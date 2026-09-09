@@ -209,6 +209,13 @@ def cmd_veval(args) -> int:
     return run_benchmark(cfg, args.dataset, args.mode, args.out, problems=args.problems, limit=args.limit, budget=args.budget, log=_logger())
 
 
+def cmd_ui(args) -> int:
+    from ..ui.server import serve
+
+    serve(args.host, args.port, open_browser=args.open)
+    return 0
+
+
 def _logger():
     t0 = time.time()
 
@@ -265,6 +272,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--budget", default="20m")
     s.add_argument("--repeats", type=int, default=1)
     s.set_defaults(fn=cmd_eval)
+    s = sub.add_parser("ui", help="start the local web UI")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--open", action="store_true", help="open a browser tab")
+    s.set_defaults(fn=cmd_ui)
     s = sub.add_parser("veval", help="run VerilogEval v2 spec-to-rtl (direct single-shot or full agent)")
     s.add_argument("--dataset", required=True, help="path to verilog-eval/dataset_spec-to-rtl")
     s.add_argument("--mode", choices=["direct", "agent"], default="direct")

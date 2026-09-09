@@ -56,7 +56,9 @@ class RunStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(self.path), isolation_level=None, timeout=30)
+        # One store is used by one logical run at a time; the UI hands a store from its HTTP thread to the
+        # worker thread, so the same-thread check is disabled (SQLite itself serialises access).
+        self.db = sqlite3.connect(str(self.path), isolation_level=None, timeout=30, check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(SCHEMA)
 

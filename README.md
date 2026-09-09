@@ -18,7 +18,14 @@ request → contract (JSON, versioned, requirement provenance)
 ```
 Design: `docs/architecture/overview.md`. Decisions: `docs/decisions/`.
 
-## Running it (cloud instance; see `docs/operations/cloud.md`)
+## Quick start (bring your own key)
+```bash
+pip install -e .            # Python 3.10+; install Icarus Verilog, Verilator and Yosys (OSS CAD Suite) for verification
+openchip ui --open          # http://127.0.0.1:8765
+```
+In **Settings** choose OpenRouter, OpenAI, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
+
+## Command line
 ```bash
 openchip doctor                                   # tools, model connectivity, features
 openchip build --project ws/fifo --request "Create a synchronous FIFO ..." --budget 20m
@@ -28,7 +35,7 @@ openchip revise --project ws/fifo --change "make dout registered"   # contract v
 openchip resume --project ws/fifo                 # after an interruption
 openchip eval --suite core-v1 --budget 15m        # locked golden suite
 ```
-Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Model: any OpenAI-compatible endpoint; the reference setup is vLLM on a JarvisLabs instance (`scripts/cloud/model-envs/*.env` + `serve.sh`). No credentials in the repo.
+Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
 
 ## Repository
 `src/openchip/` product · `tests/` (30 tests; real-tool tests need the EDA toolchain) · `evals/suite/core-v1/` locked tasks + goldens · `evals/results/` recorded runs · `outputs/demo/` delivered example packages (two successes, one useful failure) · `scripts/cloud/` provisioning/serving/eval scripts · `docs/` architecture, decisions, research, operations, product, project (STATUS, ROADMAP, BACKLOG, HANDOFF).

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenChip</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #6b7280; --line: #e5e7eb; --accent: #2f6fed; --accent-ink: #ffffff;
+    --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --chip: #eef2ff; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --panel: #161a21; --ink: #e8eaee; --muted: #9aa3b2; --line: #262c36; --accent: #6b9bff; --accent-ink: #0b1020; --chip: #1c2433; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+  a { color: var(--accent); text-decoration: none; }
+  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  aside { border-right: 1px solid var(--line); background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; font-weight: 650; letter-spacing: .2px; }
+  .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #8b5cf6); }
+  .brand small { color: var(--muted); font-weight: 400; margin-left: auto; }
+  .nav button, .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .projects { display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+  .projects .item { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .projects .item:hover { background: var(--chip); }
+  .projects .item.active { border-color: var(--line); background: var(--chip); }
+  .projects .item .name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .projects .item .sub { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .foot { margin-top: auto; color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+  main { padding: 26px 34px; max-width: 1100px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 22px 0 8px; } .lead { color: var(--muted); margin: 0 0 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  textarea, input, select { width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 9px 11px; font: inherit; }
+  textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1; } .row .fix { flex: 0 0 auto; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--chip); font-size: 12px; font-weight: 600; }
+  .chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); } .chip.warn { color: var(--warn); } .chip.run { color: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse 1.2s infinite; } @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  .feed { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; }
+  .feed .l { color: var(--muted); } .feed .k { color: var(--accent); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .tabs button { border: 0; background: none; padding: 8px 12px; color: var(--muted); cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .md table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; } .md th, .md td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+  .md th { background: var(--chip); } .md code { font-family: var(--mono); font-size: 12.5px; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+  .md pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font-family: var(--mono); font-size: 12.5px; }
+  .md h1 { font-size: 17px; } .md h2 { font-size: 14px; margin-top: 18px; } .md h3 { font-size: 13px; }
+  .md ul { padding-left: 20px; } .md p { margin: 6px 0; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; } .kv div:nth-child(odd) { color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 1fr; } aside { display: none; } }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal-bg.open { display: flex; } .modal { width: min(560px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .status-line { font-size: 13px; }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .toast { position: fixed; bottom: 18px; right: 18px; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><div class="logo"></div>OpenChip <small id="ver"></small></div>
+    <div class="nav"><button class="btn primary" style="width:100%" onclick="showHome()">+ New design</button></div>
+    <div class="projects" id="projects"></div>
+    <div class="foot">
+      <div id="modelline">—</div>
+      <button class="btn" onclick="openSettings()">Settings &amp; API key</button>
+    </div>
+  </aside>
+  <main>
+    <section id="home">
+      <h1>Describe the module you need</h1>
+      <p class="lead">OpenChip turns the description into a reviewable contract, an independent reference model, Verilog RTL and tool-backed evidence. Be precise about ports, reset and what happens each clock.</p>
+      <div class="card">
+        <textarea id="req" placeholder="Example: Create a synchronous FIFO module named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports: clk, rst (active-high synchronous), push, din[WIDTH], pop, dout[WIDTH], full, empty, count. A push is accepted when push=1 and full=0 …"></textarea>
+        <div class="row" style="margin-top:10px">
+          <div><label>Project name</label><input id="name" placeholder="sync_fifo"></div>
+          <div class="fix"><label>Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
+          <div class="fix" style="align-self:flex-end"><button class="btn primary" id="go" onclick="startRun()">Build &amp; verify</button></div>
+        </div>
+        <div class="hint" style="margin-top:10px" id="readiness"></div>
+      </div>
+      <div class="card" id="recent"><h2 style="margin-top:0">Recent designs</h2><div id="recentlist" class="empty">No designs yet.</div></div>
+    </section>
+
+    <section id="run" style="display:none">
+      <div class="row" style="align-items:flex-start">
+        <div><h1 id="runtitle">design</h1><div class="status-line" id="runstatus"></div></div>
+        <div class="fix row" style="gap:8px"><button class="btn" onclick="openRevise()">Request a change</button><button class="btn" onclick="showHome()">Back</button></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="row" style="justify-content:space-between"><div id="chips" class="row" style="gap:8px"></div><div class="hint" id="elapsed"></div></div>
+        <div class="feed" id="feed" style="margin-top:10px"></div>
+      </div>
+      <div class="tabs">
+        <button class="active" onclick="tab('contract',this)">Contract</button><button onclick="tab('rtl',this)">RTL</button><button onclick="tab('report',this)">Report</button><button onclick="tab('request',this)">Request</button>
+      </div>
+      <div class="card md" id="pane"></div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-bg" id="settings">
+  <div class="modal">
+    <h2 style="margin-top:0">Model &amp; API key</h2>
+    <p class="hint">Bring your own key. Paste a key from OpenRouter, OpenAI or Anthropic, or point at a local/hosted OpenAI-compatible server (vLLM). Keys are stored only in <code>~/.config/openchip/keys.env</code>.</p>
+    <label>Provider</label>
+    <select id="provider" onchange="providerChanged()">
+      <option value="openrouter">OpenRouter (any model, one key)</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="openai-compatible">OpenAI-compatible server (vLLM, local)</option>
+    </select>
+    <label>Model</label>
+    <input id="model" list="presets" placeholder="model id"><datalist id="presets"></datalist>
+    <label>Base URL <span class="hint">(leave empty for the provider default)</span></label>
+    <input id="baseurl" placeholder="https://…">
+    <label>API key <span class="hint" id="keyhint"></span></label>
+    <input id="apikey" type="password" placeholder="paste key — leave empty to keep the saved one" autocomplete="off">
+    <div class="row" style="margin-top:14px">
+      <button class="btn" onclick="testConnection()">Test connection</button>
+      <button class="btn primary" onclick="saveSettings()">Save</button>
+      <button class="btn fix" onclick="closeSettings()">Close</button>
+    </div>
+    <div class="hint" id="testresult" style="margin-top:10px"></div>
+    <h2>Toolchain</h2>
+    <div class="kv" id="tools"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="revise">
+  <div class="modal">
+    <h2 style="margin-top:0">Request a change</h2>
+    <p class="hint">A change creates a new contract version, invalidates the previous evidence and re-verifies.</p>
+    <textarea id="change" placeholder="e.g. make dout registered; add an almost_full flag when count >= DEPTH-2"></textarea>
+    <div class="row" style="margin-top:12px"><button class="btn primary" onclick="submitRevise()">Apply change</button><button class="btn fix" onclick="document.getElementById('revise').classList.remove('open')">Cancel</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0, feedText = '';
+const $ = id => document.getElementById(id);
+const api = async (path, body) => { const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
+const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 3200); };
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// -- minimal markdown (headings, tables, lists, code fences, inline code/bold) ---------------------
+function md(src) {
+  const lines = (src || '').split('\n'); let out = [], i = 0, inList = false;
+  const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/_([^_]+)_/g, '<i>$1</i>');
+  const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.startsWith('```')) { closeList(); let b=[]; i++; while (i < lines.length && !lines[i].startsWith('```')) b.push(lines[i++]); i++; out.push('<pre>'+esc(b.join('\n'))+'</pre>'); continue; }
+    if (/^\|/.test(l)) { closeList(); let rows=[]; while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      let h = cells(rows[0]); let body = rows.slice(1).filter(r => !/^\|[\s\-:|]+\|$/.test(r));
+      out.push('<table><thead><tr>'+h.map(c=>'<th>'+inline(c)+'</th>').join('')+'</tr></thead><tbody>'+body.map(r=>'<tr>'+cells(r).map(c=>'<td>'+inline(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'); continue; }
+    const hm = /^(#{1,3})\s+(.*)/.exec(l); if (hm) { closeList(); out.push(`<h${hm[1].length}>${inline(hm[2])}</h${hm[1].length}>`); i++; continue; }
+    if (/^\s*[-*]\s+/.test(l)) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>'+inline(l.replace(/^\s*[-*]\s+/,''))+'</li>'); i++; continue; }
+    closeList(); if (l.trim()) out.push('<p>'+inline(l)+'</p>'); i++;
+  }
+  closeList(); return out.join('\n');
+}
+
+// -- status / projects -------------------------------------------------------------------------------
+async function refreshStatus() {
+  status = await api('/api/status');
+  const s = status.settings;
+  $('modelline').innerHTML = `<b>${esc(s.provider)}</b> · ${esc(s.model || 'no model')}<br><span class="${s.key_present||s.provider==='openai-compatible'?'':'chip warn'}">${s.key_present ? 'key ' + esc(s.key_hint) : (s.provider==='openai-compatible' ? 'no key needed' : 'no API key')}</span>`;
+  const d = status.doctor; const missing = Object.entries(d.tools).filter(([k,v]) => !v.ok && k !== 'sby').map(([k])=>k);
+  $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || s.provider==='openai-compatible' ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
+  renderProjects(status.runs);
+}
+function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${lbl}</span>`; }
+function renderProjects(runs) {
+  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
+  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
+}
+
+// -- new run -------------------------------------------------------------------------------------------
+async function startRun() {
+  const req = $('req').value.trim(); if (req.length < 20) return toast('Describe the module in at least a sentence.');
+  $('go').disabled = true;
+  try { const r = await api('/api/runs', {request: req, name: $('name').value, budget_s: +$('budget').value}); toast('Run started'); await refreshStatus(); openRun(r.workspace); }
+  catch (e) { toast(e.message); } finally { $('go').disabled = false; }
+}
+function showHome() { current = null; if (poll) clearInterval(poll); $('run').style.display='none'; $('home').style.display='block'; refreshStatus(); }
+
+// -- run view --------------------------------------------------------------------------------------------
+async function openRun(name) {
+  current = name; logSeen = 0; feedText = ''; $('feed').textContent = '';
+  $('home').style.display='none'; $('run').style.display='block'; $('runtitle').textContent = name;
+  if (poll) clearInterval(poll);
+  await tick(); poll = setInterval(tick, 2500);
+}
+let lastDetail = null;
+async function tick() {
+  if (!current) return;
+  let d; try { d = await api(`/api/runs/${current}?since=${logSeen}`); } catch (e) { return; }
+  lastDetail = d;
+  (d.logs || []).forEach(l => { feedText += `<span class="l">${new Date(l.t*1000).toLocaleTimeString()}</span> ${esc(l.msg).replace(/^\[(\w[\w:]*)\]/, '<span class="k">[$1]</span>')}\n`; });
+  if (d.logs && d.logs.length) { $('feed').innerHTML = feedText; $('feed').scrollTop = $('feed').scrollHeight; }
+  logSeen = d.log_total || logSeen;
+  const o = d.outcome || {};
+  $('runstatus').textContent = o.status_line || (d.state ? `${d.state} · step ${d.step}` : 'starting…');
+  const chips = [stateChip({state: d.state, accepted: o.accepted})];
+  if (d.step) chips.push(`<span class="chip">step: ${esc(d.step)}</span>`);
+  if (d.contract_version) chips.push(`<span class="chip">contract v${d.contract_version}</span>`);
+  if (o.provisional) chips.push(`<span class="chip warn">provisional</span>`);
+  if (o.reference_consensus && o.reference_consensus.confidence) chips.push(`<span class="chip">confidence: ${esc(o.reference_consensus.confidence)}</span>`);
+  $('chips').innerHTML = chips.join('');
+  const b = (o.budget || {}); $('elapsed').textContent = b.elapsed_s ? `${Math.round(b.elapsed_s)} s · ${b.model_calls} model calls · ${b.tokens} tokens` : (d.alive ? 'working…' : '');
+  renderPane();
+  if (!d.alive && d.state && d.state !== 'running' && d.state !== 'planned') { clearInterval(poll); poll = null; refreshStatus(); }
+}
+function tab(name, btn) { activeTab = name; document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderPane(); }
+function renderPane() {
+  const d = lastDetail; if (!d) return;
+  if (activeTab === 'contract') $('pane').innerHTML = d.contract_md ? md(d.contract_md) : '<div class="empty">The contract appears once intake finishes.</div>';
+  if (activeTab === 'rtl') $('pane').innerHTML = Object.keys(d.rtl||{}).length ? Object.entries(d.rtl).map(([n,c]) => `<h3>${esc(n)}</h3><pre>${esc(c)}</pre>`).join('') : '<div class="empty">No RTL yet.</div>';
+  if (activeTab === 'report') $('pane').innerHTML = d.report_md ? md(d.report_md) : '<div class="empty">The report is written when the run ends.</div>';
+  if (activeTab === 'request') $('pane').innerHTML = `<pre>${esc(d.request||'')}</pre>`;
+}
+function openRevise() { if (!current) return; $('revise').classList.add('open'); }
+async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; } catch (e) { toast(e.message); } }
+
+// -- settings ---------------------------------------------------------------------------------------------
+function providerChanged() {
+  const p = $('provider').value; const s = status ? status.settings : {};
+  const defaults = {openrouter:'https://openrouter.ai/api/v1', openai:'https://api.openai.com/v1', anthropic:'https://api.anthropic.com', 'openai-compatible':'http://127.0.0.1:8000/v1'};
+  const presets = {openrouter:['openai/gpt-oss-120b','qwen/qwen3.8-27b','anthropic/claude-sonnet-5','openai/gpt-5-codex'], openai:['gpt-5-codex','gpt-5','gpt-oss-120b'], anthropic:['claude-sonnet-5','claude-opus-5','claude-haiku-4-5-20251001'], 'openai-compatible':['openai/gpt-oss-120b','Qwen/Qwen3.8-27B','Qwen/Qwen3-8B']};
+  $('presets').innerHTML = presets[p].map(m => `<option value="${m}">`).join('');
+  $('baseurl').placeholder = defaults[p];
+  if (p !== s.provider) { $('model').value = presets[p][0]; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === defaults[p] ? '' : (s.base_url || ''); }
+  $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${ {openrouter:'OPENROUTER_API_KEY', openai:'OPENAI_API_KEY', anthropic:'ANTHROPIC_API_KEY'}[p] } also works)`;
+}
+function openSettings() { const s = status.settings; $('provider').value = s.provider; providerChanged(); $('apikey').value=''; $('testresult').textContent='';
+  $('tools').innerHTML = Object.entries(status.doctor.tools).map(([k,v]) => `<div>${k}</div><div>${v.ok ? '<span class="chip ok">ok</span> <span class="hint">'+esc(v.version)+'</span>' : '<span class="chip warn">missing</span>'}</div>`).join('');
+  $('settings').classList.add('open'); }
+function closeSettings() { $('settings').classList.remove('open'); }
+async function saveSettings() { try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value}); $('apikey').value=''; toast('Saved'); await refreshStatus(); } catch (e) { toast(e.message); } }
+async function testConnection() {
+  $('testresult').textContent = 'Testing…';
+  try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value}); $('apikey').value='';
+    const h = await api('/api/test', {});
+    if (!h.ok) { $('testresult').innerHTML = `<span class="chip bad">unreachable</span> ${esc(h.error||'')}`; }
+    else { const p = h.ping || {}; $('testresult').innerHTML = `${p.ok ? '<span class="chip ok">connected</span>' : '<span class="chip warn">reachable, but the model did not answer</span>'} ${esc(h.provider)} · ${esc(h.configured)}${h.configured_is_served===false ? ' · <span class="chip warn">model not in the served list</span>' : ''} ${p.latency_s ? '· '+p.latency_s+' s' : ''} ${p.error ? '· '+esc(p.error) : ''}`; }
+    await refreshStatus();
+  } catch (e) { $('testresult').innerHTML = `<span class="chip bad">${esc(e.message)}</span>`; }
+}
+refreshStatus().then(() => { fetch('/api/status').catch(()=>{}); });
+setInterval(() => { if (!current) refreshStatus(); }, 8000);
+</script>
+</body>
+</html>
