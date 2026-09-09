@@ -98,8 +98,9 @@ class UIState:
         ad = ModelAdapter(cfg.model)
         h = ad.health()
         if h.get("ok"):
-            r = ad.chat([{"role": "user", "content": "Reply with the single word OK."}], role="ping", max_tokens=8, thinking=False)
-            h["ping"] = {"ok": r.ok and "OK" in r.text.upper(), "latency_s": round(r.latency_s, 2), "error": r.error, "reply": r.text[:40]}
+            # reasoning models spend output tokens before answering: give the ping room
+            r = ad.chat([{"role": "user", "content": "Reply with the single word OK."}], role="ping", max_tokens=256, thinking=False)
+            h["ping"] = {"ok": r.ok and bool(r.text.strip()), "latency_s": round(r.latency_s, 2), "error": r.error, "reply": r.text.strip()[:40]}
         return h
 
     # -- runs -----------------------------------------------------------------------------------

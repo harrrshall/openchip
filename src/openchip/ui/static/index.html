@@ -6,12 +6,12 @@
 <title>OpenChip</title>
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #6b7280; --line: #e5e7eb; --accent: #2f6fed; --accent-ink: #ffffff;
-    --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --chip: #eef2ff; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #6b7280; --line: #e5e7eb; --accent: #1d4ed8; --accent-ink: #ffffff;
+    --ok: #0e6e30; --warn: #a24a06; --bad: #b91c1c; --chip: #eef2ff; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1216; --panel: #161a21; --ink: #e8eaee; --muted: #9aa3b2; --line: #262c36; --accent: #6b9bff; --accent-ink: #0b1020; --chip: #1c2433; }
+    :root { --bg: #0f1216; --panel: #161a21; --ink: #e8eaee; --muted: #9aa3b2; --line: #262c36; --accent: #6b9bff; --accent-ink: #0b1020; --chip: #1c2433; --ok: #15803d; --warn: #b45309; }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
@@ -54,16 +54,26 @@
   .md h1 { font-size: 17px; } .md h2 { font-size: 14px; margin-top: 18px; } .md h3 { font-size: 13px; }
   .md ul { padding-left: 20px; } .md p { margin: 6px 0; }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; } .kv div:nth-child(odd) { color: var(--muted); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 1fr; } aside { display: none; } }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 1fr; } aside { display: none; } .topbar { display: flex; } }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
   .modal-bg.open { display: flex; } .modal { width: min(560px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
   .hint { font-size: 12px; color: var(--muted); }
   .status-line { font-size: 13px; }
   .empty { color: var(--muted); padding: 30px 0; text-align: center; }
   .toast { position: fixed; bottom: 18px; right: 18px; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 13px; display: none; }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .projects .item:focus-visible, [role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .topbar { display: none; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 6; }
+  .topbar .brand { padding: 0; }
 </style>
 </head>
 <body>
+<div class="topbar" id="topbar">
+  <div class="brand"><div class="logo"></div>OpenChip</div>
+  <div class="row" style="gap:8px;flex-wrap:nowrap">
+    <button class="btn primary" onclick="showHome()">+ New design</button>
+    <button class="btn" onclick="openSettings()">Settings &amp; API key</button>
+  </div>
+</div>
 <div class="app">
   <aside>
     <div class="brand"><div class="logo"></div>OpenChip <small id="ver"></small></div>
@@ -79,10 +89,10 @@
       <h1>Describe the module you need</h1>
       <p class="lead">OpenChip turns the description into a reviewable contract, an independent reference model, Verilog RTL and tool-backed evidence. Be precise about ports, reset and what happens each clock.</p>
       <div class="card">
-        <textarea id="req" placeholder="Example: Create a synchronous FIFO module named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports: clk, rst (active-high synchronous), push, din[WIDTH], pop, dout[WIDTH], full, empty, count. A push is accepted when push=1 and full=0 …"></textarea>
+        <textarea id="req" aria-label="Module description" placeholder="Example: Create a synchronous FIFO module named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports: clk, rst (active-high synchronous), push, din[WIDTH], pop, dout[WIDTH], full, empty, count. A push is accepted when push=1 and full=0 …"></textarea>
         <div class="row" style="margin-top:10px">
-          <div><label>Project name</label><input id="name" placeholder="sync_fifo"></div>
-          <div class="fix"><label>Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
+          <div><label for="name">Project name</label><input id="name" placeholder="sync_fifo"></div>
+          <div class="fix"><label for="budget">Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
           <div class="fix" style="align-self:flex-end"><button class="btn primary" id="go" onclick="startRun()">Build &amp; verify</button></div>
         </div>
         <div class="hint" style="margin-top:10px" id="readiness"></div>
@@ -107,22 +117,22 @@
   </main>
 </div>
 
-<div class="modal-bg" id="settings">
+<div class="modal-bg" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
   <div class="modal">
-    <h2 style="margin-top:0">Model &amp; API key</h2>
+    <h2 id="settings-title" style="margin-top:0">Model &amp; API key</h2>
     <p class="hint">Bring your own key. Paste a key from OpenRouter, OpenAI or Anthropic, or point at a local/hosted OpenAI-compatible server (vLLM). Keys are stored only in <code>~/.config/openchip/keys.env</code>.</p>
-    <label>Provider</label>
+    <label for="provider">Provider</label>
     <select id="provider" onchange="providerChanged()">
       <option value="openrouter">OpenRouter (any model, one key)</option>
       <option value="openai">OpenAI</option>
       <option value="anthropic">Anthropic</option>
       <option value="openai-compatible">OpenAI-compatible server (vLLM, local)</option>
     </select>
-    <label>Model</label>
+    <label for="model">Model</label>
     <input id="model" list="presets" placeholder="model id"><datalist id="presets"></datalist>
-    <label>Base URL <span class="hint">(leave empty for the provider default)</span></label>
+    <label for="baseurl">Base URL <span class="hint">(leave empty for the provider default)</span></label>
     <input id="baseurl" placeholder="https://…">
-    <label>API key <span class="hint" id="keyhint"></span></label>
+    <label for="apikey">API key <span class="hint" id="keyhint"></span></label>
     <input id="apikey" type="password" placeholder="paste key — leave empty to keep the saved one" autocomplete="off">
     <div class="row" style="margin-top:14px">
       <button class="btn" onclick="testConnection()">Test connection</button>
@@ -135,11 +145,11 @@
   </div>
 </div>
 
-<div class="modal-bg" id="revise">
+<div class="modal-bg" id="revise" role="dialog" aria-modal="true" aria-labelledby="revise-title">
   <div class="modal">
-    <h2 style="margin-top:0">Request a change</h2>
+    <h2 id="revise-title" style="margin-top:0">Request a change</h2>
     <p class="hint">A change creates a new contract version, invalidates the previous evidence and re-verifies.</p>
-    <textarea id="change" placeholder="e.g. make dout registered; add an almost_full flag when count >= DEPTH-2"></textarea>
+    <textarea id="change" aria-label="Requested change" placeholder="e.g. make dout registered; add an almost_full flag when count >= DEPTH-2"></textarea>
     <div class="row" style="margin-top:12px"><button class="btn primary" onclick="submitRevise()">Apply change</button><button class="btn fix" onclick="document.getElementById('revise').classList.remove('open')">Cancel</button></div>
   </div>
 </div>
@@ -181,10 +191,11 @@ async function refreshStatus() {
   renderProjects(status.runs);
 }
 function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${lbl}</span>`; }
+const kbdActivate = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"`;
 function renderProjects(runs) {
-  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
+  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
   $('recentlist').className = runs.length ? '' : 'empty';
-  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
+  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
 }
 
 // -- new run -------------------------------------------------------------------------------------------
@@ -235,7 +246,7 @@ function renderPane() {
   if (activeTab === 'request') $('pane').innerHTML = `<pre>${esc(d.request||'')}</pre>`;
 }
 function openRevise() { if (!current) return; $('revise').classList.add('open'); }
-async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; } catch (e) { toast(e.message); } }
+async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); } catch (e) { toast(e.message); } }
 
 // -- settings ---------------------------------------------------------------------------------------------
 function providerChanged() {
@@ -247,7 +258,8 @@ function providerChanged() {
   if (p !== s.provider) { $('model').value = presets[p][0]; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === defaults[p] ? '' : (s.base_url || ''); }
   $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${ {openrouter:'OPENROUTER_API_KEY', openai:'OPENAI_API_KEY', anthropic:'ANTHROPIC_API_KEY'}[p] } also works)`;
 }
-function openSettings() { const s = status.settings; $('provider').value = s.provider; providerChanged(); $('apikey').value=''; $('testresult').textContent='';
+async function openSettings() { if (!status) { try { await refreshStatus(); } catch (e) { return toast('Still loading — try again in a moment.'); } }
+  const s = status.settings; $('provider').value = s.provider; providerChanged(); $('apikey').value=''; $('testresult').textContent='';
   $('tools').innerHTML = Object.entries(status.doctor.tools).map(([k,v]) => `<div>${k}</div><div>${v.ok ? '<span class="chip ok">ok</span> <span class="hint">'+esc(v.version)+'</span>' : '<span class="chip warn">missing</span>'}</div>`).join('');
   $('settings').classList.add('open'); }
 function closeSettings() { $('settings').classList.remove('open'); }
@@ -261,7 +273,7 @@ async function testConnection() {
     await refreshStatus();
   } catch (e) { $('testresult').innerHTML = `<span class="chip bad">${esc(e.message)}</span>`; }
 }
-refreshStatus().then(() => { fetch('/api/status').catch(()=>{}); });
+refreshStatus();
 setInterval(() => { if (!current) refreshStatus(); }, 8000);
 </script>
 </body>

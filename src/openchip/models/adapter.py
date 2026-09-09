@@ -215,7 +215,10 @@ class ModelAdapter:
         if not reasoning:
             text, reasoning = split_think(text)
         usage = data.get("usage", {}) or {}
-        return ModelResponse(text=text, reasoning=reasoning, finish_reason=choice.get("finish_reason") or "stop",
+        finish = choice.get("finish_reason") or "stop"
+        if finish in ("max_tokens", "max_output_tokens"):  # gateways relaying Anthropic/Gemini stop reasons
+            finish = "length"
+        return ModelResponse(text=text, reasoning=reasoning, finish_reason=finish,
                              prompt_tokens=usage.get("prompt_tokens", 0) or 0, completion_tokens=usage.get("completion_tokens", 0) or 0,
                              latency_s=0.0, model=data.get("model", self.cfg.model), raw_id=data.get("id", ""))
 

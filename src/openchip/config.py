@@ -114,6 +114,8 @@ class Config(BaseModel):
             cfg.runs_dir = os.environ["OPENCHIP_RUNS_DIR"]
         if os.environ.get("OPENCHIP_PROVIDER"):
             cfg.model.provider = os.environ["OPENCHIP_PROVIDER"]  # type: ignore[assignment]
+        if os.environ.get("OPENCHIP_MAX_TOKENS"):
+            cfg.model.max_tokens = int(os.environ["OPENCHIP_MAX_TOKENS"])
         if os.environ.get("OPENCHIP_USER_AGENT"):
             cfg.model.user_agent = os.environ["OPENCHIP_USER_AGENT"]
         if os.environ.get("OPENCHIP_MODEL_API_KEY_ENV"):

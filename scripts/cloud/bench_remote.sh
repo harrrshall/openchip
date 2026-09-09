@@ -6,6 +6,8 @@ set -uo pipefail
 PROVIDER=$1; BASE=$2; MODEL=$3; KEYENV=$4; UA=${5:-}; OUT=${6:-/home/openchip-runs/evals/remote}
 export OPENCHIP_PROVIDER=$PROVIDER OPENCHIP_MODEL_BASE_URL=$BASE OPENCHIP_MODEL=$MODEL OPENCHIP_MODEL_API_KEY_ENV=$KEYENV OPENCHIP_THINKING_ROLES="" OPENCHIP_MODEL_REVISION=remote
 [ -n "$UA" ] && export OPENCHIP_USER_AGENT="$UA"
+# optional per-model tuning passed through the environment: OPENCHIP_EXTRA_BODY (JSON), OPENCHIP_MAX_TOKENS
+export OPENCHIP_EXTRA_BODY="${OPENCHIP_EXTRA_BODY:-}" OPENCHIP_MAX_TOKENS="${OPENCHIP_MAX_TOKENS:-}"
 cd /home/openchip
 SLUG=$(echo "${MODEL##*/}" | tr -c 'A-Za-z0-9.\n' '-'); mkdir -p $OUT; LOG=$OUT/bench-$SLUG.log
 echo "== bench_remote $PROVIDER $MODEL via $BASE start $(date -u +%FT%TZ)" | tee -a "$LOG"

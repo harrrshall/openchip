@@ -24,6 +24,6 @@ find "$DST" -name 'records.jsonl' -delete
 cd "$DST"
 git add -A
 if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
-git -c user.name="Harshal Singh" -c user.email="paolo@gladium.ai" commit -q -m "$MSG"
+git -c user.name="Harshal Singh" -c user.email="harshalsingh1223@gmail.com" commit -q -m "$MSG"
 git push -q -u origin main
 echo "published: $(git rev-parse --short HEAD) -> $REMOTE"
