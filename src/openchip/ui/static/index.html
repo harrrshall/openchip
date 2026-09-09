@@ -17,7 +17,7 @@
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
   a { color: var(--accent); text-decoration: none; }
   .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
-  aside { border-right: 1px solid var(--line); background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+  aside { border-right: 1px solid var(--line); background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; height: 100vh; overflow: hidden; }
   .brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; font-weight: 650; letter-spacing: .2px; }
   .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #8b5cf6); }
   .brand small { color: var(--muted); font-weight: 400; margin-left: auto; }
@@ -155,7 +155,7 @@ const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'
 // -- minimal markdown (headings, tables, lists, code fences, inline code/bold) ---------------------
 function md(src) {
   const lines = (src || '').split('\n'); let out = [], i = 0, inList = false;
-  const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/_([^_]+)_/g, '<i>$1</i>');
+  const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
   while (i < lines.length) {
     const l = lines[i];
@@ -183,6 +183,7 @@ async function refreshStatus() {
 function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${lbl}</span>`; }
 function renderProjects(runs) {
   $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
+  $('recentlist').className = runs.length ? '' : 'empty';
   $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
 }
 
@@ -209,6 +210,9 @@ async function tick() {
   lastDetail = d;
   (d.logs || []).forEach(l => { feedText += `<span class="l">${new Date(l.t*1000).toLocaleTimeString()}</span> ${esc(l.msg).replace(/^\[(\w[\w:]*)\]/, '<span class="k">[$1]</span>')}\n`; });
   if (d.logs && d.logs.length) { $('feed').innerHTML = feedText; $('feed').scrollTop = $('feed').scrollHeight; }
+  else if (!feedText && d.events && d.events.length) {
+    $('feed').innerHTML = d.events.map(e => { const t = new Date(e.ts*1000).toLocaleTimeString(); const rest = Object.entries(e).filter(([k]) => !['ts','kind'].includes(k)).map(([k,v]) => `${k}=${typeof v==='object' ? JSON.stringify(v) : v}`).join(' ').slice(0,160); return `<span class="l">${t}</span> <span class="k">[${esc(e.kind)}]</span> ${esc(rest)}`; }).join('\n');
+  }
   logSeen = d.log_total || logSeen;
   const o = d.outcome || {};
   $('runstatus').textContent = o.status_line || (d.state ? `${d.state} · step ${d.step}` : 'starting…');
