@@ -45,6 +45,7 @@ class VerificationResult:
     sims: list[dict] = field(default_factory=list)
     synth: Optional[dict] = None
     formal: Optional[dict] = None
+    guard_findings: list[dict] = field(default_factory=list)
     reference_error: str = ""
     summary: str = ""
     artifacts: dict = field(default_factory=dict)
@@ -55,6 +56,8 @@ class VerificationResult:
     def evidence_for_model(self, max_chars: int = 6000) -> str:
         """Compact evidence text for the repair prompt."""
         parts = []
+        for g in self.guard_findings:
+            parts.append("ACCEPTANCE GUARD (deterministic contract-vs-RTL check): " + g["message"])
         if self.reference_error:
             parts.append("REFERENCE MODEL ERROR (the reference, not the RTL, failed to run):\n" + self.reference_error)
         if self.lint and not self.lint.get("ok"):

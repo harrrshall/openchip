@@ -74,9 +74,16 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         parts.append("formal not run")
     parts.append("timing closure not evaluated")
-    provisional = bool(contract and contract.unresolved) and accepted
+    conf = ((ck.get("consensus") or {}).get("confidence") or "high")
+    n_unresolved = len(contract.unresolved) if contract else 0
+    provisional = accepted and (n_unresolved > 0 or conf != "high")
+    if accepted and conf != "high":
+        parts.append(f"reference vote not unanimous ({conf} confidence)")
     if provisional:
-        parts.append(f"PROVISIONAL: {len(contract.unresolved)} unresolved decision(s) need the user")
+        why = [f"{n_unresolved} unresolved decision(s)"] if n_unresolved else []
+        if conf != "high":
+            why.append("non-unanimous reference vote")
+        parts.append("PROVISIONAL: " + " and ".join(why) + " need the user")
     status_line = f"[{final_state}] " + "; ".join(parts) + (f". Reason: {reason}" if reason else "")
 
     tools = {k: tool_version(getattr(cfg.tools, k), ("-V",) if k in ("iverilog", "vvp", "yosys") else ("--version",)) for k in ("iverilog", "vvp", "verilator", "yosys", "sby")}

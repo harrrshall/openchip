@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full OpenChip protocol against a REMOTE provider (no local vLLM): core-v1 -> heldout-v1 -> VerilogEval direct -> agent subset.
-# Usage: bench_remote.sh <provider> <base_url> <model> <api-key-env-name> [user-agent] [out-dir]
+# Usage: [BENCH_FROM=<stage>] bench_remote.sh <provider> <base_url> <model> <api-key-env-name> [user-agent] [out-dir]
 set -uo pipefail
 . /home/openchip-env/env.sh; [ -f /home/openchip-env/secrets.env ] && . /home/openchip-env/secrets.env
 PROVIDER=$1; BASE=$2; MODEL=$3; KEYENV=$4; UA=${5:-}; OUT=${6:-/home/openchip-runs/evals/remote}
@@ -14,7 +14,10 @@ echo "== bench_remote $PROVIDER $MODEL via $BASE start $(date -u +%FT%TZ)" | tee
 .venv/bin/openchip doctor 2>&1 | grep -E "model " | tee -a "$LOG"
 DS=/home/openchip-env/verilog-eval/dataset_spec-to-rtl
 SUBSET=$(ls $DS | grep _prompt.txt | sed 's/_prompt.txt//' | awk 'NR%4==1' | paste -sd, -)
-run() { echo "== $1 $(date -u +%T)" | tee -a "$LOG"; shift; "$@" 2>&1 | tee -a "$LOG" | grep -E "=>|^- |^n = |\[[0-9]+/[0-9]+\]|pass = " ; }
+# BENCH_FROM=<stage> resumes at that stage (core-v1|heldout-v1|veval-direct|veval-agent); earlier stages are skipped.
+FROM=${BENCH_FROM:-core-v1}; STARTED=0
+run() { [ "$1" = "$FROM" ] && STARTED=1; if [ $STARTED = 0 ]; then echo "== skip $1" | tee -a "$LOG"; return; fi
+        echo "== $1 $(date -u +%T)" | tee -a "$LOG"; shift; "$@" 2>&1 | tee -a "$LOG" | grep -E "=>|^- |^n = |\[[0-9]+/[0-9]+\]|pass = " ; }
 run core-v1      .venv/bin/openchip eval --suite core-v1    --budget 15m --repeats 1 --out $OUT
 run heldout-v1   .venv/bin/openchip eval --suite heldout-v1 --budget 15m --repeats 2 --out $OUT
 run veval-direct .venv/bin/openchip veval --dataset $DS --mode direct --out $OUT

@@ -26,6 +26,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
+from ..verification.guards import acceptance_guards, contract_guards
 from ..verification.normalize import normalize_rtl
 from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
@@ -313,6 +314,7 @@ class Runner:
         """A separate context (optionally a different model) compares request and contract and proposes
         corrections; safe corrections are applied as a recorded contract revision before any code is written."""
         if not self.cfg.review.enabled:
+            self._apply_contract_guards(ck, self._load_contract(ck))
             self.store.checkpoint(self.run_id, "reference", ck)
             return ck
         contract = self._load_contract(ck)
@@ -359,6 +361,7 @@ class Runner:
         elif unresolved:
             contract.unresolved.extend(u for u in unresolved if u not in contract.unresolved)
             Path(ck["contract_path"]).write_text(contract.model_dump_json(indent=1))
+        self._apply_contract_guards(ck, self._load_contract(ck))
         ck["review"] = {"verdict": data.get("verdict"), "applied": applied, "rejected": rejected, "unresolved": unresolved,
                         "notes": str(data.get("notes", ""))[:300], "reviewer_model": adapter.cfg.model}
         self.store.event(self.run_id, "review", {"verdict": data.get("verdict"), "applied": len(applied), "rejected": len(rejected), "unresolved": len(unresolved)})
@@ -590,6 +593,17 @@ class Runner:
         ck["reference_path"] = str(canonical)
         ck["reference_disputed"] = str(disputed)
 
+    def _apply_contract_guards(self, ck: dict, contract: Contract) -> Contract:
+        finds = contract_guards(contract)
+        if finds:
+            for f in finds:
+                if f.message not in contract.unresolved:
+                    contract.unresolved.append(f.message)
+            Path(ck["contract_path"]).write_text(contract.model_dump_json(indent=1))
+            self.store.event(self.run_id, "contract_guard", {"findings": [f.code for f in finds]})
+            self.log("[guard] contract: " + "; ".join(f.code for f in finds) + " -> provisional")
+        return contract
+
     def _step_properties(self, ck: dict) -> dict:
         """Optional formal layer: a property checker written independently of the RTL. Failure is recorded, not fatal."""
         contract = self._load_contract(ck)
@@ -679,6 +693,29 @@ class Runner:
             ck.update({"history": history, "rtl_attempt": attempt, "last_evidence": str(work / "evidence.json")})
             self.store.checkpoint(self.run_id, "verify", ck)
             if res.accepted:
+                # deterministic acceptance guards (zero-false-alarm contradictions between contract and RTL)
+                findings = acceptance_guards(contract, rp.read_text())
+                if findings:
+                    res.accepted = False
+                    res.summary = "acceptance guard: " + "; ".join(f.code for f in findings)
+                    res.guard_findings = [f.__dict__ for f in findings]
+                    (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=1))
+                    history[-1].update({"accepted": False, "summary": res.summary, "signature": "guard:" + ",".join(f.code for f in findings)})
+                    self.store.event(self.run_id, "acceptance_guard", {"findings": [f.code for f in findings]})
+                    self.log(f"[guard] {res.summary}")
+                    ck.update({"history": history})
+                    self.store.checkpoint(self.run_id, "verify", ck)
+                    if attempt >= max_iter:
+                        raise BudgetExhausted(f"repair iteration limit {max_iter} reached without acceptance")
+                    attempt += 1
+                    new_rtl, verdict = self._repair(contract, rp, res, attempt, ck.get("request", ""))
+                    if new_rtl is None or hashlib.sha256(new_rtl.encode()).hexdigest() == res.artifacts.get("rtl_sha256"):
+                        raise Stalled("repair did not address an acceptance-guard finding")
+                    rp.write_text(self._normalize(new_rtl, f"repair_{attempt}"))
+                    self._save("rtl_candidate", rp, f"repair_{attempt}")
+                    ck.update({"rtl_attempt": attempt, "history": history})
+                    self.store.checkpoint(self.run_id, "verify", ck)
+                    continue
                 if not ck.get("consensus_done") and self.cfg.verification.corroborate:
                     # Acceptance requires agreement with TWO independently derived references (or a majority of three).
                     ck, ref, ok = self._corroborate_acceptance(ck, contract, rp, ref)
