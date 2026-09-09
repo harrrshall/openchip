@@ -1,0 +1,17 @@
+# Runtime default after the 2026-09-08/09 benchmark (ADR 0006). Serve on an 80 GB+ Hopper GPU (H100/H200):
+#   OPENCHIP_MODEL=openai/gpt-oss-120b, VLLM_REASONING_PARSER=openai_gptoss (scripts/cloud/model-envs/gpt-oss-120b.env)
+[model]
+provider = "openai-compatible"
+base_url = "http://127.0.0.1:8000/v1"
+model = "openai/gpt-oss-120b"
+revision = "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
+max_tokens = 10000
+temperature = 0.2
+top_p = 0.95
+seed = 1234
+context_window = 32768
+timeout_s = 600.0
+thinking = false            # gpt-oss always reasons; depth is set by reasoning_effort below
+thinking_roles = []
+[model.extra_body]
+reasoning_effort = "low"

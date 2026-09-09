@@ -1,0 +1,15 @@
+# Runner-up (ADR 0006): best on the precise-spec suites (core-v1 10/10, heldout 8/10, 0 false acceptances),
+# weaker on VerilogEval (76/156) and ~7x slower per task on RTX PRO 6000. Serve with model-envs/qwen3.8-27b.env.
+[model]
+provider = "openai-compatible"
+base_url = "http://127.0.0.1:8000/v1"
+model = "Qwen/Qwen3.8-27B"
+revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+max_tokens = 10000
+temperature = 0.2
+top_p = 0.95
+seed = 1234
+context_window = 32768
+timeout_s = 600.0
+thinking = true
+thinking_roles = ["intake"]

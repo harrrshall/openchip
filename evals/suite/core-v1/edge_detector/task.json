@@ -1,0 +1,8 @@
+{
+ "id": "edge_detector",
+ "family": "control",
+ "request": "Create a module named `edge_detector` that detects rising and falling edges of a single-bit input.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `sig` (input, 1 bit), `rise` (output, 1 bit), `fall` (output, 1 bit).\n\nBehavior: the module samples `sig` at every rising clock edge and remembers the previous sample. `rise` and `fall` are registered outputs: at each rising clock edge `rise` becomes 1 if the current `sig` is 1 and the previous sample was 0, otherwise 0; `fall` becomes 1 if the current `sig` is 0 and the previous sample was 1, otherwise 0. Each pulse therefore lasts exactly one clock cycle and appears one cycle after the transition is sampled. After reset the previous sample is 0 and both outputs are 0. No parameters.",
+ "expected": {"module": "edge_detector", "params": {},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "sig": {"dir": "input", "width": 1}, "rise": {"dir": "output", "width": 1}, "fall": {"dir": "output", "width": 1}}},
+ "golden_cycles": 500
+}

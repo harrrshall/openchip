@@ -1,0 +1,6 @@
+{
+ "id": "tick_gen", "family": "timers",
+ "request": "Create a programmable tick generator module named `tick_gen` with parameter `WIDTH` (default 12).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `en` (input, 1 bit), `divisor` (input, WIDTH bits), `tick` (output, 1 bit), `phase` (output, WIDTH bits).\n\nBehavior: `phase` is a registered counter, 0 after reset. `tick` is a registered single-cycle pulse, 0 after reset. At each rising clock edge: if `en` is 0, `phase` returns to 0 and `tick` becomes 0. If `en` is 1: when `phase` >= `divisor` - 1 or `divisor` is 0, `phase` becomes 0 and `tick` becomes 1; otherwise `phase` increments by 1 and `tick` becomes 0. Thus with a constant `divisor` D >= 1 and `en` held high, `tick` is high for exactly one cycle every D cycles.",
+ "expected": {"module": "tick_gen", "params": {"WIDTH": 12}, "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "en": {"dir": "input", "width": 1}, "divisor": {"dir": "input", "width": 12}, "tick": {"dir": "output", "width": 1}, "phase": {"dir": "output", "width": 12}}},
+ "golden_cycles": 600
+}

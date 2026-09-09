@@ -1,0 +1,10 @@
+{
+ "id": "sync_fifo",
+ "family": "fifos",
+ "request": "Create a synchronous FIFO module named `sync_fifo` with parameters `WIDTH` (default 8) and `DEPTH` (default 16, a power of two).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `push` (input, 1 bit), `din` (input, WIDTH bits), `pop` (input, 1 bit), `dout` (output, WIDTH bits), `full` (output, 1 bit), `empty` (output, 1 bit), `count` (output, 5 bits, i.e. clog2(DEPTH)+1 bits, number of stored entries).\n\nBehavior: first-in first-out storage of DEPTH entries. `full`, `empty` and `count` reflect the current contents (before the clock edge). A push is accepted at a rising clock edge only when `push` is 1 and `full` is 0; an accepted push stores `din` at the tail. A pop is accepted only when `pop` is 1 and `empty` is 0; an accepted pop removes the head entry. A push and a pop may be accepted in the same cycle; both acceptance conditions are evaluated on the state before the edge (so a push into a full FIFO is dropped even if a pop happens in the same cycle). `dout` is combinational: it shows the head entry whenever `empty` is 0, and 0 when `empty` is 1. After reset the FIFO is empty (`empty`=1, `full`=0, `count`=0).",
+ "expected": {"module": "sync_fifo", "params": {"WIDTH": 8, "DEPTH": 16},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "push": {"dir": "input", "width": 1}, "din": {"dir": "input", "width": 8},
+             "pop": {"dir": "input", "width": 1}, "dout": {"dir": "output", "width": 8}, "full": {"dir": "output", "width": 1}, "empty": {"dir": "output", "width": 1},
+             "count": {"dir": "output", "width": 5}}},
+ "golden_cycles": 800
+}

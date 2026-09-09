@@ -1,0 +1,45 @@
+# Config B of experiment R-05: thinking mode for every role (slower, more tokens).
+# OpenChip validated defaults. Override with ./openchip.toml, $OPENCHIP_CONFIG, or env vars.
+# No credentials here. The model API key is read from $OPENCHIP_MODEL_API_KEY.
+
+[model]
+provider = "openai-compatible"
+base_url = "http://127.0.0.1:8000/v1"
+# PROVISIONAL default (docs/decisions/0003-provisional-model.md). Replace with the user-supplied model.
+model = "Qwen/Qwen3-8B"
+revision = "b968826d9c46dd6066d109eabc6255188de91218"
+max_tokens = 16000
+temperature = 0.2
+top_p = 0.95
+seed = 1234
+context_window = 32768
+timeout_s = 600.0
+thinking = true
+# Roles that use thinking mode (others answer directly). Config A of the M1 experiment.
+thinking_roles = ["intake", "reference", "properties", "rtl", "repair"]
+thinking_budget = 12000
+
+[tools]
+iverilog = "iverilog"
+vvp = "vvp"
+verilator = "verilator"
+yosys = "yosys"
+sby = "sby"
+timeout_s = 300.0
+
+[budget]
+wall_time_s = 3600.0
+max_repair_iterations = 4
+max_model_calls = 40
+max_total_tokens = 2000000
+
+[verification]
+sim_cycles = 400
+seeds = [1, 2, 3]
+require_lint = true
+require_synth = true
+corroborate = true       # acceptance requires agreement with a second independently derived reference (or 2 of 3)
+run_formal = true        # SBY bounded model checking on the model-written property checker (extra evidence)
+require_formal = false   # a counterexample is reported but does not block acceptance yet
+formal_depth = 20
+formal_timeout_s = 300.0

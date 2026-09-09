@@ -1,0 +1,24 @@
+# secrets
+*.env
+.env*
+secrets/
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+# ephemeral
+work/
+runs/
+outputs/**/waves/
+*.vcd
+*.fst
+# cloud
+.jl/
+
+# model env files hold model ids/revisions/serving flags only (no secrets)
+!scripts/cloud/model-envs/*.env

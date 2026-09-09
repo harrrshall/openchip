@@ -1,0 +1,9 @@
+{
+ "id": "pwm_gen",
+ "family": "timers",
+ "request": "Create a PWM generator module named `pwm_gen` with parameter `WIDTH` (default 8).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `period` (input, WIDTH bits), `duty` (input, WIDTH bits), `pwm_out` (output, 1 bit), `cnt` (output, WIDTH bits).\n\nBehavior: `cnt` is a free-running registered counter. At each rising clock edge: if `period` is 0, `cnt` becomes 0; otherwise if `cnt` >= `period` - 1, `cnt` becomes 0; otherwise `cnt` increments by 1. (So with a constant `period` the counter cycles through 0 .. period-1.) `pwm_out` is combinational: 1 when `cnt` < `duty`, else 0. Reset value of `cnt` is 0. Inputs `period` and `duty` may change at any time.",
+ "expected": {"module": "pwm_gen", "params": {"WIDTH": 8},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "period": {"dir": "input", "width": 8}, "duty": {"dir": "input", "width": 8},
+             "pwm_out": {"dir": "output", "width": 1}, "cnt": {"dir": "output", "width": 8}}},
+ "golden_cycles": 600
+}

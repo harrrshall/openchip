@@ -1,0 +1,54 @@
+{
+ "suite": "core-v1",
+ "n": 10,
+ "tasks": 10,
+ "repeats": 1,
+ "budget": "15m",
+ "accepted": 6,
+ "golden_pass": 7,
+ "false_acceptance": 0,
+ "interface_mismatch": 0,
+ "states": {
+  "completed": 6,
+  "failed": 1,
+  "stalled": 3
+ },
+ "mean_wall_s": 179.5,
+ "mean_attempts": 1.0,
+ "total_tokens": 388661,
+ "total_model_calls": 74,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "AS-SiliconMind/SiliconMind-V1-Qwen3-8B",
+  "revision": "901f9c51184334ef7270211862c42369ad7bb177",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [
+   "intake"
+  ],
+  "thinking_budget": 12000,
+  "extra_body": {}
+ },
+ "verification": {
+  "sim_cycles": 400,
+  "seeds": [
+   1,
+   2,
+   3
+  ],
+  "require_lint": true,
+  "require_synth": true,
+  "corroborate": true,
+  "run_formal": true,
+  "require_formal": false,
+  "formal_depth": 20,
+  "formal_timeout_s": 300.0
+ }
+}

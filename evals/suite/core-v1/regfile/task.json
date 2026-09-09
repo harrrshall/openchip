@@ -1,0 +1,9 @@
+{
+ "id": "regfile",
+ "family": "storage",
+ "request": "Create a small register file module named `regfile` with parameters `WIDTH` (default 8) and `DEPTH` (default 4). Address width is clog2(DEPTH) = 2 bits at the defaults.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `we` (input, 1 bit), `waddr` (input, 2 bits), `wdata` (input, WIDTH bits), `raddr0` (input, 2 bits), `rdata0` (output, WIDTH bits), `raddr1` (input, 2 bits), `rdata1` (output, WIDTH bits).\n\nBehavior: DEPTH registers of WIDTH bits. A write happens at the rising clock edge when `we` is 1: register `waddr` takes `wdata`. Both read ports are combinational (asynchronous): `rdata0` shows register `raddr0` and `rdata1` shows register `raddr1` at all times, and a read of the register being written in the same cycle returns the OLD value (no write-through bypass). Reset clears all registers to 0.",
+ "expected": {"module": "regfile", "params": {"WIDTH": 8, "DEPTH": 4},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "we": {"dir": "input", "width": 1}, "waddr": {"dir": "input", "width": 2}, "wdata": {"dir": "input", "width": 8},
+             "raddr0": {"dir": "input", "width": 2}, "rdata0": {"dir": "output", "width": 8}, "raddr1": {"dir": "input", "width": 2}, "rdata1": {"dir": "output", "width": 8}}},
+ "golden_cycles": 500
+}

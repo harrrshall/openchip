@@ -1,0 +1,6 @@
+{
+ "id": "seq_detect", "family": "fsm",
+ "request": "Create a serial sequence detector module named `seq_detect` that detects the bit pattern 1011 on a serial input, with overlapping matches allowed.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `din` (input, 1 bit), `det` (output, 1 bit).\n\nBehavior: one input bit `din` is sampled at every rising clock edge. `det` is a registered output: it becomes 1 at the clock edge at which the fourth bit of a `1 0 1 1` sequence is sampled (most recent four sampled bits, oldest first, equal 1,0,1,1), and is 0 otherwise; so `det` is 1 during the cycle after that edge. Overlapping detection: after a match, the last bits remain part of the history (e.g. the input 1 0 1 1 0 1 1 produces two detections). After reset the history is empty (treated as all zeros) and `det` is 0. No parameters.",
+ "expected": {"module": "seq_detect", "params": {}, "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "din": {"dir": "input", "width": 1}, "det": {"dir": "output", "width": 1}}},
+ "golden_cycles": 600
+}

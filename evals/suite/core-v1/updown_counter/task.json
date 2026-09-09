@@ -1,0 +1,9 @@
+{
+ "id": "updown_counter",
+ "family": "counters",
+ "request": "Create an 8-bit up/down counter module named `updown_counter`.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `en` (input, 1 bit), `up` (input, 1 bit), `load` (input, 1 bit), `load_val` (input, 8 bits), `count` (output, 8 bits).\n\nBehavior: `count` is a registered output. On reset `count` becomes 0. At every rising clock edge: if `load` is 1, `count` takes `load_val` (load has priority over `en`). Otherwise, if `en` is 1, `count` increments by one when `up` is 1 and decrements by one when `up` is 0, wrapping around modulo 256 (255+1 -> 0, 0-1 -> 255). If neither `load` nor `en` is 1, `count` holds its value. No parameters.",
+ "expected": {"module": "updown_counter", "params": {},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "en": {"dir": "input", "width": 1}, "up": {"dir": "input", "width": 1},
+             "load": {"dir": "input", "width": 1}, "load_val": {"dir": "input", "width": 8}, "count": {"dir": "output", "width": 8}}},
+ "golden_cycles": 600
+}

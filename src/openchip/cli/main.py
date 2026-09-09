@@ -1,0 +1,285 @@
+"""OpenChip command-line interface."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+from .. import __version__
+from ..config import Config
+
+
+def _cfg(args) -> Config:
+    return Config.load(getattr(args, "config", None))
+
+
+def _read_request(arg: str | None) -> str | None:
+    """A request argument may be a path to a file or literal text."""
+    if not arg:
+        return None
+    try:
+        p = Path(arg)
+        if len(arg) < 4096 and p.is_file():
+            return p.read_text()
+    except OSError:
+        pass
+    return arg
+
+
+def cmd_doctor(args) -> int:
+    from ..models.adapter import ModelAdapter
+    from ..tools.base import tool_version, which
+
+    cfg = _cfg(args)
+    print(f"openchip {__version__}  python {sys.version.split()[0]}")
+    ok = True
+    for name in ("iverilog", "vvp", "verilator", "yosys", "sby"):
+        exe = getattr(cfg.tools, name)
+        path = which(exe)
+        ver = tool_version(exe, ("-V",) if name in ("iverilog", "vvp", "yosys") else ("--version",)) if path else ""
+        print(f"  {name:10} {'ok     ' if path else 'MISSING'} {path or ''}  {ver}")
+        if not path and name != "sby":
+            ok = False
+    h = ModelAdapter(cfg.model, cfg.api_key()).health()
+    print(f"  model      {'ok     ' if h.get('ok') else 'UNREACH'} {cfg.model.base_url} -> {cfg.model.model}"
+          + (f"  served={h.get('served_models')}" if h.get("ok") else f"  ({h.get('error')})"))
+    if h.get("ok") and not h.get("configured_is_served"):
+        print("  WARNING: configured model is not in the served list")
+    print("  features   contract validation, reference-vs-RTL simulation (iverilog), verilator lint, yosys generic synth; formal (sby) optional; no timing/power")
+    return 0 if ok else 1
+
+
+def cmd_init(args) -> int:
+    from ..runtime.workspace import Workspace
+
+    ws = Workspace(args.project)
+    request = _read_request(args.request)
+    ws.init(request=request, name=args.name)
+    print(f"initialized workspace {ws.root}" + (" with request" if request else ""))
+    return 0
+
+
+def _parse_duration(s: str) -> float:
+    units = {"s": 1, "m": 60, "h": 3600}
+    if s[-1] in units:
+        return float(s[:-1]) * units[s[-1]]
+    return float(s)
+
+
+def cmd_build(args) -> int:
+    from ..runtime.run import Runner
+    from ..runtime.workspace import Workspace
+
+    cfg = _cfg(args)
+    ws = Workspace(args.project)
+    request = _read_request(args.request)
+    if not ws.exists():
+        ws.init(request=request)
+    elif request:
+        (ws.root / "request" / "request.md").write_text(request.strip() + "\n")
+    request = ws.request_text().strip()
+    if not request:
+        print("error: no request. Pass --request <file-or-text> or write request/request.md", file=sys.stderr)
+        return 2
+    runner = Runner(ws, cfg, log=_logger())
+    budget = _parse_duration(args.budget) if args.budget else None
+    if budget:
+        cfg.budget.wall_time_s = budget
+    run_id = runner.start(request, budget_s=budget)
+    print(f"run {run_id} started in {ws.root}")
+    outcome = runner.execute()
+    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts")}, indent=1))
+    return 0 if outcome.get("accepted") else 3
+
+
+def cmd_resume(args) -> int:
+    from ..runtime.run import Runner
+    from ..runtime.workspace import Workspace
+
+    cfg = _cfg(args)
+    ws = Workspace(args.project)
+    runner = Runner(ws, cfg, log=_logger())
+    run_id = args.run or runner.store.latest_run_id()
+    if not run_id:
+        print("error: no run to resume", file=sys.stderr)
+        return 2
+    run = runner.store.get_run(run_id)
+    if run and run["state"] in ("completed",):
+        print(f"run {run_id} already completed")
+        return 0
+    runner.resume(run_id)
+    print(f"resuming run {run_id} from step {run['step'] if run else '?'}")
+    outcome = runner.execute()
+    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts")}, indent=1))
+    return 0 if outcome.get("accepted") else 3
+
+
+def cmd_revise(args) -> int:
+    """Apply a change request: new contract version, invalidated evidence, targeted re-run."""
+    from ..runtime.run import Runner
+    from ..runtime.workspace import Workspace
+
+    cfg = _cfg(args)
+    ws = Workspace(args.project)
+    change = _read_request(args.change)
+    if not change:
+        print("error: --change is required", file=sys.stderr)
+        return 2
+    runner = Runner(ws, cfg, log=_logger())
+    budget = _parse_duration(args.budget) if args.budget else None
+    run_id = runner.revise(change, budget_s=budget)
+    print(f"revision run {run_id} started in {ws.root}")
+    outcome = runner.execute()
+    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts", "contract_version")}, indent=1))
+    return 0 if outcome.get("accepted") else 3
+
+
+def cmd_status(args) -> int:
+    from ..runtime.store import RunStore
+    from ..runtime.workspace import Workspace
+
+    ws = Workspace(args.project)
+    if not ws.db_path.is_file():
+        print("no runs")
+        return 0
+    store = RunStore(ws.db_path)
+    runs = store.list_runs()
+    if args.run:
+        runs = [r for r in runs if r["run_id"] == args.run]
+    for r in runs:
+        full = store.get_run(r["run_id"])
+        ck = full["checkpoint"] if full else {}
+        hist = ck.get("history", [])
+        last = hist[-1]["summary"] if hist else "-"
+        print(f"{r['run_id']}  state={r['state']:16} step={r['step']:10} attempts={len(hist)}  last: {last}")
+        if args.verbose and full:
+            for e in store.events(r["run_id"]):
+                print("   ", time.strftime("%H:%M:%S", time.localtime(e["ts"])), e["kind"], {k: v for k, v in e.items() if k not in ("ts", "kind")})
+    return 0
+
+
+def cmd_report(args) -> int:
+    from ..runtime.workspace import Workspace
+
+    ws = Workspace(args.project)
+    p = ws.root / "reports" / ("outcome.json" if args.json else "report.md")
+    if not p.is_file():
+        print("no report yet", file=sys.stderr)
+        return 1
+    print(p.read_text())
+    return 0
+
+
+def cmd_verify(args) -> int:
+    """Re-run verification of delivered artifacts (no model calls)."""
+    from ..contracts.schema import Contract
+    from ..runtime.workspace import Workspace
+    from ..verification.harness import verify
+
+    cfg = _cfg(args)
+    ws = Workspace(args.project)
+    spec = ws.dir("spec")
+    contracts = sorted(spec.glob("contract.v*.json"))
+    if not contracts:
+        print("no contract found", file=sys.stderr)
+        return 1
+    contract = Contract.model_validate_json(contracts[-1].read_text())
+    rtl = ws.dir("rtl") / f"{contract.module_name}.v"
+    ref = ws.dir("reference") / "reference.py"
+    work = ws.dir("verification") / "reverify"
+    seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
+    res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds)
+    print(json.dumps({"accepted": res.accepted, "stage": res.stage, "summary": res.summary, "sims": [(s["seed"], s["status"], s["mismatches"]) for s in res.sims]}, indent=1))
+    return 0 if res.accepted else 3
+
+
+def cmd_eval(args) -> int:
+    from ..evals.runner import run_suite
+
+    cfg = _cfg(args)
+    return run_suite(cfg, args.suite, args.out, tasks=args.tasks, budget=args.budget, repeats=args.repeats, log=_logger())
+
+
+def cmd_veval(args) -> int:
+    from ..evals.verilogeval import run_benchmark
+
+    cfg = _cfg(args)
+    return run_benchmark(cfg, args.dataset, args.mode, args.out, problems=args.problems, limit=args.limit, budget=args.budget, log=_logger())
+
+
+def _logger():
+    t0 = time.time()
+
+    def log(msg: str) -> None:
+        print(f"[{time.time() - t0:7.1f}s] {msg}", flush=True)
+
+    return log
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="openchip", description="Natural-language request -> RTL project with verification evidence.")
+    p.add_argument("--config", help="config TOML (default: ./openchip.toml or configs/default.toml)")
+    p.add_argument("--version", action="version", version=__version__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("doctor", help="report prerequisites, tool versions, model connectivity")
+    s.set_defaults(fn=cmd_doctor)
+    s = sub.add_parser("init", help="create a design workspace")
+    s.add_argument("project")
+    s.add_argument("--request", help="request text or path to a file")
+    s.add_argument("--name")
+    s.set_defaults(fn=cmd_init)
+    s = sub.add_parser("build", help="run the full request -> RTL -> verification pipeline")
+    s.add_argument("--project", required=True)
+    s.add_argument("--request", help="request text or path; overrides request/request.md")
+    s.add_argument("--budget", help="wall-time budget, e.g. 20m, 2h")
+    s.set_defaults(fn=cmd_build)
+    s = sub.add_parser("revise", help="apply a change request: new contract version, re-verify")
+    s.add_argument("--project", required=True)
+    s.add_argument("--change", required=True, help="change request text or path")
+    s.add_argument("--budget")
+    s.set_defaults(fn=cmd_revise)
+    s = sub.add_parser("resume", help="resume an interrupted run")
+    s.add_argument("--project", required=True)
+    s.add_argument("--run")
+    s.set_defaults(fn=cmd_resume)
+    s = sub.add_parser("status", help="show runs in a workspace")
+    s.add_argument("--project", required=True)
+    s.add_argument("--run")
+    s.add_argument("-v", "--verbose", action="store_true")
+    s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("report", help="print the latest delivery report")
+    s.add_argument("--project", required=True)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_report)
+    s = sub.add_parser("verify", help="re-run verification on delivered artifacts")
+    s.add_argument("--project", required=True)
+    s.add_argument("--cycles", type=int)
+    s.add_argument("--seeds", help="comma-separated seeds")
+    s.set_defaults(fn=cmd_verify)
+    s = sub.add_parser("eval", help="run an evaluation suite")
+    s.add_argument("--suite", required=True)
+    s.add_argument("--out", default="evals/results")
+    s.add_argument("--tasks", help="comma-separated task ids (default: all)")
+    s.add_argument("--budget", default="20m")
+    s.add_argument("--repeats", type=int, default=1)
+    s.set_defaults(fn=cmd_eval)
+    s = sub.add_parser("veval", help="run VerilogEval v2 spec-to-rtl (direct single-shot or full agent)")
+    s.add_argument("--dataset", required=True, help="path to verilog-eval/dataset_spec-to-rtl")
+    s.add_argument("--mode", choices=["direct", "agent"], default="direct")
+    s.add_argument("--out", default="evals/results")
+    s.add_argument("--problems", help="comma-separated problem ids")
+    s.add_argument("--limit", type=int)
+    s.add_argument("--budget", default="10m")
+    s.set_defaults(fn=cmd_veval)
+    return p
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

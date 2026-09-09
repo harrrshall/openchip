@@ -1,0 +1,9 @@
+{
+ "id": "alu8",
+ "family": "arithmetic",
+ "request": "Create an 8-bit ALU module named `alu8` with registered outputs.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `a` (input, 8 bits), `b` (input, 8 bits), `op` (input, 3 bits), `result` (output, 8 bits), `zero` (output, 1 bit), `carry` (output, 1 bit).\n\nBehavior: at every rising clock edge the outputs are updated from the current inputs (one cycle latency; outputs are registers). Operation by `op`: 0 = a + b (low 8 bits), 1 = a - b (low 8 bits, modulo 256), 2 = a AND b, 3 = a OR b, 4 = a XOR b, 5 = a shifted left by 1 (bit 0 becomes 0), 6 = a shifted right by 1 logically (bit 7 becomes 0), 7 = a (pass-through). `carry` is the carry-out (bit 8) of the addition for op 0, is 1 for op 1 when a < b (borrow), and is 0 for every other op. `zero` is 1 when the new `result` is 0. Reset sets `result`, `zero` and `carry` to 0. No parameters.",
+ "expected": {"module": "alu8", "params": {},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "a": {"dir": "input", "width": 8}, "b": {"dir": "input", "width": 8}, "op": {"dir": "input", "width": 3},
+             "result": {"dir": "output", "width": 8}, "zero": {"dir": "output", "width": 1}, "carry": {"dir": "output", "width": 1}}},
+ "golden_cycles": 600
+}

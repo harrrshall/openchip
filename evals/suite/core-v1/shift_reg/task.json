@@ -1,0 +1,9 @@
+{
+ "id": "shift_reg",
+ "family": "datapath",
+ "request": "Create a parallel-load shift register module named `shift_reg` with parameter `WIDTH` (default 8).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `load` (input, 1 bit), `din` (input, WIDTH bits), `shift_en` (input, 1 bit), `sin` (input, 1 bit), `q` (output, WIDTH bits), `sout` (output, 1 bit).\n\nBehavior: `q` is the register contents (registered output). At each rising clock edge: if `load` is 1, `q` takes `din` (load has priority); otherwise if `shift_en` is 1, the register shifts left by one bit: the new value is {q[WIDTH-2:0], sin} (the old most-significant bit is shifted out and `sin` enters at bit 0); otherwise `q` holds. `sout` is combinational and equals the current most-significant bit q[WIDTH-1]. Reset sets `q` to 0.",
+ "expected": {"module": "shift_reg", "params": {"WIDTH": 8},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "load": {"dir": "input", "width": 1}, "din": {"dir": "input", "width": 8},
+             "shift_en": {"dir": "input", "width": 1}, "sin": {"dir": "input", "width": 1}, "q": {"dir": "output", "width": 8}, "sout": {"dir": "output", "width": 1}}},
+ "golden_cycles": 500
+}

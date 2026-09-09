@@ -1,0 +1,8 @@
+{
+ "id": "gray_counter",
+ "family": "counters",
+ "request": "Create a Gray-code counter module named `gray_counter` with parameter `WIDTH` (default 4).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `en` (input, 1 bit), `bin` (output, WIDTH bits), `gray` (output, WIDTH bits).\n\nBehavior: `bin` is a registered binary counter that increments by 1 at each rising clock edge when `en` is 1 and wraps from 2^WIDTH-1 to 0; it holds when `en` is 0. `gray` is combinational and equals the Gray encoding of the current `bin`: gray = bin XOR (bin >> 1). Reset sets `bin` to 0.",
+ "expected": {"module": "gray_counter", "params": {"WIDTH": 4},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "en": {"dir": "input", "width": 1}, "bin": {"dir": "output", "width": 4}, "gray": {"dir": "output", "width": 4}}},
+ "golden_cycles": 400
+}

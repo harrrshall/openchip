@@ -1,0 +1,6 @@
+{
+ "id": "debounce", "family": "control",
+ "request": "Create a switch debouncer module named `debounce` with parameter `N` (default 4): the number of consecutive identical samples required before the output changes.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `din` (input, 1 bit), `dout` (output, 1 bit).\n\nBehavior: `dout` is a registered output, 0 after reset. An internal counter (reset to 0) counts consecutive rising clock edges at which the sampled `din` differs from the current `dout`. At an edge where `din` != `dout`: if the counter has already reached N-1 (i.e. this is the N-th consecutive differing sample), `dout` takes the value of `din` and the counter returns to 0; otherwise the counter increments. At an edge where `din` == `dout`, the counter returns to 0 and `dout` holds. With N=4, a change on `din` must be stable for 4 consecutive samples before `dout` follows it; a glitch shorter than that is ignored.",
+ "expected": {"module": "debounce", "params": {"N": 4}, "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "din": {"dir": "input", "width": 1}, "dout": {"dir": "output", "width": 1}}},
+ "golden_cycles": 600
+}

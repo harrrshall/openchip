@@ -1,0 +1,71 @@
+{
+ "module_name": "updown_counter",
+ "purpose": "8-bit up/down counter with load.",
+ "ports": [
+  {
+   "name": "clk",
+   "direction": "input",
+   "width": 1,
+   "role": "clock",
+   "timing": "n/a"
+  },
+  {
+   "name": "rst",
+   "direction": "input",
+   "width": 1,
+   "role": "reset",
+   "timing": "n/a"
+  },
+  {
+   "name": "en",
+   "direction": "input",
+   "width": 1,
+   "role": "control",
+   "timing": "n/a"
+  },
+  {
+   "name": "up",
+   "direction": "input",
+   "width": 1,
+   "role": "control",
+   "timing": "n/a"
+  },
+  {
+   "name": "load",
+   "direction": "input",
+   "width": 1,
+   "role": "control",
+   "timing": "n/a"
+  },
+  {
+   "name": "load_val",
+   "direction": "input",
+   "width": 8,
+   "timing": "n/a"
+  },
+  {
+   "name": "count",
+   "direction": "output",
+   "width": 8,
+   "timing": "registered"
+  }
+ ],
+ "behavior": "count is a registered 8-bit output. On reset it becomes 0. At each rising clock edge: if load is 1, count takes load_val (load has priority over en); otherwise if en is 1, count increments when up is 1 and decrements when up is 0, wrapping modulo 256; otherwise count holds its value.",
+ "requirements": [
+  {
+   "id": "R001",
+   "text": "count resets to 0",
+   "source": "user_text"
+  },
+  {
+   "id": "R002",
+   "text": "load takes priority over en",
+   "source": "user_text"
+  },
+  {
+   "id": "R003",
+   "text": "wraps modulo 256",
+   "source": "user_text"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)",
+ "mode": "direct",
+ "n": 156,
+ "pass": 47,
+ "pass_rate": 0.3013,
+ "statuses": {
+  "pass": 47,
+  "fail": 54,
+  "compile_error": 55
+ },
+ "false_acceptance": null,
+ "total_calls": 156,
+ "total_tokens": 86241,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "Qwen/Qwen3-8B",
+  "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [
+   "intake"
+  ],
+  "thinking_budget": 12000,
+  "extra_body": {}
+ },
+ "protocol": "single generation, pass@1",
+ "contamination": "unknown (public benchmark)"
+}

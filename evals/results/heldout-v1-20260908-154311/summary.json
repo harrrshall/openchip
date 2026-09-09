@@ -1,0 +1,54 @@
+{
+ "suite": "heldout-v1",
+ "n": 10,
+ "tasks": 5,
+ "repeats": 2,
+ "budget": "15m",
+ "accepted": 5,
+ "golden_pass": 5,
+ "false_acceptance": 1,
+ "interface_mismatch": 0,
+ "states": {
+  "stalled": 4,
+  "budget_exhausted": 1,
+  "completed": 5
+ },
+ "mean_wall_s": 107.1,
+ "mean_attempts": 2.5,
+ "total_tokens": 253351,
+ "total_model_calls": 77,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "Qwen/Qwen3-8B",
+  "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [
+   "intake"
+  ],
+  "thinking_budget": 12000,
+  "extra_body": {}
+ },
+ "verification": {
+  "sim_cycles": 400,
+  "seeds": [
+   1,
+   2,
+   3
+  ],
+  "require_lint": true,
+  "require_synth": true,
+  "corroborate": true,
+  "run_formal": true,
+  "require_formal": false,
+  "formal_depth": 20,
+  "formal_timeout_s": 300.0
+ }
+}

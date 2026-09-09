@@ -1,0 +1,37 @@
+{
+ "benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)",
+ "mode": "direct",
+ "n": 156,
+ "pass": 114,
+ "pass_rate": 0.7308,
+ "statuses": {
+  "pass": 114,
+  "no_code": 1,
+  "compile_error": 8,
+  "fail": 33
+ },
+ "false_acceptance": null,
+ "total_calls": 156,
+ "total_tokens": 132129,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "openai/gpt-oss-120b",
+  "revision": "b5c939de8f754692c1647ca79fbf85e8c1e70f8a",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [],
+  "thinking_budget": 12000,
+  "extra_body": {
+   "reasoning_effort": "low"
+  }
+ },
+ "protocol": "single generation, pass@1",
+ "contamination": "unknown (public benchmark)"
+}

@@ -1,0 +1,38 @@
+{
+ "module_name": "prio_enc",
+ "purpose": "8-to-3 priority encoder, combinational.",
+ "clock_reset": null,
+ "ports": [
+  {
+   "name": "req",
+   "direction": "input",
+   "width": 8,
+   "timing": "n/a"
+  },
+  {
+   "name": "idx",
+   "direction": "output",
+   "width": 3,
+   "timing": "combinational"
+  },
+  {
+   "name": "valid",
+   "direction": "output",
+   "width": 1,
+   "timing": "combinational"
+  }
+ ],
+ "behavior": "valid is 1 when any bit of req is set. idx is the index of the highest set bit of req (bit 7 highest priority); idx is 0 when req is 0. Purely combinational, no clock, no reset, no state.",
+ "requirements": [
+  {
+   "id": "R001",
+   "text": "idx is the index of the highest set bit",
+   "source": "user_text"
+  },
+  {
+   "id": "R002",
+   "text": "valid reflects any bit set",
+   "source": "user_text"
+  }
+ ]
+}

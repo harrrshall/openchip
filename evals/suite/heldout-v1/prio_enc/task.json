@@ -1,0 +1,6 @@
+{
+ "id": "prio_enc", "family": "combinational",
+ "request": "Create an 8-to-3 priority encoder module named `prio_enc`.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset, unused by the logic but must be present), `req` (input, 8 bits), `idx` (output, 3 bits), `valid` (output, 1 bit).\n\nBehavior: purely combinational. `valid` is 1 when any bit of `req` is 1, else 0. `idx` is the index of the HIGHEST set bit of `req` (bit 7 has the highest priority): for example req=8'b0010_0100 gives idx=5. When `req` is 0, `idx` is 0. No parameters.",
+ "expected": {"module": "prio_enc", "params": {}, "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "req": {"dir": "input", "width": 8}, "idx": {"dir": "output", "width": 3}, "valid": {"dir": "output", "width": 1}}},
+ "golden_cycles": 400
+}

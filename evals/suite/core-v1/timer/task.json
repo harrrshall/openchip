@@ -1,0 +1,9 @@
+{
+ "id": "timer",
+ "family": "timers",
+ "request": "Create a one-shot countdown timer module named `timer` with parameter `WIDTH` (default 8).\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `start` (input, 1 bit), `load_val` (input, WIDTH bits), `busy` (output, 1 bit), `done` (output, 1 bit), `remaining` (output, WIDTH bits).\n\nBehavior: all outputs are registered. When the timer is idle (`busy`=0) and `start` is 1 at a rising clock edge: if `load_val` is 0 the timer stays idle and `done` pulses (is 1) for exactly the next cycle; otherwise `remaining` takes `load_val` and `busy` becomes 1. While `busy` is 1, `remaining` decrements by 1 at each clock edge; at the edge where `remaining` is 1 it becomes 0, `busy` becomes 0, and `done` becomes 1 for exactly one cycle. `done` is 0 in every other cycle. `start` is ignored while `busy` is 1 (including the cycle in which `done` is being set). Reset: `busy`=0, `done`=0, `remaining`=0.",
+ "expected": {"module": "timer", "params": {"WIDTH": 8},
+   "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "start": {"dir": "input", "width": 1}, "load_val": {"dir": "input", "width": 8},
+             "busy": {"dir": "output", "width": 1}, "done": {"dir": "output", "width": 1}, "remaining": {"dir": "output", "width": 8}}},
+ "golden_cycles": 600
+}

@@ -1,0 +1,36 @@
+{
+ "benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)",
+ "mode": "agent",
+ "n": 39,
+ "pass": 28,
+ "pass_rate": 0.7179,
+ "statuses": {
+  "fail": 10,
+  "no_rtl": 1,
+  "pass": 28
+ },
+ "false_acceptance": 9,
+ "total_calls": 184,
+ "total_tokens": 577707,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "openai/gpt-oss-120b",
+  "revision": "b5c939de8f754692c1647ca79fbf85e8c1e70f8a",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [],
+  "thinking_budget": 12000,
+  "extra_body": {
+   "reasoning_effort": "low"
+  }
+ },
+ "protocol": "full OpenChip pipeline with tool feedback, budget 6m/problem; not comparable to single-generation pass@1",
+ "contamination": "unknown (public benchmark)"
+}

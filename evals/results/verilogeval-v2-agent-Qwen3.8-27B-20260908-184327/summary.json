@@ -1,0 +1,36 @@
+{
+ "benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)",
+ "mode": "agent",
+ "n": 39,
+ "pass": 21,
+ "pass_rate": 0.5385,
+ "statuses": {
+  "pass": 21,
+  "no_rtl": 8,
+  "fail": 10
+ },
+ "false_acceptance": 10,
+ "total_calls": 164,
+ "total_tokens": 673738,
+ "model": {
+  "provider": "openai-compatible",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "model": "Qwen/Qwen3.8-27B",
+  "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "api_key_env": "OPENCHIP_MODEL_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": true,
+  "thinking_roles": [
+   "intake"
+  ],
+  "thinking_budget": 12000,
+  "extra_body": {}
+ },
+ "protocol": "full OpenChip pipeline with tool feedback, budget 6m/problem; not comparable to single-generation pass@1",
+ "contamination": "unknown (public benchmark)"
+}

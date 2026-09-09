@@ -1,0 +1,6 @@
+{
+ "id": "rr_arbiter", "family": "control",
+ "request": "Create a 4-requester round-robin arbiter module named `rr_arbiter`.\n\nPorts: `clk` (input), `rst` (input, active-high synchronous reset), `req` (input, 4 bits), `grant` (output, 4 bits, one-hot or zero).\n\nBehavior: `grant` is combinational from the current `req` and an internal registered pointer `last` (2 bits, index of the most recently granted requester; reset value 3 so that requester 0 has the highest priority after reset). Each cycle, the arbiter grants the first requesting index found when searching in the order last+1, last+2, last+3, last (mod 4), i.e. starting just after the last granted requester. `grant` has exactly one bit set when `req` is nonzero and is 0 when `req` is 0. At every rising clock edge where `grant` is nonzero, `last` is updated to the granted index; when `grant` is 0, `last` holds. No parameters.",
+ "expected": {"module": "rr_arbiter", "params": {}, "ports": {"clk": {"dir": "input", "width": 1}, "rst": {"dir": "input", "width": 1}, "req": {"dir": "input", "width": 4}, "grant": {"dir": "output", "width": 4}}},
+ "golden_cycles": 600
+}
