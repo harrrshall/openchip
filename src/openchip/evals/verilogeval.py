@@ -89,7 +89,9 @@ def run_agent(cfg: Config, prob: dict, work: Path, budget_s: float, log) -> dict
         outcome = runner.execute()
     except Exception as e:  # noqa: BLE001
         outcome = {"state": "failed", "accepted": False, "status_line": f"crash: {e}", "attempts": 0}
+    rv = outcome.get("review") or {}
     rec = {"id": prob["id"], "mode": "agent", "state": outcome.get("state"), "accepted": bool(outcome.get("accepted")), "attempts": outcome.get("attempts", 0),
+           "provisional": bool(outcome.get("provisional")), "review_verdict": rv.get("verdict"), "review_applied": len(rv.get("applied", [])),
            "calls": runner.adapter.usage.calls, "tokens": runner.adapter.usage.total_tokens, "wall_s": round(time.time() - t0, 1)}
     rtl = work / "rtl" / "TopModule.v"
     if rtl.is_file():
@@ -122,6 +124,9 @@ def run_benchmark(cfg: Config, dataset: str, mode: str, out: str, problems: Opti
     n = len(recs)
     npass = sum(r.get("status") == "pass" for r in recs)
     summary = {"benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)", "mode": mode, "n": n, "pass": npass, "pass_rate": round(npass / n, 4),
+               "provisional_acceptances": sum(bool(r.get("provisional")) for r in recs) if mode == "agent" else None,
+               "false_acceptance_excluding_provisional": sum(bool(r.get("false_acceptance")) and not r.get("provisional") for r in recs) if mode == "agent" else None,
+               "review": {"enabled": cfg.review.enabled, "alt_model": cfg.model.alt.model if cfg.model.alt else None, "review_model": cfg.model.review.model if cfg.model.review else None},
                "statuses": {s: sum(r.get("status") == s for r in recs) for s in set(r.get("status") for r in recs)},
                "false_acceptance": sum(bool(r.get("false_acceptance")) for r in recs) if mode == "agent" else None,
                "total_calls": sum(r.get("calls", 0) for r in recs), "total_tokens": sum(r.get("tokens", 0) for r in recs),

@@ -5,7 +5,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ else:  # pragma: no cover
 
 
 class ModelConfig(BaseModel):
-    provider: str = "openai-compatible"
+    provider: Literal["openai-compatible", "openai", "openrouter", "anthropic"] = "openai-compatible"
     base_url: str = "http://127.0.0.1:8000/v1"
     model: str = "Qwen/Qwen3-8B"
     revision: str = "main"
@@ -31,6 +31,9 @@ class ModelConfig(BaseModel):
     thinking_roles: Optional[list[str]] = None  # None -> `thinking` applies to all roles; else only these roles think
     thinking_budget: int = 12000
     extra_body: dict = Field(default_factory=dict)
+    # Optional second model for cross-family reference corroboration and an optional independent spec reviewer.
+    alt: Optional["ModelConfig"] = None
+    review: Optional["ModelConfig"] = None
 
 
 class ToolsConfig(BaseModel):
@@ -48,6 +51,12 @@ class BudgetConfig(BaseModel):
     max_model_calls: int = 40
     max_total_tokens: int = 2_000_000
     max_candidates: int = 1
+
+
+class ReviewConfig(BaseModel):
+    enabled: bool = True          # independent spec review of the contract before any code is written
+    apply_corrections: bool = True
+    max_corrections: int = 8
 
 
 class VerificationConfig(BaseModel):
@@ -70,6 +79,7 @@ class Config(BaseModel):
     model: ModelConfig = Field(default_factory=ModelConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     runs_dir: str = "runs"
 
@@ -101,7 +111,30 @@ class Config(BaseModel):
             cfg.model.thinking_roles = roles
         if os.environ.get("OPENCHIP_RUNS_DIR"):
             cfg.runs_dir = os.environ["OPENCHIP_RUNS_DIR"]
+        if os.environ.get("OPENCHIP_PROVIDER"):
+            cfg.model.provider = os.environ["OPENCHIP_PROVIDER"]  # type: ignore[assignment]
+        if os.environ.get("OPENCHIP_REVIEW") in ("0", "false", "off"):
+            cfg.review.enabled = False
+        # second model (cross-family corroboration) from env: OPENCHIP_ALT_MODEL [+ _BASE_URL, _PROVIDER, _API_KEY_ENV]
+        if os.environ.get("OPENCHIP_ALT_MODEL"):
+            alt = cfg.model.alt or ModelConfig(model=os.environ["OPENCHIP_ALT_MODEL"])
+            alt.model = os.environ["OPENCHIP_ALT_MODEL"]
+            alt.base_url = os.environ.get("OPENCHIP_ALT_BASE_URL", alt.base_url)
+            alt.provider = os.environ.get("OPENCHIP_ALT_PROVIDER", alt.provider)  # type: ignore[assignment]
+            alt.api_key_env = os.environ.get("OPENCHIP_ALT_API_KEY_ENV", "OPENCHIP_ALT_API_KEY")
+            alt.thinking_roles = alt.thinking_roles if alt.thinking_roles is not None else ["intake"]
+            alt.alt = None
+            cfg.model.alt = alt
+        if os.environ.get("OPENCHIP_REVIEW_MODEL"):
+            rv = cfg.model.review or ModelConfig(model=os.environ["OPENCHIP_REVIEW_MODEL"])
+            rv.model = os.environ["OPENCHIP_REVIEW_MODEL"]
+            rv.base_url = os.environ.get("OPENCHIP_REVIEW_BASE_URL", rv.base_url)
+            rv.provider = os.environ.get("OPENCHIP_REVIEW_PROVIDER", rv.provider)  # type: ignore[assignment]
+            rv.api_key_env = os.environ.get("OPENCHIP_REVIEW_API_KEY_ENV", "OPENCHIP_REVIEW_API_KEY")
+            rv.review = None
+            cfg.model.review = rv
         return cfg
 
     def api_key(self) -> str:
-        return os.environ.get(self.model.api_key_env, "") or "EMPTY"
+        from .models.adapter import resolve_api_key  # lazy: adapter imports this module
+        return resolve_api_key(self.model)

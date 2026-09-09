@@ -77,7 +77,10 @@ def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log
         outcome = runner.execute()
     except Exception as e:  # noqa: BLE001
         outcome = {"state": "failed", "accepted": False, "status_line": f"crash: {e}", "attempts": 0}
+    rv = outcome.get("review") or {}
     rec.update({"state": outcome.get("state"), "accepted": bool(outcome.get("accepted")), "attempts": outcome.get("attempts", 0),
+                "provisional": bool(outcome.get("provisional")), "review_verdict": rv.get("verdict"), "review_applied": len(rv.get("applied", [])),
+                "alt_model": (cfg.model.alt.model if cfg.model.alt else None),
                 "formal": (outcome.get("formal") or {}).get("status") if isinstance(outcome.get("formal"), dict) else None,
                 "status_line": outcome.get("status_line", ""), "wall_s": round(time.time() - t0, 1),
                 "model_calls": runner.adapter.usage.calls, "tokens": runner.adapter.usage.total_tokens,

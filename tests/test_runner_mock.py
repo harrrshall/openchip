@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from openchip.config import Config
+from openchip.config import Config, ModelConfig
 from openchip.models.adapter import ModelResponse, Usage
 from openchip.runtime.run import Runner
 from openchip.runtime.workspace import Workspace
@@ -20,6 +20,7 @@ class ScriptedAdapter:
         self.replies = {k: list(v) for k, v in replies.items()}
         self.usage = Usage()
         self.calls: list[str] = []
+        self.cfg = ModelConfig(model="scripted", thinking=False, thinking_roles=[])
 
     def chat(self, messages, role="generic", **kw):
         self.calls.append(role)
@@ -49,7 +50,7 @@ def test_happy_path_and_resume_state(tmp_path):
     rid = r.start("8-bit up/down counter")
     out = r.execute()
     assert out["accepted"] and out["state"] == "completed" and out["attempts"] == 1
-    assert adapter.calls == ["intake", "reference", "rtl", "reference"]  # second reference corroborates acceptance
+    assert adapter.calls == ["intake", "review", "reference", "rtl", "reference"]  # review, then a second reference corroborates acceptance
     assert out["reference_consensus"]["outcome"] == "rtl_corroborated_by_two_references"
     assert (ws.root / "reports" / "report.md").is_file() and (ws.root / "rtl" / "updown_counter.v").is_file()
     run = r.store.get_run(rid)
@@ -203,3 +204,28 @@ def test_revision_creates_v2_and_reverifies(tmp_path):
     assert (ws.root / "spec" / "contract.v1.json").read_text() == v1
     assert out["contract_version"] == 2 and adapter2.calls[0] == "revise" and "intake" not in adapter2.calls
     assert any(e["kind"] == "contract_revised" and "R004" in e["changed_or_new"] for e in r2.store.events(rid2))
+
+
+def test_spec_review_applies_timing_correction(tmp_path):
+    """The reviewer flips a mislabelled output to combinational; the contract becomes v2 with provenance."""
+    ws = Workspace(tmp_path / "ws")
+    ws.init(request="counter with a combinational is_max flag")
+    c = json.loads(contract_reply())
+    c["ports"].append({"name": "is_max", "direction": "output", "width": 1, "timing": "registered"})  # wrong on purpose
+    review = json.dumps({"verdict": "needs_correction", "corrections": [{"kind": "port_timing", "target": "is_max", "value": "combinational", "reason": "request says the flag reflects count"}],
+                         "unresolved": ["Should is_max also assert during reset?"], "notes": "ok"})
+    ref = (FIX / "counter_reference.py").read_text().replace('out = {"count": self.count}', 'out = {"count": self.count, "is_max": int(self.count == 255)}')
+    rtl = (FIX / "counter_good.v").read_text().replace("output reg [7:0] count);", "output reg [7:0] count, output is_max);\n  assign is_max = (count == 8'd255);")
+    adapter = ScriptedAdapter({"intake": [json.dumps(c)], "review": [review], "reference": ["```python\n" + ref + "\n```"], "rtl": ["```verilog\n" + rtl + "\n```"]})
+    cfg = Config.load()
+    cfg.verification.run_formal = False
+    cfg.verification.sim_cycles = 100
+    r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
+    r.start("counter")
+    out = r.execute()
+    assert out["accepted"], out["status_line"]
+    v2 = json.loads((ws.root / "spec" / "contract.v2.json").read_text())
+    assert v2["parent_version"] == 1 and v2["revision_authority"] == "agent_inference"
+    assert next(p for p in v2["ports"] if p["name"] == "is_max")["timing"] == "combinational"
+    assert out["provisional"] is True and "PROVISIONAL" in out["status_line"]
+    assert out["review"]["applied"][0]["kind"] == "port_timing"

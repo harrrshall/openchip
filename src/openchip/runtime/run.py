@@ -30,7 +30,7 @@ from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
 from .workspace import Workspace
 
-STEPS = ("intake", "reference", "properties", "rtl", "verify", "report", "done")
+STEPS = ("intake", "review", "reference", "properties", "rtl", "verify", "report", "done")
 
 
 # Roles for which thinking hit the token cap in this process: shared across runs (an eval suite runs many
@@ -62,19 +62,26 @@ class Budget:
         if adapter.usage.total_tokens >= self.max_total_tokens:
             raise BudgetExhausted(f"token limit {self.max_total_tokens} reached")
 
-    def snapshot(self, adapter: ModelAdapter) -> dict:
+    def snapshot(self, adapter: ModelAdapter, extra: tuple = ()) -> dict:
+        others = [a for a in extra if a is not None]
         return {"elapsed_s": round(time.time() - self.started, 1), "wall_time_s": self.wall_time_s,
                 "model_calls": adapter.usage.calls, "max_model_calls": self.max_model_calls,
                 "tokens": adapter.usage.total_tokens, "max_total_tokens": self.max_total_tokens,
-                "model_latency_s": round(adapter.usage.latency_s, 1)}
+                "model_latency_s": round(adapter.usage.latency_s, 1),
+                "secondary_models": {a.cfg.model: {"calls": a.usage.calls, "tokens": a.usage.total_tokens, "latency_s": round(a.usage.latency_s, 1)} for a in others}}
 
 
 class Runner:
-    def __init__(self, ws: Workspace, cfg: Config, adapter: Optional[ModelAdapter] = None, log=print):
+    def __init__(self, ws: Workspace, cfg: Config, adapter: Optional[ModelAdapter] = None, log=print,
+                 alt_adapter: Optional[ModelAdapter] = None, review_adapter: Optional[ModelAdapter] = None):
         self.ws = ws
         self.cfg = cfg
         self.store = RunStore(ws.db_path)
-        self.adapter = adapter or ModelAdapter(cfg.model, cfg.api_key())
+        self.adapter = adapter or ModelAdapter(cfg.model)
+        # cross-family corroboration: alternate references come from a second model when configured
+        self.alt_adapter = alt_adapter or (ModelAdapter(cfg.model.alt) if cfg.model.alt else None)
+        # independent spec review: a separate context, optionally a separate model
+        self.review_adapter = review_adapter or (ModelAdapter(cfg.model.review) if cfg.model.review else None)
         self.log = log
         self.run_id: str = ""
         self.budget: Optional[Budget] = None
@@ -166,6 +173,9 @@ class Runner:
         try:
             if step == "intake":
                 ck = self._step_intake(ck)
+                step = "review"
+            if step == "review":
+                ck = self._step_review(ck)
                 step = "reference"
             if step == "reference":
                 ck = self._step_reference(ck)
@@ -205,24 +215,28 @@ class Runner:
         return outcome
 
     # -- helpers ------------------------------------------------------------------------------
-    def _call(self, role: str, system: str, user: str, json_schema: Optional[dict] = None, temperature: Optional[float] = None, seed: Optional[int] = None):
+    def _call(self, role: str, system: str, user: str, json_schema: Optional[dict] = None, temperature: Optional[float] = None, seed: Optional[int] = None,
+              adapter: Optional[ModelAdapter] = None):
         assert self.budget
         self.budget.check(self.adapter)
         self.store.touch_lock(self.run_id)
-        tr = self.cfg.model.thinking_roles
-        think = (self.cfg.model.thinking if tr is None else (role in tr)) and role not in self._no_think_roles
+        adapter = adapter or self.adapter
+        mcfg = adapter.cfg
+        tr = mcfg.thinking_roles
+        think = (mcfg.thinking if tr is None else (role in tr)) and f"{adapter.cfg.model}:{role}" not in self._no_think_roles
         msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        r = self.adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=think)
+        r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=think)
+        tag = "" if adapter is self.adapter else f" [{adapter.cfg.model}]"
         self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
-                                                     "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think})
-        self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok)" + (f" ERROR {r.error}" if r.error else ""))
+                                                     "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think, "model": adapter.cfg.model})
+        self.log(f"[model:{role}]{tag} {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok)" + (f" ERROR {r.error}" if r.error else ""))
         if think and r.finish_reason == "length":
             # Reasoning consumed the token budget (any answer is truncated): retry without thinking, and stop
             # using thinking for this role for the rest of the run — this model cannot finish within the cap.
-            self._no_think_roles.add(role)
+            self._no_think_roles.add(f"{adapter.cfg.model}:{role}")
             self.budget.check(self.adapter)
-            self.log(f"[model:{role}] thinking hit the token cap; retrying without thinking (and for the rest of this run)")
-            r = self.adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False)
+            self.log(f"[model:{role}]{tag} thinking hit the token cap; retrying without thinking (and for the rest of this run)")
+            r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False)
             self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
                                                          "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": False, "fallback": True})
             self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok) [no-thinking fallback]")
@@ -284,9 +298,65 @@ class Runner:
             self.log(f"[intake] contract v{contract.version} for `{contract.module_name}` with {len(contract.requirements)} requirements (sha {h[:12]})"
                      + (f"; {len(contract.unresolved)} unresolved question(s) recorded" if contract.unresolved else ""))
             ck.update({"contract_path": str(cj), "contract_version": contract.version, "intake_attempts": attempt + 1})
-            self.store.checkpoint(self.run_id, "reference", ck)
+            self.store.checkpoint(self.run_id, "review", ck)
             return ck
         raise RuntimeError("intake failed: could not obtain a valid contract in 3 attempts: " + (errors[-1] if errors else ""))
+
+    # -- independent spec review ----------------------------------------------------------------
+    def _step_review(self, ck: dict) -> dict:
+        """A separate context (optionally a different model) compares request and contract and proposes
+        corrections; safe corrections are applied as a recorded contract revision before any code is written."""
+        if not self.cfg.review.enabled:
+            self.store.checkpoint(self.run_id, "reference", ck)
+            return ck
+        contract = self._load_contract(ck)
+        request = ck.get("request", "")
+        user = P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1))
+        adapter = self.review_adapter or self.adapter
+        r = self._call("review", P.REVIEW_SYSTEM, user, json_schema=REVIEW_SCHEMA, adapter=adapter)
+        data = extract_json(r.text) if r.ok else None
+        if not data:
+            self.store.event(self.run_id, "review_skipped", {"error": r.error or "no JSON"})
+            self.log("[review] no usable review; continuing with the intake contract")
+            self.store.checkpoint(self.run_id, "reference", ck)
+            return ck
+        corrections = [c for c in (data.get("corrections") or []) if isinstance(c, dict)][: self.cfg.review.max_corrections]
+        unresolved = [u for u in (data.get("unresolved") or []) if isinstance(u, str) and u.strip()]
+        applied, rejected = [], []
+        if corrections and self.cfg.review.apply_corrections:
+            new_data = contract.model_dump(mode="json")
+            for c in corrections:
+                ok, why = _apply_correction(new_data, c)
+                (applied if ok else rejected).append({**c, "result": why})
+            for u in unresolved:
+                if u not in new_data["unresolved"]:
+                    new_data["unresolved"].append(u)
+            if applied:
+                new_data["version"] = contract.version + 1
+                new_data["parent_version"] = contract.version
+                new_data["revision_authority"] = "agent_inference"
+                new_data["revision_reason"] = "independent spec review: " + "; ".join(f"{a['kind']}:{a['target']}" for a in applied)[:300]
+                try:
+                    revised = Contract.model_validate(new_data)
+                    spec = self.ws.dir("spec")
+                    cj = spec / f"contract.v{revised.version}.json"
+                    cj.write_text(revised.model_dump_json(indent=1))
+                    (spec / f"contract.v{revised.version}.md").write_text(revised.summary_md())
+                    self._save("contract", cj, "review")
+                    ck["contract_path"] = str(cj)
+                    ck["contract_version"] = revised.version
+                except ValidationError as e:
+                    rejected += [{"kind": "revision", "target": "contract", "result": str(e)[:300]}]
+                    applied = []
+        elif unresolved:
+            contract.unresolved.extend(u for u in unresolved if u not in contract.unresolved)
+            Path(ck["contract_path"]).write_text(contract.model_dump_json(indent=1))
+        ck["review"] = {"verdict": data.get("verdict"), "applied": applied, "rejected": rejected, "unresolved": unresolved,
+                        "notes": str(data.get("notes", ""))[:300], "reviewer_model": adapter.cfg.model}
+        self.store.event(self.run_id, "review", {"verdict": data.get("verdict"), "applied": len(applied), "rejected": len(rejected), "unresolved": len(unresolved)})
+        self.log(f"[review] {data.get('verdict')}: {len(applied)} correction(s) applied, {len(rejected)} rejected, {len(unresolved)} unresolved" + (f" -> contract v{ck['contract_version']}" if applied else ""))
+        self.store.checkpoint(self.run_id, "reference", ck)
+        return ck
 
     def _documents_text(self) -> str:
         docs = []
@@ -320,8 +390,9 @@ class Runner:
                 user += ("\n\nYour previous reference model failed when executed:\n" + last_err + "\nFix it. Reminder: `inputs` is a dict of non-negative ints keyed by the exact port name "
                          "(e.g. inputs['in']); bit k of a port is (inputs['name'] >> k) & 1; every output must be returned as a non-negative int (never a list or bool).")
             system = P.REFERENCE_SYSTEM if seed_offset == 0 else P.REFERENCE_ALT_SYSTEM  # alternates use a different structure to decorrelate errors
+            alt = self.alt_adapter if (seed_offset != 0 and self.alt_adapter is not None) else None  # cross-family second voice
             r = self._call("reference", system, user, seed=(self.cfg.model.seed or 0) + seed_offset + attempt,
-                           temperature=(self.cfg.model.temperature if seed_offset == 0 else max(self.cfg.model.temperature, 0.7)))
+                           temperature=(self.cfg.model.temperature if seed_offset == 0 else max(self.cfg.model.temperature, 0.7)), adapter=alt)
             code = extract_code(r.text, ("python", "py")) if r.ok else None
             if not code or "class Reference" not in code:
                 last_err = "no ```python block defining class Reference was found" if r.ok else r.error
@@ -683,12 +754,84 @@ class Runner:
     def _step_report(self, ck: dict, final_state: str, reason: str = "") -> tuple[dict, dict]:
         assert self.budget
         outcome = write_report(self.ws, self.store, self.run_id, ck, self.cfg, final_state=final_state, reason=reason,
-                               budget=self.budget.snapshot(self.adapter), tool_time_s=self.tool_time_s)
+                               budget=self.budget.snapshot(self.adapter, (self.alt_adapter, self.review_adapter)), tool_time_s=self.tool_time_s)
         self.store.set_outcome(self.run_id, outcome)
         if final_state == "completed":
             self.store.checkpoint(self.run_id, "done", ck)
         self.log(f"[report] {outcome['status_line']}")
         return ck, outcome
+
+
+REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["consistent", "needs_correction"]},
+        "corrections": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string", "enum": ["port_timing", "port_width", "parameter", "behavior", "requirement"]},
+            "target": {"type": "string"}, "value": {"type": "string"}, "reason": {"type": "string"}},
+            "required": ["kind", "target", "value", "reason"]}},
+        "unresolved": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"},
+    },
+    "required": ["verdict", "corrections", "unresolved", "notes"],
+}
+
+
+def _apply_correction(data: dict, c: dict) -> tuple[bool, str]:
+    """Apply one reviewer correction to a contract dict in place. Only bounded, checkable edits are allowed."""
+    kind, target, value = c.get("kind"), str(c.get("target", "")).strip("` "), str(c.get("value", "")).strip()
+    ports = {p["name"]: p for p in data["ports"]}
+    if kind == "port_timing":
+        if target in ports and ports[target]["direction"] == "output" and value in ("registered", "combinational"):
+            if ports[target]["timing"] == value:
+                return False, "already so"
+            ports[target]["timing"] = value
+            return True, f"{target}.timing -> {value}"
+        return False, "unknown output or bad value"
+    if kind == "port_width":
+        if target not in ports:
+            return False, "unknown port"
+        w, _, expr = value.partition(":")
+        try:
+            ports[target]["width"] = int(w)
+        except ValueError:
+            return False, "bad width"
+        ports[target]["width_expr"] = expr.strip() or ports[target].get("width_expr")
+        return True, f"{target}.width -> {value}"
+    if kind == "parameter":
+        name, _, default = value.partition("=")
+        name = name.strip()
+        if not re.match(r"^[A-Za-z_]\w*$", name):
+            return False, "bad parameter name"
+        try:
+            d = int(default.strip())
+        except ValueError:
+            return False, "bad default"
+        for prm in data["parameters"]:
+            if prm["name"] == name:
+                if prm["default"] == d:
+                    return False, "already so"
+                prm["default"] = d
+                return True, f"{name} default -> {d}"
+        data["parameters"].append({"name": name, "default": d, "description": "added by spec review"})
+        return True, f"parameter {name}={d} added"
+    if kind == "behavior":
+        if len(value) < 15:
+            return False, "too short"
+        data["behavior"] = data["behavior"].rstrip() + "\n\nReviewer clarification: " + value
+        return True, "behavior clarified"
+    if kind == "requirement":
+        if len(value) < 12:
+            return False, "too short"
+        for rq in data["requirements"]:
+            if rq["id"] == target:
+                rq["text"] = value
+                return True, f"{target} text replaced"
+        ids = [int(rq["id"][1:]) for rq in data["requirements"]]
+        new_id = f"R{(max(ids) + 1 if ids else 1):03d}"
+        data["requirements"].append({"id": new_id, "text": value, "source": "inference", "source_detail": "added by independent spec review: " + str(c.get("reason", ""))[:200]})
+        return True, f"{new_id} added"
+    return False, "unknown kind"
 
 
 _PARAM_RE = re.compile(r"\bparameters?\s+`?([A-Z][A-Z0-9_]*)`?(?:\s*\(\s*default\s+(\d+))?", re.I)

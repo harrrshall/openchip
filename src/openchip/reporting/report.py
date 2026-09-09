@@ -74,6 +74,9 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         parts.append("formal not run")
     parts.append("timing closure not evaluated")
+    provisional = bool(contract and contract.unresolved) and accepted
+    if provisional:
+        parts.append(f"PROVISIONAL: {len(contract.unresolved)} unresolved decision(s) need the user")
     status_line = f"[{final_state}] " + "; ".join(parts) + (f". Reason: {reason}" if reason else "")
 
     tools = {k: tool_version(getattr(cfg.tools, k), ("-V",) if k in ("iverilog", "vvp", "yosys") else ("--version",)) for k in ("iverilog", "vvp", "verilator", "yosys", "sby")}
@@ -89,7 +92,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             "properties": ck.get("properties_path"), "properties_sha256": _sha(Path(ck["properties_path"])) if ck.get("properties_path") else "",
         },
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
-        "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"),
+        "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
@@ -136,6 +139,13 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         md.append("No verification evidence was produced.")
     md.append("")
+    if ck.get("review"):
+        rv = ck["review"]
+        md += ["### Independent spec review", "", f"Verdict: **{rv.get('verdict')}** (reviewer `{rv.get('reviewer_model')}`). Applied {len(rv.get('applied', []))} correction(s), rejected {len(rv.get('rejected', []))}, {len(rv.get('unresolved', []))} question(s) for the user." + (f" {rv.get('notes')}" if rv.get("notes") else ""), ""]
+        for a in rv.get("applied", []):
+            md.append(f"- applied `{a.get('kind')}` on `{a.get('target')}`: {a.get('result')} — {str(a.get('reason',''))[:160]}")
+        if rv.get("applied"):
+            md.append("")
     if ck.get("consensus"):
         c = ck["consensus"]
         md += ["### Reference cross-check", "", f"Outcome: **{c.get('outcome')}** (confidence: {c.get('confidence', 'n/a')}). References derived: " + ", ".join(f"`{Path(r['path']).name}` ({r['role']})" for r in c.get("references", [])) + ".",
