@@ -131,6 +131,8 @@ class ModelAdapter:
         self.base_url = resolve_base_url(cfg)
         self.api_key = api_key or resolve_api_key(cfg)
         headers = {"Content-Type": "application/json"}
+        if cfg.user_agent:
+            headers["User-Agent"] = cfg.user_agent
         if self.provider == "anthropic":
             headers.update({"x-api-key": self.api_key, "anthropic-version": "2023-06-01"})
         else:

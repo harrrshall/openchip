@@ -31,6 +31,7 @@ class ModelConfig(BaseModel):
     thinking_roles: Optional[list[str]] = None  # None -> `thinking` applies to all roles; else only these roles think
     thinking_budget: int = 12000
     extra_body: dict = Field(default_factory=dict)
+    user_agent: Optional[str] = None   # some gateways allow-list clients by User-Agent; set per provider if required
     # Optional second model for cross-family reference corroboration and an optional independent spec reviewer.
     alt: Optional["ModelConfig"] = None
     review: Optional["ModelConfig"] = None
@@ -113,6 +114,10 @@ class Config(BaseModel):
             cfg.runs_dir = os.environ["OPENCHIP_RUNS_DIR"]
         if os.environ.get("OPENCHIP_PROVIDER"):
             cfg.model.provider = os.environ["OPENCHIP_PROVIDER"]  # type: ignore[assignment]
+        if os.environ.get("OPENCHIP_USER_AGENT"):
+            cfg.model.user_agent = os.environ["OPENCHIP_USER_AGENT"]
+        if os.environ.get("OPENCHIP_MODEL_API_KEY_ENV"):
+            cfg.model.api_key_env = os.environ["OPENCHIP_MODEL_API_KEY_ENV"]
         if os.environ.get("OPENCHIP_REVIEW") in ("0", "false", "off"):
             cfg.review.enabled = False
         # second model (cross-family corroboration) from env: OPENCHIP_ALT_MODEL [+ _BASE_URL, _PROVIDER, _API_KEY_ENV]

@@ -19,6 +19,7 @@ from typing import Optional
 from pydantic import ValidationError
 
 from ..config import Config
+from ..contracts.coerce import coerce_contract
 from ..contracts.schema import Contract, contract_json_schema
 from ..models import prompts as P
 from ..models.adapter import ModelAdapter, extract_code, extract_json
@@ -128,6 +129,7 @@ class Runner:
             if data is None:
                 errors.append("reply was not a JSON object" if r.ok else r.error)
                 continue
+            data, _ = coerce_contract(data, request)
             data["version"] = base.version + 1
             data["parent_version"] = base.version
             data["revision_authority"] = "user"
@@ -268,6 +270,10 @@ class Runner:
             if data is None:
                 errors.append("reply was not a JSON object" if r.ok else r.error)
                 continue
+            data, coerce_notes = coerce_contract(data, request)
+            if coerce_notes:
+                self.store.event(self.run_id, "contract_coerced", {"attempt": attempt, "notes": coerce_notes})
+                ck["coerce_notes"] = coerce_notes
             data.setdefault("version", 1)
             data["version"] = 1
             data["parent_version"] = None
@@ -312,6 +318,8 @@ class Runner:
         contract = self._load_contract(ck)
         request = ck.get("request", "")
         user = P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1))
+        if ck.get("coerce_notes"):
+            user += "\n\nNote: these fields were DEFAULTED mechanically because the intake omitted them — verify each: " + "; ".join(ck["coerce_notes"])
         adapter = self.review_adapter or self.adapter
         r = self._call("review", P.REVIEW_SYSTEM, user, json_schema=REVIEW_SCHEMA, adapter=adapter)
         data = extract_json(r.text) if r.ok else None

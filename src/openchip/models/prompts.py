@@ -32,6 +32,14 @@ INTAKE_USER = """User request:
 {request}
 >>>
 {documents}
+Reply with ONE JSON object and nothing else, with exactly these keys:
+- "module_name" (string), "purpose" (string), "language" ("verilog-2001"), "target" (string)
+- "parameters": [{{"name","default"(int),"description"}}]
+- "ports": [{{"name","direction"("input"|"output"),"width"(int at default parameters),"width_expr"(string or null),"signed"(bool),"role"("clock"|"reset"|"data"|"control"|"status"|"handshake"),"timing"("registered"|"combinational" for outputs, "n/a" for inputs),"description"}}]
+- "clock_reset": {{"clock","clock_edge":"posedge","reset","reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
+- "behavior" (several precise sentences), "timing" (string), "arithmetic" (string)
+- "requirements": [{{"id":"R001","text","source"("user_text"|"document"|"inference"|"default"|"protocol"),"source_detail","disposition":"tested","verification_plan"}}]
+- "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)
 Produce the design contract JSON now."""
 
 REFERENCE_SYSTEM = """You are the reference-model engineer for OpenChip. You write an INDEPENDENT executable specification in Python from a design contract. You never see the RTL.
