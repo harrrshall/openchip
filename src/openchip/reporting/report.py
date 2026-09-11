@@ -39,12 +39,40 @@ def consensus_confidence(ck: dict) -> str:
     return c.get("confidence") or "low"
 
 
+# Arbitration outcomes meaning the independently derived references never reached
+# unanimity. Acceptances carrying one of these were wrong in 14 of 17 recorded cases
+# (11 of 11 on the VerilogEval agent corpus); see docs/decisions/0009-signoff-gate.md.
+NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority_alt1"})
+
+
+def sign_off_withheld(ck: dict) -> str:
+    """Why the design must not be signed off, or "" when it may be.
+
+    A reference vote that never reached unanimity means the model's own independent
+    derivations disagreed about what the request asks for. That is evidence about the
+    contract, not about the RTL, so no amount of RTL repair settles it and the design
+    is handed back to the user instead of being accepted.
+    """
+    c = ck.get("consensus") or {}
+    if not c:
+        return ""
+    outcome = c.get("outcome") or ""
+    if not outcome:
+        return "the reference arbitration recorded no outcome"
+    if outcome in NON_UNANIMOUS_OUTCOMES:
+        return f"the independently derived references never agreed unanimously (arbitration outcome `{outcome}`)"
+    return ""
+
+
 def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg: "Config", final_state: str, reason: str,
                  budget: dict, tool_time_s: float) -> dict:
     reports = ws.dir("reports")
     contract = Contract.model_validate_json(Path(ck["contract_path"]).read_text()) if ck.get("contract_path") else None
     evidence = json.loads(Path(ck["last_evidence"]).read_text()) if ck.get("last_evidence") and Path(ck["last_evidence"]).is_file() else None
     accepted = bool(evidence and evidence.get("accepted"))
+    withheld = sign_off_withheld(ck) if accepted else ""
+    if withheld:
+        accepted = False
     history = ck.get("history", [])
     rtl_path = Path(ck["rtl_path"]) if ck.get("rtl_path") else None
     ref_path = Path(ck["reference_path"]) if ck.get("reference_path") else None
@@ -88,6 +116,8 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         parts.append("formal not run")
     parts.append("timing closure not evaluated")
+    if withheld:
+        parts.append("SIGN-OFF WITHHELD: " + withheld + "; the design needs the user")
     conf = consensus_confidence(ck)
     n_unresolved = len(contract.unresolved) if contract else 0
     provisional = accepted and (n_unresolved > 0 or conf != "high")

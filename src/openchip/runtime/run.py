@@ -510,13 +510,13 @@ class Runner:
         m23 = cmp23.get("mismatches", 10**9)
         if m23 == 0 and m13 > 0:
             ck["consensus"]["outcome"] = "majority_alt1"
-            ck["consensus"]["confidence"] = "high"
+            ck["consensus"]["confidence"] = "low"
             self._adopt_reference(ck, ref, ref2)
             self.log("[consensus] references 2 and 3 agree; adopting reference 2 (majority) and re-verifying")
             return ck, Path(ck["reference_path"]), False
         if m13 == 0 and m23 > 0:
             ck["consensus"]["outcome"] = "majority_initial"
-            ck["consensus"]["confidence"] = "high"
+            ck["consensus"]["confidence"] = "low"
             self.log("[consensus] references 1 and 3 agree; keeping the initial reference")
             return ck, ref, False
         ck["consensus"]["outcome"] = "no_majority"

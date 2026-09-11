@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from openchip.reporting.report import consensus_confidence
+from openchip.reporting.report import consensus_confidence, sign_off_withheld
 from openchip.runtime import run as run_mod
 
 
@@ -80,10 +80,10 @@ DISAGREE = {"mismatches": 3, "cycles": 10}
     # 1-1 split and the tiebreaking third reference could not be derived.
     ("alt2_failed", "low", [("alt1.py", ""), (None, "boom")], {"r1_vs_r2": DISAGREE}, [False]),
     # References 2 and 3 agree against the initial one: a 2-of-3 majority.
-    ("majority_alt1", "high", [("alt1.py", ""), ("alt2.py", "")],
+    ("majority_alt1", "low", [("alt1.py", ""), ("alt2.py", "")],
      {"r1_vs_r2": DISAGREE, "r1_vs_r3": DISAGREE, "r2_vs_r3": AGREE}, [False]),
     # References 1 and 3 agree: the initial reference holds the majority.
-    ("majority_initial", "high", [("alt1.py", ""), ("alt2.py", "")],
+    ("majority_initial", "low", [("alt1.py", ""), ("alt2.py", "")],
      {"r1_vs_r2": DISAGREE, "r1_vs_r3": AGREE, "r2_vs_r3": DISAGREE}, [False]),
     # All three references disagree; the contract is probably ambiguous.
     ("no_majority", "low", [("alt1.py", ""), ("alt2.py", "")],
@@ -96,3 +96,33 @@ def test_every_consensus_branch_records_its_confidence(
     assert consensus["outcome"].startswith(outcome)
     assert consensus["confidence"] == confidence
     assert consensus_confidence({"consensus": consensus}) == confidence
+
+
+def test_no_consensus_block_is_not_withheld():
+    # No arbitration happened: an ordinary acceptance is signed off normally.
+    assert sign_off_withheld({}) == ""
+
+
+@pytest.mark.parametrize("outcome", ["no_majority", "majority_initial", "majority_alt1"])
+def test_non_unanimous_outcomes_withhold_sign_off(outcome):
+    reason = sign_off_withheld({"consensus": {"outcome": outcome, "confidence": "low"}})
+    assert reason
+    assert outcome in reason
+
+
+def test_missing_outcome_withholds_sign_off():
+    # An arbitration block that recorded no outcome must not be signed off either.
+    assert sign_off_withheld({"consensus": {"outcome": ""}})
+
+
+@pytest.mark.parametrize("outcome", [
+    "rtl_corroborated_by_two_references",
+    "rtl_corroborated_2_of_3",
+    "reference_corroborated",
+    "rtl_corroborated_by_alt1",
+    "alt1_failed",
+    "split_1_1_alt2_failed",
+])
+def test_agreeing_outcomes_are_not_gated(outcome):
+    # Regression guard: the gate must not widen to outcomes that represent agreement.
+    assert sign_off_withheld({"consensus": {"outcome": outcome}}) == ""
