@@ -475,27 +475,32 @@ class Runner:
         ref2, err = self._generate_reference(ck, contract, refdir / "reference.alt1.py", seed_offset=17, attempts=2)
         if ref2 is None:
             ck["consensus"]["outcome"] = "alt1_failed: " + err[:200]
+            ck["consensus"]["confidence"] = "low"
             return ck, ref, False
         cmp12 = compare_references(contract, ref, ref2, cwork / "r1_vs_r2", vcfg.seeds, vcfg.sim_cycles)
         ck["consensus"]["references"].append({"path": str(ref2), "role": "alt1", "vs_initial": {k: v for k, v in cmp12.items() if k != "first"}})
         self.store.event(self.run_id, "consensus", {"stage": "r1_vs_r2", **{k: v for k, v in cmp12.items() if k != "first"}})
         if cmp12.get("error"):
             ck["consensus"]["outcome"] = "compare_error"
+            ck["consensus"]["confidence"] = "low"
             return ck, ref, False
         if cmp12["mismatches"] == 0:
             ck["consensus"]["outcome"] = "reference_corroborated"
+            ck["consensus"]["confidence"] = "high"
             self.log(f"[consensus] second reference agrees with the first on {cmp12['cycles']} cycles; the RTL is the likely culprit")
             return ck, ref, False
         self.log(f"[consensus] the two references disagree on {cmp12['mismatches']}/{cmp12['cycles']} cycles; checking RTL against the second")
         res2 = verify(contract, rp, ref2, cwork / "rtl_vs_r2", self.cfg, run_synth=False)
         if res2.accepted:
             ck["consensus"]["outcome"] = "rtl_corroborated_by_alt1"
+            ck["consensus"]["confidence"] = "low"
             self._adopt_reference(ck, ref, ref2)
             self.log("[consensus] RTL matches the second reference; adopting it and marking the first as disputed")
             return ck, Path(ck["reference_path"]), True
         ref3, err = self._generate_reference(ck, contract, refdir / "reference.alt2.py", seed_offset=41, attempts=2)
         if ref3 is None:
             ck["consensus"]["outcome"] = "alt2_failed"
+            ck["consensus"]["confidence"] = "low"
             return ck, ref, False
         cmp13 = compare_references(contract, ref, ref3, cwork / "r1_vs_r3", vcfg.seeds, vcfg.sim_cycles)
         cmp23 = compare_references(contract, ref2, ref3, cwork / "r2_vs_r3", vcfg.seeds, vcfg.sim_cycles)
@@ -505,14 +510,17 @@ class Runner:
         m23 = cmp23.get("mismatches", 10**9)
         if m23 == 0 and m13 > 0:
             ck["consensus"]["outcome"] = "majority_alt1"
+            ck["consensus"]["confidence"] = "high"
             self._adopt_reference(ck, ref, ref2)
             self.log("[consensus] references 2 and 3 agree; adopting reference 2 (majority) and re-verifying")
             return ck, Path(ck["reference_path"]), False
         if m13 == 0 and m23 > 0:
             ck["consensus"]["outcome"] = "majority_initial"
+            ck["consensus"]["confidence"] = "high"
             self.log("[consensus] references 1 and 3 agree; keeping the initial reference")
             return ck, ref, False
         ck["consensus"]["outcome"] = "no_majority"
+        ck["consensus"]["confidence"] = "low"
         self.log("[consensus] no two references agree; keeping the initial reference and flagging the contract as ambiguous")
         return ck, ref, False
 

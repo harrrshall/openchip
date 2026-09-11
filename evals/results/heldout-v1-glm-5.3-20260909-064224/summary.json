@@ -1,0 +1,55 @@
+{
+ "suite": "heldout-v1",
+ "n": 10,
+ "tasks": 5,
+ "repeats": 2,
+ "budget": "15m",
+ "accepted": 10,
+ "golden_pass": 10,
+ "false_acceptance": 0,
+ "interface_mismatch": 0,
+ "states": {
+  "completed": 10
+ },
+ "mean_wall_s": 73.5,
+ "mean_attempts": 1.0,
+ "total_tokens": 213690,
+ "total_model_calls": 62,
+ "model": {
+  "provider": "openrouter",
+  "base_url": "https://agentrouter.org/v1",
+  "model": "glm-5.3",
+  "revision": "remote",
+  "api_key_env": "AGENTROUTER_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": false,
+  "thinking_roles": [],
+  "thinking_budget": 12000,
+  "extra_body": {
+   "reasoning_effort": "low"
+  },
+  "user_agent": "claude-cli/2.1.0 (external, cli)",
+  "alt": null,
+  "review": null
+ },
+ "verification": {
+  "sim_cycles": 400,
+  "seeds": [
+   1,
+   2,
+   3
+  ],
+  "require_lint": true,
+  "require_synth": true,
+  "corroborate": true,
+  "run_formal": true,
+  "require_formal": false,
+  "formal_depth": 20,
+  "formal_timeout_s": 300.0
+ }
+}

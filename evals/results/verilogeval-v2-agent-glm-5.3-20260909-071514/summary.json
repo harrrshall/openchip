@@ -1,0 +1,46 @@
+{
+ "benchmark": "VerilogEval v2 spec-to-rtl (NVlabs verilog-eval, MIT)",
+ "mode": "agent",
+ "n": 39,
+ "pass": 28,
+ "pass_rate": 0.7179,
+ "provisional_acceptances": 6,
+ "false_acceptance_excluding_provisional": 5,
+ "review": {
+  "enabled": true,
+  "alt_model": null,
+  "review_model": null
+ },
+ "statuses": {
+  "pass": 28,
+  "fail": 6,
+  "no_rtl": 5
+ },
+ "false_acceptance": 6,
+ "total_calls": 208,
+ "total_tokens": 671478,
+ "model": {
+  "provider": "openrouter",
+  "base_url": "https://agentrouter.org/v1",
+  "model": "glm-5.3",
+  "revision": "remote",
+  "api_key_env": "AGENTROUTER_API_KEY",
+  "max_tokens": 10000,
+  "temperature": 0.2,
+  "top_p": 0.95,
+  "seed": 1234,
+  "context_window": 32768,
+  "timeout_s": 600.0,
+  "thinking": false,
+  "thinking_roles": [],
+  "thinking_budget": 12000,
+  "extra_body": {
+   "reasoning_effort": "low"
+  },
+  "user_agent": "claude-cli/2.1.0 (external, cli)",
+  "alt": null,
+  "review": null
+ },
+ "protocol": "full OpenChip pipeline with tool feedback, budget 6m/problem; not comparable to single-generation pass@1",
+ "contamination": "unknown (public benchmark)"
+}

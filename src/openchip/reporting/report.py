@@ -25,6 +25,20 @@ def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else ""
 
 
+def consensus_confidence(ck: dict) -> str:
+    """Confidence in the reference vote behind an acceptance.
+
+    No consensus block means no reference vote was held, which is the ordinary
+    single-reference path. A consensus block that records no confidence means an
+    arbitration path reached a conclusion without stating one; that is treated as
+    low, never as full confidence.
+    """
+    c = ck.get("consensus") or {}
+    if not c:
+        return "high"
+    return c.get("confidence") or "low"
+
+
 def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg: "Config", final_state: str, reason: str,
                  budget: dict, tool_time_s: float) -> dict:
     reports = ws.dir("reports")
@@ -74,7 +88,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         parts.append("formal not run")
     parts.append("timing closure not evaluated")
-    conf = ((ck.get("consensus") or {}).get("confidence") or "high")
+    conf = consensus_confidence(ck)
     n_unresolved = len(contract.unresolved) if contract else 0
     provisional = accepted and (n_unresolved > 0 or conf != "high")
     if accepted and conf != "high":

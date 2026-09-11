@@ -1,0 +1,98 @@
+"""Reference-vote confidence: a missing confidence on an arbitration outcome is low, never silently high."""
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from openchip.reporting.report import consensus_confidence
+from openchip.runtime import run as run_mod
+
+
+def test_no_consensus_block_is_high():
+    assert consensus_confidence({}) == "high"
+
+
+def test_split_acceptance_without_confidence_is_low():
+    # Regression: rtl_corroborated_by_alt1 is a 1-1 reference split with no tiebreak;
+    # it must never fall through to "high".
+    ck = {"consensus": {"outcome": "rtl_corroborated_by_alt1"}}
+    assert consensus_confidence(ck) == "low"
+    assert consensus_confidence(ck) != "high"
+
+
+def test_explicit_confidence_returned_unchanged():
+    for conf in ("high", "medium", "low"):
+        assert consensus_confidence({"consensus": {"outcome": "x", "confidence": conf}}) == conf
+
+
+def test_none_confidence_is_low():
+    assert consensus_confidence({"consensus": {"outcome": "x", "confidence": None}}) == "low"
+
+
+def test_provisional_rule():
+    # Mirrors write_report: provisional = accepted and (n_unresolved > 0 or conf != "high")
+    split = {"consensus": {"outcome": "rtl_corroborated_by_alt1"}}
+    assert True and (0 > 0 or consensus_confidence(split) != "high")
+    assert not (True and (0 > 0 or consensus_confidence({}) != "high"))
+
+
+def _drive_consensus(tmp_path, monkeypatch, generated, comparisons, rtl_accepts):
+    """Run Runner._reference_consensus against stubs and return its consensus block.
+
+    `generated` are the (path, error) pairs the reference generator yields in order,
+    `comparisons` maps a comparison working-directory name to its result, and
+    `rtl_accepts` are the verdicts of verifying the RTL against each alternate.
+    """
+    gen = iter(generated)
+    verdicts = iter(rtl_accepts)
+    monkeypatch.setattr(run_mod, "compare_references",
+                        lambda contract, a, b, work, seeds, cycles: comparisons[Path(work).name])
+    monkeypatch.setattr(run_mod, "verify",
+                        lambda *a, **k: SimpleNamespace(accepted=next(verdicts)))
+    runner = SimpleNamespace(
+        ws=SimpleNamespace(dir=lambda name: tmp_path / name),
+        cfg=SimpleNamespace(verification=SimpleNamespace(seeds=[1], sim_cycles=10)),
+        store=SimpleNamespace(event=lambda *a, **k: None),
+        log=lambda *a, **k: None,
+        run_id="test-run",
+        _generate_reference=lambda ck, contract, path, seed_offset, attempts: next(gen),
+        _adopt_reference=lambda ck, old, new: ck.__setitem__("reference_path", str(new)),
+    )
+    ck: dict = {}
+    run_mod.Runner._reference_consensus(
+        runner, ck, None, tmp_path / "rtl.v", tmp_path / "reference.py", None)
+    return ck["consensus"]
+
+
+AGREE = {"mismatches": 0, "cycles": 10}
+DISAGREE = {"mismatches": 3, "cycles": 10}
+
+
+@pytest.mark.parametrize("outcome,confidence,generated,comparisons,rtl_accepts", [
+    # The second reference could not be derived at all, so nothing arbitrated.
+    ("alt1_failed", "low", [(None, "boom")], {}, []),
+    # The comparison itself failed, so the split was never resolved.
+    ("compare_error", "low", [("alt1.py", "")], {"r1_vs_r2": {"error": "boom"}}, []),
+    # Both references agree; the RTL is the culprit and gets repaired to match them.
+    ("reference_corroborated", "high", [("alt1.py", "")], {"r1_vs_r2": AGREE}, []),
+    # 1-1 split, RTL matches the second reference, no tiebreak run: the reported bug.
+    ("rtl_corroborated_by_alt1", "low", [("alt1.py", "")], {"r1_vs_r2": DISAGREE}, [True]),
+    # 1-1 split and the tiebreaking third reference could not be derived.
+    ("alt2_failed", "low", [("alt1.py", ""), (None, "boom")], {"r1_vs_r2": DISAGREE}, [False]),
+    # References 2 and 3 agree against the initial one: a 2-of-3 majority.
+    ("majority_alt1", "high", [("alt1.py", ""), ("alt2.py", "")],
+     {"r1_vs_r2": DISAGREE, "r1_vs_r3": DISAGREE, "r2_vs_r3": AGREE}, [False]),
+    # References 1 and 3 agree: the initial reference holds the majority.
+    ("majority_initial", "high", [("alt1.py", ""), ("alt2.py", "")],
+     {"r1_vs_r2": DISAGREE, "r1_vs_r3": AGREE, "r2_vs_r3": DISAGREE}, [False]),
+    # All three references disagree; the contract is probably ambiguous.
+    ("no_majority", "low", [("alt1.py", ""), ("alt2.py", "")],
+     {"r1_vs_r2": DISAGREE, "r1_vs_r3": DISAGREE, "r2_vs_r3": DISAGREE}, [False]),
+])
+def test_every_consensus_branch_records_its_confidence(
+        tmp_path, monkeypatch, outcome, confidence, generated, comparisons, rtl_accepts):
+    """Every exit from _reference_consensus must label itself, so none can default to high."""
+    consensus = _drive_consensus(tmp_path, monkeypatch, generated, comparisons, rtl_accepts)
+    assert consensus["outcome"].startswith(outcome)
+    assert consensus["confidence"] == confidence
+    assert consensus_confidence({"consensus": consensus}) == confidence

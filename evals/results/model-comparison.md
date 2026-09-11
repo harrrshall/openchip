@@ -11,6 +11,8 @@ Protocol per model: core-v1 (10 tasks × 1, budget 15 min), heldout-v1 (5 × 2, 
 | `Qwen/Qwen3.6-27B @ 6a9e13bd6f` | 9/10 | 0/10 | 6/10 | 0/10 | 104/156 | 18/39 | 2/39 | 470.2 |
 | `Qwen/Qwen3.8-27B @ 1d4bf0f2ff` | 10/10 | 0/10 | 8/10 | 0/10 | 76/156 | 21/39 | 10/39 | 244.8 |
 | `core12345/ChipMATE-V-4B @ 7fbb17249a` | 5/10 | 1/10 | 0/10 | 0/10 | 41/156 | 7/39 | 3/39 | 46.3 |
+| `deepseek-v4-flash @ remote` | 9/10 | 0/10 | 10/10 | 0/10 | 124/156 | 32/39 | 1/39 | 218.9 |
+| `glm-5.3 @ remote` | 10/10 | 0/10 | 10/10 | 0/10 | 109/156 | 28/39 | 6/39 | 113.0 |
 | `openai/gpt-oss-120b @ b5c939de8f` | 9/10 | 1/10 | 8/10 | 0/10 | 114/156 | 28/39 | 9/39 | 34.2 |
 | `openai/gpt-oss-20b @ 6cee5e81ee` | 8/10 | 0/10 | 9/10 | 0/10 | 95/156 | 22/39 | 12/39 | 23.2 |
 | `zhuyaoyu/CodeV-R1-RL-Qwen-7B @ 286cf433f5` | 5/10 | 0/10 | 5/10 | 0/10 | 95/156 | 20/39 | 1/39 | 189.2 |
@@ -24,6 +26,8 @@ Source directories:
 - `Qwen/Qwen3.6-27B @ 6a9e13bd6f`: core-v1=`core-v1-Qwen3.6-27B-20260908-164620`, heldout-v1=`heldout-v1-Qwen3.6-27B-20260908-180445`, veval-agent=`verilogeval-v2-agent-Qwen3.6-27B-20260908-200815`, veval-direct=`verilogeval-v2-direct-Qwen3.6-27B-20260908-192938`
 - `Qwen/Qwen3.8-27B @ 1d4bf0f2ff`: core-v1=`core-v1-Qwen3.8-27B-20260908-164755`, heldout-v1=`heldout-v1-Qwen3.8-27B-20260908-172846`, veval-agent=`verilogeval-v2-agent-Qwen3.8-27B-20260908-184327`, veval-direct=`verilogeval-v2-direct-Qwen3.8-27B-20260908-181246`
 - `core12345/ChipMATE-V-4B @ 7fbb17249a`: core-v1=`core-v1-ChipMATE-V-4B-20260908-193516`, heldout-v1=`heldout-v1-ChipMATE-V-4B-20260908-194303`, veval-agent=`verilogeval-v2-agent-ChipMATE-V-4B-20260908-195324`, veval-direct=`verilogeval-v2-direct-ChipMATE-V-4B-20260908-194808`
+- `deepseek-v4-flash @ remote`: core-v1=`core-v1-deepseek-v4-flash-20260909-041529`, heldout-v1=`heldout-v1-deepseek-v4-flash-20260909-064225`, veval-agent=`verilogeval-v2-agent-deepseek-v4-flash-20260909-080655`, veval-direct=`verilogeval-v2-direct-deepseek-v4-flash-20260909-071537`
+- `glm-5.3 @ remote`: core-v1=`core-v1-glm-5.3-20260909-041535`, heldout-v1=`heldout-v1-glm-5.3-20260909-064224`, veval-agent=`verilogeval-v2-agent-glm-5.3-20260909-071514`, veval-direct=`verilogeval-v2-direct-glm-5.3-20260909-065441`
 - `openai/gpt-oss-120b @ b5c939de8f`: core-v1=`core-v1-gpt-oss-120b-20260908-181846`, heldout-v1=`heldout-v1-gpt-oss-120b-20260908-182432`, veval-agent=`verilogeval-v2-agent-gpt-oss-120b-20260908-183615`, veval-direct=`verilogeval-v2-direct-gpt-oss-120b-20260908-182952`
 - `openai/gpt-oss-20b @ 6cee5e81ee`: core-v1=`core-v1-gpt-oss-20b-20260908-181249`, heldout-v1=`heldout-v1-gpt-oss-20b-20260908-181644`, veval-agent=`verilogeval-v2-agent-gpt-oss-20b-20260908-182356`, veval-direct=`verilogeval-v2-direct-gpt-oss-20b-20260908-182007`
 - `zhuyaoyu/CodeV-R1-RL-Qwen-7B @ 286cf433f5`: core-v1=`core-v1-CodeV-R1-RL-Qwen-7B-20260908-193946`, heldout-v1=`heldout-v1-CodeV-R1-RL-Qwen-7B-20260908-201122`, veval-agent=`verilogeval-v2-agent-CodeV-R1-RL-Qwen-7B-20260908-210332`, veval-direct=`verilogeval-v2-direct-CodeV-R1-RL-Qwen-7B-20260908-203655`
