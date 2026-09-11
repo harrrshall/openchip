@@ -48,20 +48,24 @@ NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority
 def sign_off_withheld(ck: dict) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
-    A reference vote that never reached unanimity means the model's own independent
-    derivations disagreed about what the request asks for. That is evidence about the
-    contract, not about the RTL, so no amount of RTL repair settles it and the design
-    is handed back to the user instead of being accepted.
+    Two conditions, both about the contract rather than the RTL, so neither is settled by
+    repairing the RTL and both hand the design back to the user:
+      - the model's own independent reference derivations never agreed unanimously;
+      - the reference contradicts a table printed in the request, which is ground truth that
+        never passed through the model (docs/decisions/0010-request-tables.md).
     """
+    reasons: list[str] = []
     c = ck.get("consensus") or {}
-    if not c:
-        return ""
-    outcome = c.get("outcome") or ""
-    if not outcome:
-        return "the reference arbitration recorded no outcome"
-    if outcome in NON_UNANIMOUS_OUTCOMES:
-        return f"the independently derived references never agreed unanimously (arbitration outcome `{outcome}`)"
-    return ""
+    if c:
+        outcome = c.get("outcome") or ""
+        if not outcome:
+            reasons.append("the reference arbitration recorded no outcome")
+        elif outcome in NON_UNANIMOUS_OUTCOMES:
+            reasons.append(f"the independently derived references never agreed unanimously (arbitration outcome `{outcome}`)")
+    t = ck.get("request_table_check") or {}
+    if t.get("status") == "mismatch":
+        reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
+    return "; ".join(reasons)
 
 
 def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg: "Config", final_state: str, reason: str,

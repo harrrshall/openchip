@@ -26,7 +26,9 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
+from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
+from ..verification.tablecheck import check_reference_against_request_tables
 from ..verification.normalize import normalize_rtl
 from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
@@ -260,10 +262,11 @@ class Runner:
     def _step_intake(self, ck: dict) -> dict:
         request = ck["request"]
         docs = self._documents_text()
+        tables = self._request_tables_text(request)
         schema = contract_json_schema()
         errors: list[str] = []
         for attempt in range(3):
-            user = P.INTAKE_USER.format(request=request, documents=docs)
+            user = P.INTAKE_USER.format(request=request, documents=docs) + tables
             if errors:
                 user += "\n\nYour previous contract was rejected by the validator:\n" + errors[-1] + "\nFix these problems."
             r = self._call("intake", P.INTAKE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt)
@@ -319,7 +322,7 @@ class Runner:
             return ck
         contract = self._load_contract(ck)
         request = ck.get("request", "")
-        user = P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1))
+        user = P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1)) + self._request_tables_text(request)
         if ck.get("coerce_notes"):
             user += "\n\nNote: these fields were DEFAULTED mechanically because the intake omitted them — verify each: " + "; ".join(ck["coerce_notes"])
         adapter = self.review_adapter or self.adapter
@@ -377,6 +380,29 @@ class Runner:
                 continue
             docs.append(f"--- Supporting document: {p.name} ---\n{p.read_text()[:12000]}\n")
         return ("\nSupporting documents:\n" + "\n".join(docs)) if docs else ""
+
+    def _request_tables_text(self, request: str) -> str:
+        """Any table printed in the request, expanded mechanically, for the intake and review prompts.
+
+        Reading a printed grid is where intake most often goes wrong: models apply the textbook
+        MSB-first convention instead of the axis labels actually printed. The expansion below is
+        produced by a parser, so the model is never asked to read the grid at all.
+        """
+        try:
+            tables = parse_request_tables(request)
+        except Exception as e:  # noqa: BLE001 — a parser fault must never block a build
+            self.store.event(self.run_id, "request_table_parse_error", {"error": f"{type(e).__name__}: {e}"})
+            return ""
+        if not tables:
+            return ""
+        rendered = "\n\n".join(render_table(t) for t in tables)
+        try:
+            (self.ws.dir("spec") / "request_tables.md").write_text(rendered + "\n")
+        except Exception:  # noqa: BLE001
+            pass
+        return ("\n\nThe request contains a table, expanded below by a parser that read the printed axis "
+                "labels literally and in the printed order. It is authoritative: state the behavior so that "
+                "it reproduces exactly these rows, and do not re-derive them from the grid yourself.\n\n" + rendered)
 
     def _load_contract(self, ck: dict) -> Contract:
         return Contract.model_validate_json(Path(ck["contract_path"]).read_text())
@@ -730,6 +756,7 @@ class Runner:
                     self.store.checkpoint(self.run_id, "verify", ck)
                     if not ok:
                         continue  # a majority of references disagrees with the RTL: re-verify against the adopted one, then repair
+                ck = self._check_request_tables(ck, contract, ref)
                 ck["final_evidence"] = str(work / "evidence.json")
                 self.store.checkpoint(self.run_id, "report", ck)
                 return ck
@@ -803,6 +830,26 @@ class Runner:
             code = None
         self.store.event(self.run_id, "repair", {"attempt": attempt, "verdict": verdict, "has_code": bool(code)})
         return code, verdict
+
+    def _check_request_tables(self, ck: dict, contract: Contract, ref: Path) -> dict:
+        """Compare the reference against any table printed in the request. No model call."""
+        if ck.get("request_table_check"):
+            return ck
+        t0 = time.time()
+        res = check_reference_against_request_tables(
+            contract, ck.get("request", ""), ref, self.ws.dir("verification") / "request_tables")
+        self.tool_time_s += time.time() - t0
+        ck["request_table_check"] = res
+        if res["status"] == "not_applicable":
+            return ck
+        self.store.event(self.run_id, "request_table_check", res)
+        if res["status"] == "mismatch":
+            self.log(f"[tables] the reference contradicts the request's own table on {len(res['mismatches'])} row(s): {res['detail'][:300]}")
+        elif res["status"] == "ok":
+            self.log(f"[tables] reference agrees with the request's printed table on all {res['rows']} row(s)")
+        else:
+            self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
+        return ck
 
     def _step_report(self, ck: dict, final_state: str, reason: str = "") -> tuple[dict, dict]:
         assert self.budget
