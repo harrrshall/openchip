@@ -5,7 +5,8 @@ cannot leak one row's history into the next: the caller only ever asks this of c
 contracts, and an independent instance per row is what makes that assumption checkable.
 
 Invoked as: python -I refrows.py <reference.py> <contract.json> <rows.json> <out.json>
-  rows.json: {"rows": [{"<port>": <int>, ...}, ...], "outputs": ["<port>", ...]}
+  rows.json: {"rows": [{"<port>": <int>, ...}, ...], "outputs": ["<port>", ...],
+              "mode": "rows" | "sequence"}  # sequence: one Reference, reset once, then step in order
   out.json:  {"results": [{"<port>": <int>, ...}, ...], "error": "..."}
 """
 from __future__ import annotations
@@ -38,11 +39,18 @@ def main() -> int:
         spec = importlib.util.spec_from_file_location("reference", ref_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
-        for row in rows:
+        if spec_.get("mode") == "sequence":
             ref = mod.Reference(dict(params))
             ref.reset()
-            out = ref.step(dict(row))
-            result["results"].append({k: out.get(k) for k in outputs})
+            for row in rows:
+                out = ref.step(dict(row))
+                result["results"].append({k: out.get(k) for k in outputs})
+        else:
+            for row in rows:
+                ref = mod.Reference(dict(params))
+                ref.reset()
+                out = ref.step(dict(row))
+                result["results"].append({k: out.get(k) for k in outputs})
     except Exception as e:  # noqa: BLE001
         tb = traceback.format_exc().strip().splitlines()
         result["error"] = f"{type(e).__name__}: {e}\n" + "\n".join(tb[-4:])

@@ -44,6 +44,21 @@ class RequestTable:
     source: str  # the verbatim block of request text this came from
 
 
+@dataclass(frozen=True)
+class WaveformTrace:
+    """A clocked simulation dump: every sample is kept, including `x` and multi-bit integers.
+
+    Combinational `RequestTable` waveforms collapse duplicate input assignments and refuse a clock
+    column. Sequential dumps need the opposite: the clock edge is the sampling event, `x` means
+    'not yet defined', and a 3-bit `q` is printed as `4` not `100`.
+    """
+
+    clock: str
+    columns: tuple[str, ...]  # non-time columns, clock included, request order
+    samples: tuple[tuple[int | None, ...], ...]  # None = don't-care / undefined
+    source: str
+
+
 def _names_each_bit_once(table: RequestTable) -> bool:
     """An axis naming the same signal bit twice makes the grid unreadable; decline rather than guess.
 
@@ -56,7 +71,7 @@ def _names_each_bit_once(table: RequestTable) -> bool:
 
 
 def parse_request_tables(request: str) -> list[RequestTable]:
-    """Every table in `request` that can be read without guessing. `[]` when none can."""
+    """Every combinational table in `request` that can be read without guessing. `[]` when none can."""
     lines = request.splitlines()
     out: list[RequestTable] = []
     i = 0
@@ -68,6 +83,22 @@ def parse_request_tables(request: str) -> list[RequestTable]:
                     out.append(table)
                 i = nxt
                 break
+        else:
+            i += 1
+    return out
+
+
+def parse_clocked_waveforms(request: str) -> list[WaveformTrace]:
+    """Every clocked waveform dump in `request`. Independent of `parse_request_tables`."""
+    lines = request.splitlines()
+    out: list[WaveformTrace] = []
+    i = 0
+    while i < len(lines):
+        trace, nxt = _parse_clocked_waveform(lines, i)
+        if nxt > i:
+            if trace is not None:
+                out.append(trace)
+            i = nxt
         else:
             i += 1
     return out
@@ -327,7 +358,7 @@ def _parse_waveform(lines: list[str], i: int, request: str) -> tuple[RequestTabl
         return None, i
     names = header[1:]
     if not all(IDENT_RE.match(n) for n in names) or any(CLOCKISH_RE.match(n) for n in names):
-        return None, i
+        return None, i  # a clock column is a sequential dump; see parse_clocked_waveforms
     end = i + 1
     rows: list[list[str]] = []
     while end < len(lines):
@@ -376,3 +407,61 @@ def _rows_to_table(kind: str, names: list[str], raw: list[list[str]], source: st
         return None
     return RequestTable(kind=kind, inputs=inputs, output=output, rows=tuple(rows),
                         dont_care=dont_care, source=source)
+
+
+def _trace_cell(token: str) -> int | None:
+    """Waveform cell: 0/1, a decimal integer, or don't-care (`x`/`d`/`-`/`z`)."""
+    t = token.strip().lower()
+    if t in DONT_CARE or t == "z":
+        return None
+    if t.isdigit():
+        return int(t)
+    raise ValueError(t)
+
+
+def _parse_clocked_waveform(lines: list[str], i: int) -> tuple[WaveformTrace | None, int]:
+    """A `time  clk ...` header and timestamped rows; exactly one clock column."""
+    header = lines[i].split()
+    if len(header) < 3 or header[0].lower() != "time" or "|" in lines[i]:
+        return None, i
+    names = header[1:]
+    if not all(IDENT_RE.match(n) for n in names):
+        return None, i
+    clocks = [n for n in names if CLOCKISH_RE.match(n)]
+    if len(clocks) != 1:
+        return None, i
+    end = i + 1
+    rows: list[list[str]] = []
+    while end < len(lines):
+        fields = lines[end].split()
+        if len(fields) != len(header) or not TIME_RE.match(fields[0]):
+            break
+        rows.append(fields[1:])
+        end += 1
+    if len(rows) < 2:
+        return None, i
+    samples: list[tuple[int | None, ...]] = []
+    clk_i = names.index(clocks[0])
+    try:
+        for row in rows:
+            cells = tuple(_trace_cell(c) for c in row)
+            if cells[clk_i] not in (0, 1):
+                return None, end
+            samples.append(cells)
+    except ValueError:
+        return None, end
+    return WaveformTrace(clock=clocks[0], columns=tuple(names), samples=tuple(samples),
+                         source="\n".join(lines[i:end])), end
+
+
+def posedge_indices(trace: WaveformTrace) -> tuple[int, ...]:
+    """Sample indices at which `trace.clock` goes 0 → 1."""
+    clk_i = trace.columns.index(trace.clock)
+    out: list[int] = []
+    prev = trace.samples[0][clk_i]
+    for i, sample in enumerate(trace.samples[1:], 1):
+        cur = sample[clk_i]
+        if prev == 0 and cur == 1:
+            out.append(i)
+        prev = cur
+    return tuple(out)
