@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,6 +94,9 @@ def check_reference_against_request_tables(
         return out
     out["tables"] = len(bound)
     work.mkdir(parents=True, exist_ok=True)
+    # A resume/recheck must never read output left by a previous reference. Keep
+    # every invocation's artifacts, but give the subprocess a fresh destination.
+    work = Path(tempfile.mkdtemp(prefix="check-", dir=work))
     contract_path = work / "contract.json"
     contract_path.write_text(contract.model_dump_json(indent=1))
     mismatches: list[dict] = []
@@ -102,11 +106,14 @@ def check_reference_against_request_tables(
         res_path = work / f"table{i}_result.json"
         rows_path.write_text(json.dumps({"rows": [r[0] for r in b.rows], "outputs": [b.output_port]}))
         try:
-            subprocess.run([python, "-I", str(REFROWS), str(Path(reference_py).resolve()),
+            proc = subprocess.run([python, "-I", str(REFROWS), str(Path(reference_py).resolve()),
                             str(contract_path.resolve()), str(rows_path.resolve()), str(res_path.resolve())],
                            capture_output=True, text=True, timeout=timeout_s, cwd=str(work))
         except subprocess.TimeoutExpired:
             out.update(status="error", detail="reference model timed out on the request table")
+            return out
+        if proc.returncode != 0:
+            out.update(status="error", detail=f"reference evaluation exited with code {proc.returncode}")
             return out
         if not res_path.is_file():
             out.update(status="error", detail="reference evaluation produced no output")

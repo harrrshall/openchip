@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -96,13 +97,27 @@ def sha256_file(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _archive_previous_reference_output(out: Path) -> None:
+    """Keep old evidence, but require the current subprocess to create its output.
+
+    CLI re-verification and resumed attempts reuse filenames. A subprocess killed
+    before writing must not inherit the previous reference's successful result.
+    """
+    if out.exists():
+        previous = Path(tempfile.mkdtemp(prefix=f".{out.stem}-previous-", dir=out.parent))
+        out.replace(previous / out.name)
+
+
 def run_reference(reference_py: Path, contract_json: Path, seed: int, cycles: int, out: Path, python: str = sys.executable, timeout_s: float = 180.0,
                   replay: Optional[Path] = None) -> dict:
+    _archive_previous_reference_output(out)
     try:
         proc = subprocess.run([python, "-I", str(REFGEN), str(Path(reference_py).resolve()), str(Path(contract_json).resolve()), str(seed), str(cycles), str(Path(out).resolve())] + ([str(Path(replay).resolve())] if replay else []),
                               capture_output=True, text=True, timeout=timeout_s, cwd=str(out.parent))
     except subprocess.TimeoutExpired:
         return {"error": f"reference model timed out after {timeout_s}s (infinite loop?)"}
+    if proc.returncode != 0:
+        return {"error": f"reference generator exited with code {proc.returncode}: {(proc.stderr or '')[-800:]}"}
     if not out.is_file():
         return {"error": f"reference generator produced no output (exit {proc.returncode}): {(proc.stderr or '')[-800:]}"}
     return json.loads(out.read_text())
@@ -111,11 +126,15 @@ def run_reference(reference_py: Path, contract_json: Path, seed: int, cycles: in
 def lint_reference_timing(reference_py: Path, contract_json: Path, out: Path, seed: int = 7, steps: int = 40, python: str = sys.executable, timeout_s: float = 120.0) -> dict:
     """Return {"violations": [...], "checked_steps": n, "error": str}. A violation means a `registered`
     output of the reference depends on same-cycle inputs."""
+    _archive_previous_reference_output(out)
     try:
-        subprocess.run([python, "-I", str(REFLINT), str(Path(reference_py).resolve()), str(Path(contract_json).resolve()), str(seed), str(steps), str(Path(out).resolve())],
+        proc = subprocess.run([python, "-I", str(REFLINT), str(Path(reference_py).resolve()), str(Path(contract_json).resolve()), str(seed), str(steps), str(Path(out).resolve())],
                        capture_output=True, text=True, timeout=timeout_s, cwd=str(out.parent))
     except subprocess.TimeoutExpired:
         return {"violations": [], "checked_steps": 0, "error": "timing lint timed out"}
+    if proc.returncode != 0:
+        return {"violations": [], "checked_steps": 0,
+                "error": f"timing lint exited with code {proc.returncode}"}
     if not out.is_file():
         return {"violations": [], "checked_steps": 0, "error": "timing lint produced no output"}
     return json.loads(out.read_text())

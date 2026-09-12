@@ -34,8 +34,19 @@ openchip verify --project ws/fifo                 # re-run the checks on the del
 openchip revise --project ws/fifo --change "make dout registered"   # contract v2, re-verify
 openchip resume --project ws/fifo                 # after an interruption
 openchip eval --suite core-v1 --budget 15m        # locked golden suite
+openchip assemble --system system.json --out top.v  # validate connections and generate a new top
 ```
 Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
+
+`assemble` is an initial multi-module capability: supply a top contract, two to
+four named instances with pinned leaf contracts and parameter bindings, and explicit
+connections. It rejects floating inputs, conflicting drivers, incompatible widths
+or signedness, stale contract pins, and combinational cycles. It generates named-port
+wiring and refuses to overwrite an existing output file. It does not generate or
+accept leaf RTL, or verify system behavior. Top widths are fixed at the top contract's
+default parameter values; leaf parameter overrides are emitted explicitly.
+`examples/composition_demo.py` builds a complete system JSON and demonstrates real
+integration simulation and synthesis of two arithmetic leaves on the cloud toolchain.
 
 ## Repository
 `src/openchip/` product · `tests/` (30 tests; real-tool tests need the EDA toolchain) · `evals/suite/core-v1/` locked tasks + goldens · `evals/results/` recorded runs · `outputs/demo/` delivered example packages (two successes, one useful failure) · `scripts/cloud/` provisioning/serving/eval scripts · `docs/` architecture, decisions, research, operations, product, project (STATUS, ROADMAP, BACKLOG, HANDOFF).

@@ -195,6 +195,22 @@ def cmd_verify(args) -> int:
     return 0 if res.accepted else 3
 
 
+def cmd_assemble(args) -> int:
+    from ..contracts.system import SystemContract, render_top
+
+    system = SystemContract.model_validate_json(Path(args.system).read_text())
+    text = render_top(system)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("x") as f:
+        f.write(text)
+    print(f"Wrote {out}: {len(system.modules)} instances, {len(system.connections)} connections.")
+    print("Structural assembly only. Leaf acceptance and behavioral integration remain unverified.")
+    for item in system.unresolved_items():
+        print(f"Unresolved: {item}")
+    return 0
+
+
 def cmd_eval(args) -> int:
     from ..evals.runner import run_suite
 
@@ -265,6 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--cycles", type=int)
     s.add_argument("--seeds", help="comma-separated seeds")
     s.set_defaults(fn=cmd_verify)
+    s = sub.add_parser("assemble", help="validate pinned module connections and generate top-level RTL")
+    s.add_argument("--system", required=True, help="system contract JSON")
+    s.add_argument("--out", required=True, help="new top-level Verilog file (must not exist)")
+    s.set_defaults(fn=cmd_assemble)
     s = sub.add_parser("eval", help="run an evaluation suite")
     s.add_argument("--suite", required=True)
     s.add_argument("--out", default="evals/results")

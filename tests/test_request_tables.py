@@ -2,6 +2,8 @@
 
 Every expected value below was derived by reading the table in the test's own input string.
 """
+import re
+
 from openchip.contracts.tables import parse_request_tables, render_table
 
 INTERFACE = """I would like you to implement a module named TopModule with the following
@@ -176,3 +178,118 @@ def test_render_table_lists_every_row_and_names_every_variable():
         assert f"{name}=" in text
     assert "3 cell(s)" in text
     assert "x[0]=0 x[1]=0" not in text  # variables from a different request must not leak in
+
+
+def test_kmap_naming_the_same_bit_twice_declines():
+    # Two columns headed by the same bit assign it conflicting values, so no row is determined.
+    assert parse_request_tables(KMAP_LSB_FIRST.replace("             x[0]x[1]",
+                                                       "             x[0]x[0]")) == []
+
+
+def test_rendered_bit_vector_is_listed_msb_first_and_carries_its_packed_value():
+    # The measured failure this pins (ADR 0010): the grid's axis order x[2]x[3]x[0]x[1] was
+    # transcribed correctly and then read as a bit ordering, packing x[2]=0 x[3]=0 x[0]=1 x[1]=0
+    # as 0b0010 = 2 instead of 0b0001 = 1.
+    (t,) = parse_request_tables(KMAP_LSB_FIRST)
+    text = render_table(t)
+    assert "Inputs: x[3] x[2] x[1] x[0]." in text
+    row = next(line for line in text.splitlines() if "[x[3:0] = 1]" in line)
+    assert "x[3]=0 x[2]=0 x[1]=0 x[0]=1" in row
+    assert row.endswith("f=1")
+    # every row must carry its packed value, not just the one inspected above
+    assert sum(1 for line in text.splitlines() if "[x[3:0] = " in line) == len(t.rows)
+
+
+def test_rendering_states_the_bit_convention_and_disowns_the_listing_order():
+    (t,) = parse_request_tables(KMAP_LSB_FIRST)
+    text = render_table(t)
+    assert "bit k of the value of `s`, contributing 2**k" in text
+    assert "not a significance order" in text
+    # The claim that got skimmed past before was about the *listing* order of the whole row; the
+    # bits within a port really are ordered here, so the text must not deny that.
+    assert "in this order" not in text
+
+
+def test_rendered_function_is_stated_as_decimal_values_before_the_rows():
+    """The decimal set needs no bit-packing decision, and a wrong packing decision was the failure."""
+    (t,) = parse_request_tables(KMAP_LSB_FIRST)
+    lines = render_table(t).splitlines()
+    ones = next(i for i, line in enumerate(lines) if line.strip().startswith("f = 1 for"))
+    zeros = next(i for i, line in enumerate(lines) if line.strip().startswith("f = 0 for"))
+    first_row = next(i for i, line in enumerate(lines) if "->" in line)
+    assert ones < first_row and zeros < first_row
+    assert lines[ones].strip() == "f = 1 for exactly these values of x[3:0]: 0, 1, 4, 5, 6, 12, 14, 15"
+    assert lines[zeros].strip() == "f = 0 for exactly these values of x[3:0]: 2, 3, 7, 8, 9, 10, 11, 13"
+
+
+def test_rendered_packing_equals_the_packing_the_sign_off_gate_checks():
+    """A rendering that packed differently from the gate would teach a function the gate rejects."""
+    from openchip.contracts.schema import Contract
+    from openchip.verification.tablecheck import bind
+
+    contract = Contract.model_validate({
+        "module_name": "TopModule", "purpose": "Combinational function of a 4-bit vector.",
+        "ports": [{"name": "x", "direction": "input", "width": 4, "timing": "combinational"},
+                  {"name": "f", "direction": "output", "width": 1, "timing": "combinational"}],
+        "clock_reset": None,
+        "behavior": ("The module is purely combinational. The output f is a single bit driven directly by "
+                     "the 4-bit input vector x with no clocked storage of any kind, so f settles to its new "
+                     "value whenever any bit of x changes. The function of x is given by the Karnaugh map "
+                     "printed in the request and by nothing else."),
+        "requirements": [{"id": "R001", "text": "f follows the printed Karnaugh map.", "source": "user_text"}],
+    })
+    (t,) = parse_request_tables(KMAP_LSB_FIRST)
+    bound = bind(t, contract)
+    assert bound is not None
+    text = render_table(t)
+    rendered = [int(m) for m in re.findall(r"\[x\[3:0\] = (\d+)\]", text)]
+    assert rendered == [vec["x"] for vec, _ in bound.rows]
+    assert sorted(rendered) == list(range(16))
+    # and the decimal summary must agree with the same source of truth
+    ones = sorted(vec["x"] for vec, expected in bound.rows if expected == 1)
+    assert f"f = 1 for exactly these values of x[3:0]: {', '.join(str(n) for n in ones)}" in text
+
+
+def test_single_bit_ports_are_rendered_without_a_packed_value():
+    (t,) = parse_request_tables(KMAP_UNUSUAL_COLUMN_ORDER)
+    text = render_table(t)
+    assert "[" not in text          # no packed-value brackets, and no bit subscripts to explain
+    assert "2**k" not in text
+    assert "for exactly these values" not in text   # no single vector carries this table
+
+
+def test_a_partially_pinned_vector_is_labelled_by_the_bits_it_pins():
+    """The renderer has no contract, so it must not present two bits as a whole 4-bit port."""
+    request = INTERFACE + """ - input  x (4 bits)
+ - output f
+
+The module should implement the function f shown in the Karnaugh map
+below.
+
+          x[0]
+x[1]   0   1
+  0  | 1 | 0 |
+  1  | 0 | 1 |
+"""
+    (t,) = parse_request_tables(request)
+    text = render_table(t)
+    assert "[x[1:0] = " in text
+    assert "[x = " not in text
+    assert "values of x[1:0]:" in text
+
+
+def test_a_dont_care_table_does_not_claim_to_be_exhaustive():
+    # One cell of the bit-vector map printed as a don't-care: the value set is then not "exactly",
+    # and the omitted value must not be quietly filed under either output.
+    (t,) = parse_request_tables(KMAP_LSB_FIRST.replace("  01     | 0 | 0 | 0 | 0 |",
+                                                       "  01     | d | 0 | 0 | 0 |"))
+    text = render_table(t)
+    assert t.dont_care == 1
+    assert "for these values of x[3:0]" in text
+    assert "exactly these values" not in text
+    # Row "01" (x[2]=0 x[3]=1), column "00" (x[0]=0 x[1]=0) is the don't-care cell, i.e. x = 8.
+    sets = {int(v) for line in text.splitlines()
+            for m in re.findall(r"for these values of x\[3:0\]: (.*)$", line)
+            for v in m.split(",")}
+    assert 8 not in sets
+    assert sets == set(range(16)) - {8}

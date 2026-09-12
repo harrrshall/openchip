@@ -44,6 +44,17 @@ class RequestTable:
     source: str  # the verbatim block of request text this came from
 
 
+def _names_each_bit_once(table: RequestTable) -> bool:
+    """An axis naming the same signal bit twice makes the grid unreadable; decline rather than guess.
+
+    Two columns headed by the same bit assign it conflicting values, so no row is determined. The
+    sign-off gate rejects such a table anyway (`verification/tablecheck.bind`); declining here keeps
+    a table nobody can read out of the prompt as well.
+    """
+    keys = [(v.port, v.bit) for v in (*table.inputs, table.output)]
+    return len(keys) == len(set(keys))
+
+
 def parse_request_tables(request: str) -> list[RequestTable]:
     """Every table in `request` that can be read without guessing. `[]` when none can."""
     lines = request.splitlines()
@@ -53,7 +64,7 @@ def parse_request_tables(request: str) -> list[RequestTable]:
         for parse in (_parse_kmap, _parse_truth_table, _parse_waveform):
             table, nxt = parse(lines, i, request)
             if nxt > i:
-                if table is not None:
+                if table is not None and _names_each_bit_once(table):
                     out.append(table)
                 i = nxt
                 break
@@ -62,16 +73,95 @@ def parse_request_tables(request: str) -> list[RequestTable]:
     return out
 
 
+def _port_groups(inputs: tuple[TableVar, ...]) -> list[tuple[str, tuple[tuple[int, TableVar], ...]]]:
+    """`inputs` regrouped per port, ports in order of first appearance, bits descending.
+
+    Each member carries its index into `inputs`, because a row's values are positional.
+    """
+    order: list[str] = []
+    for v in inputs:
+        if v.port not in order:
+            order.append(v.port)
+    groups = []
+    for port in order:
+        members = [(i, v) for i, v in enumerate(inputs) if v.port == port]
+        members.sort(key=lambda iv: -(iv[1].bit if iv[1].bit is not None else 0))
+        groups.append((port, tuple(members)))
+    return groups
+
+
+def _packed(members: tuple[tuple[int, TableVar], ...], values: tuple[int, ...]) -> int | None:
+    """The integer a port's bits form on a row, or None unless the table pins bits 0..n-1 once each.
+
+    Bit k carries weight 2**k, which is how `verification/tablecheck.bind` builds the vector the
+    reference is evaluated on. Rendering and checking must not be able to disagree, so the two
+    decline on the same inputs: a repeated bit would silently OR two cells together here while
+    `bind` rejects it outright.
+    """
+    bits = {v.bit for _, v in members}
+    if None in bits or len(bits) != len(members) or bits != set(range(len(bits))):
+        return None
+    n = 0
+    for i, v in members:
+        n |= (values[i] & 1) << (v.bit or 0)
+    return n
+
+
+def _slice_name(port: str, members: tuple[tuple[int, TableVar], ...]) -> str:
+    """`x[3:0]` — the bits the table actually pins, which need not be the whole port."""
+    return f"{port}[{max(v.bit or 0 for _, v in members)}:0]"
+
+
 def render_table(table: RequestTable) -> str:
-    """A plain-text expansion of `table`, for pasting into a prompt."""
+    """A plain-text expansion of `table`, for pasting into a prompt.
+
+    Reading the grid is only half of what a model gets wrong. Measured (ADR 0010): given rows
+    labelled `x[2] x[3] x[0] x[1]`, a model transcribed every row correctly and then read that
+    *listing* order as a bit ordering, packing `0 0 1 0` as `0b0010` instead of `0b0001` and
+    arriving at exactly the wrong function it produced with no table at all. So bit significance is
+    stated here explicitly, bits are listed descending within a port, and every row carries the
+    packed integer the port actually takes.
+    """
     kind = {"kmap": "Karnaugh map", "truth_table": "truth table", "waveform": "waveform table"}.get(table.kind, table.kind)
-    names = " ".join(v.name for v in table.inputs)
+    groups = _port_groups(table.inputs)
+    display = [iv for _, members in groups for iv in members]
+    names = " ".join(v.name for _, v in display)
+    vectors = [(port, members) for port, members in groups if members[0][1].bit is not None]
     out = [f"Truth table read mechanically from the {kind} printed in the request.",
-           "The axis labels were parsed literally, in the order printed; no MSB-first convention was applied.",
-           f"Inputs, in this order: {names}. Output: {table.output.name}."]
+           "Every cell was read at the position printed: the axis labels decide which variable each "
+           "character of a printed code belongs to, and neither an MSB-first nor a Gray-code "
+           "ordering was assumed."]
+    if vectors:
+        out.append("`s[k]` below means bit k of the value of `s`, contributing 2**k to it. That is the "
+                   "only bit convention used here. The request's axis labels group the bits; they are "
+                   "not a significance order, and neither is the order anything is listed in below.")
+    # The decimal value set first and labelled authoritative: it is the only form that needs no
+    # bit-packing decision, and a wrong packing decision is the measured failure (ADR 0010).
+    summary: list[str] = []
+    if len(groups) == 1 and vectors:
+        port, members = groups[0]
+        packed_rows = [(_packed(members, values), value) for values, value in table.rows]
+        if all(n is not None for n, _ in packed_rows):
+            sliced = _slice_name(port, members)
+            # "exactly" would be a claim about the don't-care cells, which this table does not make.
+            scope = "these" if table.dont_care else "exactly these"
+            for wanted in (1, 0):
+                vals = sorted(n for n, value in packed_rows if value == wanted)
+                summary.append(f"  {table.output.name} = {wanted} for {scope} values of {sliced}: "
+                               f"{', '.join(str(n) for n in vals)}")
+    if summary:
+        out.append("The function, stated as the values the input takes. Use this form; it is the same "
+                   "table as the rows below, already packed:")
+        out.extend(summary)
+        out.append("The same cells one at a time, as evidence for the lines above — bits most "
+                   "significant first, each row followed by the value it packs to:")
+    out.append(f"Inputs: {names}. Output: {table.output.name}.")
     for values, value in table.rows:
-        assignment = " ".join(f"{v.name}={n}" for v, n in zip(table.inputs, values))
-        out.append(f"  {assignment} -> {table.output.name}={value}")
+        assignment = " ".join(f"{v.name}={values[i]}" for i, v in display)
+        packed = [(_slice_name(port, members), _packed(members, values)) for port, members in vectors]
+        shown = ", ".join(f"{sliced} = {n}" for sliced, n in packed if n is not None)
+        suffix = f"  [{shown}]" if shown else ""
+        out.append(f"  {assignment}{suffix} -> {table.output.name}={value}")
     if table.dont_care:
         out.append(f"{table.dont_care} cell(s) were printed as don't-care and are omitted above; "
                    "any output is acceptable for those inputs.")
