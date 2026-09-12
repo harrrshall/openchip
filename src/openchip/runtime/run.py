@@ -26,7 +26,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
-from ..contracts.tables import parse_request_tables, render_table
+from ..contracts.tables import expand_printed_tables
 from ..verification.guards import acceptance_guards, contract_guards
 from ..verification.tablecheck import check_reference_against_request_tables
 from ..verification.normalize import normalize_rtl
@@ -382,27 +382,22 @@ class Runner:
         return ("\nSupporting documents:\n" + "\n".join(docs)) if docs else ""
 
     def _request_tables_text(self, request: str) -> str:
-        """Any table printed in the request, expanded mechanically, for the intake and review prompts.
+        """Any table or clocked dump printed in the request, expanded mechanically, for intake and review.
 
-        Reading a printed grid is where intake most often goes wrong: models apply the textbook
-        MSB-first convention instead of the axis labels actually printed. The expansion below is
-        produced by a parser, so the model is never asked to read the grid at all.
+        Combinational grids go wrong when the model applies MSB-first instead of the printed axis
+        labels (ADR 0010). Clocked dumps go unread entirely (ADR 0013 detection-only). Both expansions
+        are produced by a parser so the model is not asked to read the grid or the dump itself.
         """
-        try:
-            tables = parse_request_tables(request)
-        except Exception as e:  # noqa: BLE001 — a parser fault must never block a build
-            self.store.event(self.run_id, "request_table_parse_error", {"error": f"{type(e).__name__}: {e}"})
+        rendered = expand_printed_tables(request)
+        if not rendered:
             return ""
-        if not tables:
-            return ""
-        rendered = "\n\n".join(render_table(t) for t in tables)
         try:
             (self.ws.dir("spec") / "request_tables.md").write_text(rendered + "\n")
         except Exception:  # noqa: BLE001
             pass
-        return ("\n\nThe request contains a table, expanded below by a parser that read the printed axis "
-                "labels literally and in the printed order. It is authoritative: state the behavior so that "
-                "it reproduces exactly these rows, and do not re-derive them from the grid yourself.\n\n" + rendered)
+        return ("\n\nThe request contains a table or clocked waveform, expanded below by a parser. "
+                "It is authoritative: state the behavior so that it reproduces exactly these "
+                "observations, and do not re-derive them from the grid or dump yourself.\n\n" + rendered)
 
     def _load_contract(self, ck: dict) -> Contract:
         return Contract.model_validate_json(Path(ck["contract_path"]).read_text())

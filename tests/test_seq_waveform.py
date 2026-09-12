@@ -2,7 +2,9 @@
 from pathlib import Path
 
 from openchip.contracts.schema import Contract
-from openchip.contracts.tables import parse_clocked_waveforms, parse_request_tables, posedge_indices
+from openchip.contracts.tables import (
+    expand_printed_tables, parse_clocked_waveforms, parse_request_tables, posedge_indices, render_trace,
+)
 from openchip.verification.tablecheck import bind_trace, check_reference_against_request_tables
 
 PROB117 = """
@@ -72,6 +74,32 @@ def test_clocked_dump_is_not_a_combinational_table():
 def test_combinational_waveform_is_not_a_clocked_trace():
     assert parse_clocked_waveforms(COMB_WAVE) == []
     assert parse_request_tables(COMB_WAVE)
+    text = expand_printed_tables(COMB_WAVE)
+    assert "Rising edges" not in text
+    assert "Clocked waveform" not in text
+
+
+def test_render_trace_prob117_q_sequence():
+    (tr,) = parse_clocked_waveforms(PROB117)
+    text = render_trace(tr)
+    qs = []
+    for line in text.splitlines():
+        if "q=" not in line:
+            continue
+        qs.append(int(line.split("q=")[1].split(",")[0].split()[0]))
+    assert qs == [4, 4, 4, 4, 4, 5, 6, 0, 1]
+    assert expand_printed_tables(PROB117).count("Rising edges") == 1
+
+
+def test_render_trace_prob145_omits_undefined_as_x_and_skips_steady_clock():
+    (tr,) = parse_clocked_waveforms(PROB145)
+    text = render_trace(tr)
+    edges = [ln for ln in text.splitlines() if ln.startswith("  ")]
+    assert len(edges) == 3
+    assert "p=0" in edges[0] and "q=x" in edges[0]
+    assert "q=0" in edges[1]
+    assert "q=1" in edges[2]
+    assert "a=1" not in text  # 90ns is clock-steady, not a rising edge
 
 
 def test_prob117_posedge_samples():

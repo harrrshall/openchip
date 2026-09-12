@@ -143,6 +143,47 @@ def _slice_name(port: str, members: tuple[tuple[int, TableVar], ...]) -> str:
     return f"{port}[{max(v.bit or 0 for _, v in members)}:0]"
 
 
+def render_trace(trace: WaveformTrace) -> str:
+    """Posedge observations from `trace`, for pasting into a prompt.
+
+    `Reference.step` returns outputs as seen just before the edge, then updates state. A dump
+    sample at clock 0→1 is that observation. Mid-cycle and falling-edge samples are omitted so
+    the model is not asked to invent a dual-edge contract the checker will not enforce.
+    """
+    clk_i = trace.columns.index(trace.clock)
+    others = [j for j, name in enumerate(trace.columns) if j != clk_i]
+    edges = posedge_indices(trace)
+    out = [
+        f"Clocked waveform read mechanically from the request. Clock `{trace.clock}`.",
+        "Each line is one rising edge (clock 0→1). A reference `step()` must RETURN these values "
+        "(the observation before the edge updates state). `x` means the dump does not define that "
+        "signal on that edge. Falling edges and samples with a steady clock are omitted on purpose.",
+        f"Rising edges of `{trace.clock}` ({len(edges)}):",
+    ]
+    for n, i in enumerate(edges, 1):
+        sample = trace.samples[i]
+        bits = []
+        for j in others:
+            v = sample[j]
+            bits.append(f"{trace.columns[j]}={'x' if v is None else v}")
+        out.append(f"  {n}. {', '.join(bits)}")
+    return "\n".join(out)
+
+
+def expand_printed_tables(request: str) -> str:
+    """Combinational tables and clocked traces concatenated; empty when neither parsed."""
+    parts: list[str] = []
+    try:
+        parts.extend(render_table(t) for t in parse_request_tables(request))
+    except Exception:  # noqa: BLE001 — a parser fault must never block a build
+        pass
+    try:
+        parts.extend(render_trace(t) for t in parse_clocked_waveforms(request))
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n\n".join(parts)
+
+
 def render_table(table: RequestTable) -> str:
     """A plain-text expansion of `table`, for pasting into a prompt.
 
