@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..contracts.schema import Contract, Disposition
+from ..contracts.underspec import underspec_questions
 from ..tools.base import tool_version
 
 if TYPE_CHECKING:
@@ -48,13 +49,16 @@ NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority
 def sign_off_withheld(ck: dict) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
-    Two conditions, both about the contract rather than the RTL, so neither is settled by
-    repairing the RTL and both hand the design back to the user:
+    Conditions about the contract rather than the RTL; none is settled by repairing the RTL:
       - the model's own independent reference derivations never agreed unanimously;
       - the reference contradicts a table printed in the request, which is ground truth that
-        never passed through the model (docs/decisions/0010-request-tables.md).
+        never passed through the model (docs/decisions/0010-request-tables.md);
+      - the request itself does not determine an observable behaviour
+        (docs/decisions/0012-underspec.md).
     """
     reasons: list[str] = []
+    for q in underspec_questions(ck.get("request") or ""):
+        reasons.append("the request does not determine the answer: " + q)
     c = ck.get("consensus") or {}
     if c:
         outcome = c.get("outcome") or ""
@@ -153,6 +157,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "tools": tools, "verification_config": cfg.verification.model_dump(),
         "budget": budget, "tool_time_s": round(tool_time_s, 1),
         "requirements": req_index,
+        "underspec": underspec_questions(ck.get("request") or ""),
         "unresolved": contract.unresolved if contract else [], "assumptions": contract.assumptions if contract else [],
         "defaults": contract.defaults if contract else [], "unsupported": contract.unsupported if contract else [],
         "host": platform.node(), "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
