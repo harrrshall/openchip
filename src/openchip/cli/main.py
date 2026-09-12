@@ -195,6 +195,18 @@ def cmd_verify(args) -> int:
     return 0 if res.accepted else 3
 
 
+def cmd_compose(args) -> int:
+    from ..runtime.composition import compose
+
+    request = _read_request(args.request)
+    if not request:
+        print("error: --request must contain a hardware request", file=sys.stderr)
+        return 2
+    outcome = compose(Path(args.project), request, _cfg(args), _parse_duration(args.budget), log=_logger())
+    print(json.dumps({k: outcome.get(k) for k in ("state", "accepted", "reason", "elapsed_s")}, indent=2))
+    return 0 if outcome.get("accepted") else 3
+
+
 def cmd_assemble(args) -> int:
     from ..contracts.system import SystemContract, render_top
 
@@ -281,6 +293,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--cycles", type=int)
     s.add_argument("--seeds", help="comma-separated seeds")
     s.set_defaults(fn=cmd_verify)
+    s = sub.add_parser("compose", help="build and verify a small multi-module system from a request")
+    s.add_argument("--project", required=True, help="new system workspace (must not exist)")
+    s.add_argument("--request", required=True)
+    s.add_argument("--budget", default="20m")
+    s.set_defaults(fn=cmd_compose)
     s = sub.add_parser("assemble", help="validate pinned module connections and generate top-level RTL")
     s.add_argument("--system", required=True, help="system contract JSON")
     s.add_argument("--out", required=True, help="new top-level Verilog file (must not exist)")

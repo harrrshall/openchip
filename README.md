@@ -35,6 +35,7 @@ openchip revise --project ws/fifo --change "make dout registered"   # contract v
 openchip resume --project ws/fifo                 # after an interruption
 openchip eval --suite core-v1 --budget 15m        # locked golden suite
 openchip assemble --system system.json --out top.v  # validate connections and generate a new top
+openchip compose --project ws/registered-sum --request examples/registered_sum_request.md --budget 20m
 ```
 Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
 
@@ -47,6 +48,22 @@ accept leaf RTL, or verify system behavior. Top widths are fixed at the top cont
 default parameter values; leaf parameter overrides are emitted explicitly.
 `examples/composition_demo.py` builds a complete system JSON and demonstrates real
 integration simulation and synthesis of two arithmetic leaves on the cloud toolchain.
+
+`compose` starts from a natural-language request, builds two to four leaves through
+the ordinary contract/reference/RTL workflow, and assembles their checked RTL.
+Integration references receive the top contract without leaf RTL or references.
+Failed or provisional leaves prevent system acceptance; an integration failure
+preserves the assembly for diagnosis. This initial workflow supports fixed top
+widths, shared clock/reset, and fresh workspaces; whole-system resume and automatic
+wiring repair are not implemented. Each leaf and the integration retain reports
+and evidence, with an aggregate `outcome.json` at the project root.
+
+The registered saturating-sum development example passed a separate oracle over
+all 65,536 operand pairs plus reset, hold, and enable checks on JarvisLabs using
+`openai/gpt-oss-120b`. Run `examples/check_registered_sum.py PROJECT
+examples/check_registered_sum.v` with the EDA toolchain to check that example's
+delivered RTL independently. This is one development design, not the three-design
+held-out composition gate or a guarantee for other requests.
 
 ## Repository
 `src/openchip/` product · `tests/` (30 tests; real-tool tests need the EDA toolchain) · `evals/suite/core-v1/` locked tasks + goldens · `evals/results/` recorded runs · `outputs/demo/` delivered example packages (two successes, one useful failure) · `scripts/cloud/` provisioning/serving/eval scripts · `docs/` architecture, decisions, research, operations, product, project (STATUS, ROADMAP, BACKLOG, HANDOFF).
