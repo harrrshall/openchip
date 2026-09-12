@@ -58,6 +58,31 @@ class DecompositionPlan(BaseModel):
                 raise ValueError("connection names an unknown instance; use uppercase TOP for the boundary")
         return self
 
+    def validate_boundary(self, top: Contract) -> None:
+        """Reject impossible external wiring before running expensive leaf builds."""
+        ports = {p.name: p for p in top.ports}
+        driven = set()
+        for connection in self.connections:
+            for module, name, direction in (
+                (connection.from_module, connection.from_port, "input"),
+                (connection.to_module, connection.to_port, "output"),
+            ):
+                if module != "TOP":
+                    continue
+                port = ports.get(name)
+                if port is None or port.direction != direction:
+                    raise ValueError(f"TOP.{name} is not a declared top {direction}; "
+                                     "keep internal state inside leaves or mark unused leaf outputs open")
+                if connection.width != port.width:
+                    raise ValueError(f"TOP.{name} requires width {port.width}")
+                if direction == "output":
+                    if name in driven:
+                        raise ValueError(f"TOP.{name} has multiple drivers")
+                    driven.add(name)
+        missing = {p.name for p in top.ports if p.direction == "output"} - driven
+        if missing:
+            raise ValueError(f"top outputs without drivers: {sorted(missing)}")
+
 
 class AssemblyRunner(Runner):
     """Existing verification/corroboration pipeline with immutable assembled RTL."""
@@ -160,6 +185,7 @@ def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print
                         if connection.get(field) == "top" and "top" not in instance_names:
                             connection[field] = "TOP"
                 plan = DecompositionPlan.model_validate(data)
+                plan.validate_boundary(top)
                 break
             except (ValueError, KeyError, TypeError) as exc:
                 plan = None
