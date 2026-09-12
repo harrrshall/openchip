@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from openchip.contracts.coerce import coerce_contract
 from openchip.contracts.schema import Contract, eval_width
 
 FIX = Path(__file__).parent / "fixtures"
@@ -70,3 +71,32 @@ def test_eval_width_restricted():
         eval_width("__import__('os')", {})
     with pytest.raises(ValueError):
         eval_width("FOO", {})
+
+
+def test_clocked_without_reset_is_valid():
+    d = load()
+    d["ports"] = [p for p in d["ports"] if p["name"] != "rst"]
+    d["clock_reset"] = {"clock": "clk", "reset": ""}
+    c = Contract.model_validate(d)
+    assert c.clock_reset is not None and c.clock_reset.reset == ""
+    assert "No reset port" in c.summary_md()
+
+
+def test_coerce_strips_bogus_reset_name():
+    d = load()
+    d["ports"] = [p for p in d["ports"] if p["name"] != "rst"]
+    d["clock_reset"] = {"clock": "clk", "reset": "null"}
+    out, notes = coerce_contract(d, "")
+    assert out["clock_reset"]["reset"] == ""
+    assert any("reset" in n.lower() for n in notes)
+    Contract.model_validate(out)
+
+
+def test_testbench_omits_undeclared_reset():
+    from openchip.verification.testbench import generate_testbench
+    d = load()
+    d["ports"] = [p for p in d["ports"] if p["name"] != "rst"]
+    d["clock_reset"] = {"clock": "clk", "reset": ""}
+    tb = generate_testbench(Contract.model_validate(d), 8)
+    assert "reg rst" not in tb and ".rst(" not in tb
+    assert ".clk(clk)" in tb

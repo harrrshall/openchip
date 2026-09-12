@@ -64,6 +64,30 @@ def coerce_contract(data: dict[str, Any], request: str = "") -> tuple[dict[str, 
             notes.append(f"timing of output {q.get('name')} defaulted to {q['timing']}")
         ports.append(q)
     d["ports"] = ports
+    names = {p.get("name") for p in ports}
+    clockish = next((p.get("name") for p in ports if p.get("role") == "clock"
+                     or str(p.get("name") or "").lower() in ("clk", "clock")), None)
+    if "clock_reset" not in d and clockish:
+        d["clock_reset"] = {"clock": clockish, "reset": "rst" if "rst" in names else ""}
+        if d["clock_reset"]["reset"] == "":
+            notes.append("clock_reset.reset left empty: request declared no reset port")
+    cr = d.get("clock_reset")
+    if isinstance(cr, dict):
+        names = {p.get("name") for p in ports}
+        bogus = {"", "null", "none", "n/a", "na", "nil"}
+        if "reset" not in cr:
+            cr["reset"] = "rst" if "rst" in names else ""
+            if cr["reset"] == "":
+                notes.append("clock_reset.reset left empty: request declared no reset port")
+        else:
+            s = "" if cr.get("reset") is None else str(cr.get("reset")).strip()
+            if s.lower() in bogus or s not in names:
+                if s:
+                    notes.append(f"clock_reset.reset {s!r} cleared: not a declared port")
+                cr["reset"] = ""
+            else:
+                cr["reset"] = s
+        d["clock_reset"] = cr
     # requirements: aliases and ids
     reqs = []
     for i, r in enumerate(d.get("requirements", []) or []):

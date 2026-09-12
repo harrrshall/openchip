@@ -413,6 +413,7 @@ class Runner:
         cj = work / "contract.json"
         dump_contract_json(contract, cj)
         last_err = ""
+        last_seq_keep: Optional[Path] = None
         prev_flagged: frozenset = frozenset()
         for attempt in range(attempts):
             user = P.REFERENCE_USER.format(**ctx)
@@ -468,11 +469,19 @@ class Runner:
             if tab.get("status") == "mismatch":
                 last_err = ("TABLE ERROR: the reference contradicts a table printed in the request "
                             f"on {len(tab.get('mismatches') or [])} row(s): {tab.get('detail') or ''}")
-                out_path.with_suffix(f".rejected{attempt}.py").write_text(code)
+                rejected = out_path.with_suffix(f".rejected{attempt}.py")
+                rejected.write_text(code)
                 self.store.event(self.run_id, "reference_rejected", {
                     "attempt": attempt, "error": last_err[:2000], "table_check": tab})
                 self.log(f"[reference] attempt {attempt + 1} rejected by request-table check: {last_err[:180]}")
+                kinds = {m.get("kind") for m in (tab.get("mismatches") or [])}
+                if kinds and kinds <= {"clocked_waveform"}:
+                    last_seq_keep = rejected
                 continue
+            return out_path, ""
+        if last_seq_keep is not None:
+            out_path.write_text(last_seq_keep.read_text())
+            self.log("[reference] kept last executable reference after clocked-waveform table mismatches; RTL will still be generated")
             return out_path, ""
         return None, last_err
 

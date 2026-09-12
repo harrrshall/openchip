@@ -91,7 +91,7 @@ def bind_trace(trace: WaveformTrace, contract: Contract) -> BoundTrace | None:
     if cr is None or cr.clock != trace.clock:
         return None
     ports = {p.name: p for p in contract.ports}
-    clk_reset = {cr.clock, cr.reset}
+    clk_reset = {cr.clock, *( [cr.reset] if cr.reset else [] )}
     cols = set(trace.columns)
     data_in = [p.name for p in contract.ports if p.direction == "input" and p.name not in clk_reset]
     data_out = [p.name for p in contract.ports if p.direction == "output"]

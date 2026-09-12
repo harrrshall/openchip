@@ -139,12 +139,13 @@ class Contract(BaseModel):
         if cr is not None:
             if cr.clock not in names:
                 raise ValueError(f"clock port {cr.clock!r} is not declared")
-            if cr.reset not in names:
-                raise ValueError(f"reset port {cr.reset!r} is not declared")
+            if cr.reset:
+                if cr.reset not in names:
+                    raise ValueError(f"reset port {cr.reset!r} is not declared")
             for p in self.ports:
                 if p.name == cr.clock and (p.direction != Direction.input or p.width != 1):
                     raise ValueError("clock must be a 1-bit input")
-                if p.name == cr.reset and (p.direction != Direction.input or p.width != 1):
+                if cr.reset and p.name == cr.reset and (p.direction != Direction.input or p.width != 1):
                     raise ValueError("reset must be a 1-bit input")
         if not self.requirements:
             raise ValueError("at least one requirement is required")
@@ -220,7 +221,10 @@ class Contract(BaseModel):
         if cr is None:
             out += ["- Purely combinational: no clock, no reset, no internal state.", ""]
         else:
-            out += [f"- Clock `{cr.clock}`, {cr.clock_edge}. Reset `{cr.reset}`, active-{cr.reset_active}, {cr.reset_kind}.", f"- {cr.reset_description}", ""]
+            if cr.reset:
+                out += [f"- Clock `{cr.clock}`, {cr.clock_edge}. Reset `{cr.reset}`, active-{cr.reset_active}, {cr.reset_kind}.", f"- {cr.reset_description}", ""]
+            else:
+                out += [f"- Clock `{cr.clock}`, {cr.clock_edge}. No reset port.", ""]
         out += [
             "## Behavior",
             "",

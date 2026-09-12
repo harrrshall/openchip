@@ -12,7 +12,7 @@ INTAKE_SYSTEM = """You are the intake engineer for OpenChip, an autonomous RTL d
 Turn the user's natural-language request into a precise, reviewable DESIGN CONTRACT as JSON matching the given schema.
 
 Rules:
-- Single clock, synchronous design. Declare the clock and reset ports explicitly (defaults: `clk`, `rst` active-high synchronous) unless the request says otherwise. If the request describes a purely combinational block with no clock and no reset, set `clock_reset` to null and list only the data ports. If the request names the clock/reset ports (e.g. `areset`, active-low `resetn`, asynchronous), record them exactly in `clock_reset`.
+- Single clock, synchronous design. Declare the clock and reset ports explicitly (defaults: `clk`, `rst` active-high synchronous) unless the request says otherwise. If the request describes a purely combinational block with no clock and no reset, set `clock_reset` to null and list only the data ports. If the request names a clock but no reset, set `clock_reset.reset` to the empty string and do not invent `rst`. If the request names the clock/reset ports (e.g. `areset`, active-low `resetn`, asynchronous), record them exactly in `clock_reset`.
 - Every externally visible behavior must be captured as a numbered requirement R001, R002, ... Each requirement records its source: user_text (quote it in source_detail), inference (you inferred it), or default (routine choice).
 - Distinguish explicit requirements from defaults and inferences. Put consequential choices the user should confirm in `unresolved`; do not block on them, pick a documented default and record it in `defaults`.
 - `behavior` must be a cycle-accurate description precise enough that two engineers would implement identical observable behavior: what happens at each clock edge, what outputs are combinational vs registered, reset values, boundary/overflow behavior.
@@ -36,7 +36,7 @@ Reply with ONE JSON object and nothing else, with exactly these keys:
 - "module_name" (string), "purpose" (string), "language" ("verilog-2001"), "target" (string)
 - "parameters": [{{"name","default"(int),"description"}}]
 - "ports": [{{"name","direction"("input"|"output"),"width"(int at default parameters),"width_expr"(string or null),"signed"(bool),"role"("clock"|"reset"|"data"|"control"|"status"|"handshake"),"timing"("registered"|"combinational" for outputs, "n/a" for inputs),"description"}}]
-- "clock_reset": {{"clock","clock_edge":"posedge","reset","reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
+- "clock_reset": {{"clock","clock_edge":"posedge","reset" (port name, or "" if the request has a clock but no reset),"reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
 - "behavior" (several precise sentences), "timing" (string), "arithmetic" (string)
 - "requirements": [{{"id":"R001","text","source"("user_text"|"document"|"inference"|"default"|"protocol"),"source_detail","disposition":"tested","verification_plan"}}]
 - "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)

@@ -97,3 +97,50 @@ def test_mismatching_reference_is_rejected_then_a_matching_one_is_kept(tmp_path,
     assert "x3" in path.read_text()
     rejected = list(ws.dir("reference").glob("*.rejected0.py"))
     assert rejected and 'return {"f": 0}' in rejected[0].read_text()
+
+
+def _seq_contract() -> Contract:
+    return Contract.model_validate({
+        "module_name": "TopModule", "purpose": "seq counter",
+        "behavior": "x" * 160,
+        "ports": [
+            {"name": "clk", "direction": "input", "width": 1, "role": "clock", "timing": "n/a"},
+            {"name": "a", "direction": "input", "width": 1, "timing": "n/a"},
+            {"name": "q", "direction": "output", "width": 3, "timing": "registered"},
+        ],
+        "clock_reset": {"clock": "clk", "reset": ""},
+        "requirements": [{"id": "R001", "text": "Count when a is low, hold when a is high.", "source": "user_text"}],
+    })
+
+
+def test_three_combinational_table_mismatches_still_abort(tmp_path, monkeypatch):
+    from openchip.runtime import run as run_mod
+    monkeypatch.setattr(run_mod, "run_reference", lambda *a, **k: {"error": ""})
+    monkeypatch.setattr(run_mod, "lint_reference_timing", lambda *a, **k: {"violations": []})
+    ws = Workspace(tmp_path / "ws")
+    ws.init(request=INTERFACE)
+    runner = Runner(ws, Config.load(), adapter=_QueuedAdapter([WRONG, WRONG, WRONG]), log=lambda m: None)
+    runner.start(INTERFACE)
+    runner.budget = Budget(600, 20, 100_000, 3)
+    path, err = runner._generate_reference({"request": INTERFACE}, _contract(), ws.dir("reference") / "reference.py")
+    assert path is None
+    assert "TABLE ERROR" in err
+
+
+def test_clocked_waveform_mismatch_keeps_last_smoke_ok_reference(tmp_path, monkeypatch):
+    from openchip.runtime import run as run_mod
+    monkeypatch.setattr(run_mod, "run_reference", lambda *a, **k: {"error": ""})
+    monkeypatch.setattr(run_mod, "lint_reference_timing", lambda *a, **k: {"violations": []})
+    monkeypatch.setattr(run_mod, "check_reference_against_request_tables", lambda *a, **k: {
+        "status": "mismatch", "mismatches": [{"kind": "clocked_waveform", "detail": "q"}], "detail": "q",
+    })
+    ws = Workspace(tmp_path / "ws")
+    req = "clocked dump"
+    ws.init(request=req)
+    runner = Runner(ws, Config.load(), adapter=_QueuedAdapter([WRONG, WRONG, WRONG]), log=lambda m: None)
+    runner.start(req)
+    runner.budget = Budget(600, 20, 100_000, 3)
+    path, err = runner._generate_reference({"request": req}, _seq_contract(), ws.dir("reference") / "reference.py")
+    assert err == ""
+    assert path is not None
+    assert path.is_file()
