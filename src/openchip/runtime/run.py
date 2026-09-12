@@ -468,6 +468,16 @@ class Runner:
                 self.store.event(self.run_id, "reference_rejected", {"attempt": attempt, "error": last_err[:2000], "timing_violations": v})
                 self.log(f"[reference] attempt {attempt + 1} rejected by timing lint: registered output(s) {names} depend on same-cycle inputs")
                 continue
+            tab = check_reference_against_request_tables(
+                contract, ck.get("request", ""), out_path, work / f"tables_{attempt}")
+            if tab.get("status") == "mismatch":
+                last_err = ("TABLE ERROR: the reference contradicts a table printed in the request "
+                            f"on {len(tab.get('mismatches') or [])} row(s): {tab.get('detail') or ''}")
+                out_path.with_suffix(f".rejected{attempt}.py").write_text(code)
+                self.store.event(self.run_id, "reference_rejected", {
+                    "attempt": attempt, "error": last_err[:2000], "table_check": tab})
+                self.log(f"[reference] attempt {attempt + 1} rejected by request-table check: {last_err[:180]}")
+                continue
             return out_path, ""
         return None, last_err
 
