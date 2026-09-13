@@ -254,12 +254,12 @@ def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print
         system = SystemContract(top=top, modules=instances, connections=plan.connections + added_controls,
                                 integration_requirements=[r.id for r in top.requirements])
         (project / "system.json").write_text(system.model_dump_json(indent=2))
-        # Only this top contract reaches the system-reference role. It receives
-        # neither the decomposition request nor any leaf workspace/RTL/reference.
-        top_request = system.top.summary_md()
+        # Preserve authoritative user wording alongside the top contract. Never
+        # substitute a derived summary or include generated leaf artifacts.
+        top_request = request
         (project / "integration-context.json").write_text(json.dumps({
             "request": top_request, "contract": system.top.model_dump(mode="json"),
-            "source": "top contract only; no leaf artifacts supplied",
+            "source": "original user request and top contract; no generated leaf artifacts supplied",
         }, indent=2))
         ws = Workspace(project / "integration")
         ws.init(request=top_request)
