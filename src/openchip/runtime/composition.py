@@ -122,6 +122,26 @@ def _seed_contract(runner: Runner, contract: Contract, request: str, budget: flo
     })
 
 
+def shared_control_connections(top: Contract, instances: list[Instance],
+                               connections: list[Connection]) -> list[Connection]:
+    """Complete mandatory shared controls; never replace an explicit driver."""
+    if top.clock_reset is None:
+        return []
+    occupied = {c.target for c in connections}
+    additions = []
+    for instance in instances:
+        controls = instance.contract.clock_reset
+        if controls is None:
+            continue
+        for source, target in ((top.clock_reset.clock, controls.clock),
+                               (top.clock_reset.reset, controls.reset)):
+            if source and target and (instance.name, target) not in occupied:
+                additions.append(Connection(from_module="TOP", from_port=source,
+                                            to_module=instance.name, to_port=target, width=1))
+                occupied.add((instance.name, target))
+    return additions
+
+
 def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print) -> dict:
     """Build a fresh system workspace; retain failures and all leaf workspaces."""
     project = project.resolve()
@@ -226,7 +246,12 @@ def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print
             if module in definitions and definitions[module] != code:
                 raise Stalled(f"independently generated instances disagree on shared module {module}")
             definitions[module] = code
-        system = SystemContract(top=top, modules=instances, connections=plan.connections,
+        added_controls = shared_control_connections(top, instances, plan.connections)
+        (project / "inferred-connections.json").write_text(json.dumps({
+            "reason": "mandatory direct clock/reset wiring in the shared-control composition scope",
+            "connections": [c.model_dump(mode="json") for c in added_controls],
+        }, indent=2))
+        system = SystemContract(top=top, modules=instances, connections=plan.connections + added_controls,
                                 integration_requirements=[r.id for r in top.requirements])
         (project / "system.json").write_text(system.model_dump_json(indent=2))
         # Only this top contract reaches the system-reference role. It receives
