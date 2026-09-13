@@ -47,8 +47,7 @@ def main() -> int:
 
         def rand_vec():
             v = {p["name"]: rng.getrandbits(p["width"]) for p in data_in}
-            if cr.get("reset"):
-                v[cr["reset"]] = rst_inactive
+            v[cr["reset"]] = rst_inactive
             v[cr["clock"]] = 0
             return v
 

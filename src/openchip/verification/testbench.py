@@ -35,7 +35,6 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
     if contract.clock_reset is None:
         return generate_comb_testbench(contract, n_cycles, max_report)
     cr = contract.clock_reset
-    rst = (cr.reset or "").strip()
     din = contract.data_inputs()
     outs = contract.outputs()
     in_w = max(1, sum(p.width for p in din))
@@ -47,8 +46,7 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
     L.append("`timescale 1ns/1ps")
     L.append(f"module tb_{contract.module_name};")
     L.append(f"  reg {cr.clock} = 1'b0;")
-    if rst:
-        L.append(f"  reg {rst} = {rst_on};")
+    L.append(f"  reg {cr.reset} = {rst_on};")
     for p in din:
         L.append(f"  reg [{p.width - 1}:0] {p.name};  // starts X; driven at the first negedge so always @* blocks get an event")
     for p in outs:
@@ -61,10 +59,7 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
     pstr = ""
     if params:
         pstr = " #(" + ", ".join(f".{k}({v})" for k, v in params.items()) + ")"
-    conns = [f".{cr.clock}({cr.clock})"]
-    if rst:
-        conns.append(f".{rst}({rst})")
-    conns += [f".{p.name}({p.name})" for p in din + outs]
+    conns = [f".{cr.clock}({cr.clock})", f".{cr.reset}({cr.reset})"] + [f".{p.name}({p.name})" for p in din + outs]
     L.append(f"  {contract.module_name}{pstr} dut (" + ", ".join(conns) + ");")
     L.append(f"  always #5 {cr.clock} = ~{cr.clock};")
     # unpack inputs
@@ -78,16 +73,14 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
     L.append('    if (!$value$plusargs("vexp=%s", vexp_file)) vexp_file = "vectors_exp.hex";')
     L.append("    $readmemh(vin_file, in_vec);")
     L.append("    $readmemh(vexp_file, exp_vec);")
-    if rst:
-        L.append(f"    {rst} = {rst_on};")
+    L.append(f"    {cr.reset} = {rst_on};")
     L.append(f"    @(negedge {cr.clock});")
     if din:
         L.append("    {" + ", ".join(p.name for p in din) + "} = 0;")
     L.append(f"    repeat ({RESET_CYCLES}) @(posedge {cr.clock});")
     L.append(f"    for (i = 0; i < {n_cycles}; i = i + 1) begin")
     L.append(f"      @(negedge {cr.clock});")
-    if rst:
-        L.append(f"      {rst} = {rst_off};")
+    L.append(f"      {cr.reset} = {rst_off};")
     L.append("      drive(i);")
     L.append("      #1;")
     L.append("      got = {" + ", ".join(p.name for p in outs) + "};")

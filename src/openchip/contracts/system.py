@@ -123,13 +123,8 @@ class SystemContract(BaseModel):
                 if connected == (p.name in m.open_outputs):
                     raise ValueError(f"{m.name}.{p.name}: output must be connected or explicitly open")
             cr = m.contract.clock_reset
-            if cr and self.top.clock_reset:
-                pairs = [(cr.clock, self.top.clock_reset.clock)]
-                if cr.reset and self.top.clock_reset.reset:
-                    pairs.append((cr.reset, self.top.clock_reset.reset))
-                for leaf_port, top_port in pairs:
-                    if not leaf_port or not top_port:
-                        continue
+            if cr:
+                for leaf_port, top_port in ((cr.clock, self.top.clock_reset.clock), (cr.reset, self.top.clock_reset.reset)):
                     if drivers[(m.name, leaf_port)] != ("TOP", top_port):
                         raise ValueError(f"{m.name}.{leaf_port}: must connect directly to shared top clock/reset")
         # Conservatively assume every combinational leaf output depends on every
