@@ -7,6 +7,7 @@
 <p align="center">describe a hardware module in plain language. get verilog rtl with tool-backed evidence that it does what you asked.</p>
 
 <p align="center">
+  <a href="https://13f5f45067272.notebooksn.jarvislabs.net">try it</a> ·
   <a href="#start-in-two-minutes">start</a> ·
   <a href="#how-it-works">how it works</a> ·
   <a href="#what-the-numbers-say">numbers</a> ·
@@ -23,7 +24,11 @@ the web ui shows the whole process as it happens: which stage is running, what e
 
 ## start in two minutes
 
-hosted version: coming soon. until then run it on your machine.
+hosted version: https://13f5f45067272.notebooksn.jarvislabs.net
+
+open it, press settings, paste your own model key and start describing modules. the verilog tools are already installed there. the page has no login, so treat it as a shared demo: do not paste a key you cannot rotate, and expect other visitors to see the session list.
+
+to run it on your own machine instead:
 
 requirements: python 3.10 or newer, and the open-source verilog tools (icarus verilog, verilator, yosys). on macos: `brew install icarus-verilog verilator yosys`. on linux the oss cad suite bundle gives you all of them: https://github.com/YosysHQ/oss-cad-suite-build/releases
 
