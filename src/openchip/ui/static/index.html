@@ -318,7 +318,7 @@ table.t th { background: var(--panel-2); font-weight: 640; }
           <textarea id="request" rows="8" placeholder="Example: a synchronous FIFO named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports clk, rst (active high, synchronous), push, din[WIDTH-1:0], pop, dout[WIDTH-1:0], full, empty, count. Type / for commands." aria-describedby="composerHelp" aria-autocomplete="list" aria-controls="palette" aria-expanded="false"></textarea>
           <div class="palette" id="palette" role="listbox" aria-label="Commands" hidden></div>
         </div>
-        <p class="hint" id="composerHelp">Type / at the start of the box for commands: /resume, /settings, /help.</p>
+        <p class="hint" id="composerHelp">Typically 1 to 3 minutes; complex designs and repairs can take longer. Type / at the start of the box for commands: /resume, /settings, /help.</p>
         <div class="row" style="margin-top:8px">
           <div style="flex:1 1 220px"><label for="projname">Project name</label><input type="text" id="projname" placeholder="sync_fifo" autocomplete="off"></div>
           <div style="flex:0 0 140px"><label for="budget">Budget</label>
@@ -346,7 +346,7 @@ table.t th { background: var(--panel-2); font-weight: 640; }
           <button class="btn small quiet" id="backBtn">Back to composer</button>
           <h1 id="sessTitle" style="margin-top:8px">session</h1>
           <div class="row tight" id="sessChips"></div>
-          <div class="hint" id="sessMeta" style="margin-top:4px"></div>
+          <div class="hint" id="sessMeta" style="margin-top:4px"></div><details><summary>Engineering details</summary><div id="engineeringMeta" class="hint"></div></details><div id="answerCard" class="card" hidden></div>
         </div>
         <div class="row" id="sessActions"></div>
       </div>
@@ -389,7 +389,7 @@ table.t th { background: var(--panel-2); font-weight: 640; }
       </div>
     </div>
     <div style="margin-top:16px">
-      <label for="apikey">API key <span class="hint" id="keyHint"></span></label>
+      <label for="tokenrate">Estimated blended cost (USD per million tokens, optional)</label><input id="tokenrate" type="number" min="0" step="any"><p class="hint">Approximate model cost at your configured rate; excludes hosting and tools.</p><label for="apikey">API key <span class="hint" id="keyHint"></span></label>
       <input type="password" id="apikey" autocomplete="off" placeholder="paste a key, or leave empty to keep the saved one">
     </div>
     <div class="row" style="margin-top:16px">
@@ -1129,6 +1129,7 @@ function renderToolchain() {
 }
 function openSettings() {
   S.settingsDraft = null;
+  $("tokenrate").value = S.status?.settings?.usd_per_million_tokens ?? "";
   settingsDraft();
   renderSettingsFields();
   renderToolchain();
@@ -1140,7 +1141,7 @@ async function saveSettings(silent) {
   const d = settingsDraft();
   d.model = $("model").value.trim();
   d.base_url = $("baseurl").value.trim();
-  const body = { provider: d.provider, model: d.model, base_url: d.base_url };
+  const body = { provider: d.provider, model: d.model, base_url: d.base_url, usd_per_million_tokens: $("tokenrate").value };
   const key = $("apikey").value;
   if (key) body.api_key = key;
   await api("/api/settings", body);
@@ -1235,8 +1236,11 @@ function renderStages() {
     const top = el("div", { class: "top" });
     top.appendChild(el("span", { class: "dot" + (status === "running" ? " pulse" : ""), "aria-hidden": "true" }));
     top.appendChild(document.createTextNode(s.name));
+    const names = {intake:['intake'],review:['review'],reference:['reference'],rtl:['properties','rtl'],verify:['verify'],'sign-off':['report']};
+    const times = (d.stage_durations || []).filter(t => (names[String(s.name).toLowerCase()] || [String(s.name).toLowerCase()]).includes(t.stage));
+    top.appendChild(document.createTextNode(" · " + (times.length ? dur(times.reduce((sum,t) => sum+t.seconds,0)) : "time not recorded")));
     box.appendChild(top);
-    box.appendChild(el("div", { class: "dt", text: s.detail || status }));
+    box.appendChild(el("div", { class: "dt", text: optionalFormalText(s.detail || status) }));
     strip.appendChild(box);
   });
   host.appendChild(strip);
@@ -1249,9 +1253,9 @@ function feedLineNode(line) {
   const m = /^\[([^\]]{1,40})\]\s*([\s\S]*)$/.exec(line.text || "");
   if (m) {
     n.appendChild(el("span", { class: "role", text: "[" + m[1] + "] " }));
-    n.appendChild(document.createTextNode(m[2]));
+    appendLinkedText(n, optionalFormalText(m[2]));
   } else {
-    n.appendChild(document.createTextNode(line.text || ""));
+    appendLinkedText(n, optionalFormalText(line.text || ""));
   }
   return n;
 }
@@ -1276,7 +1280,15 @@ function renderFeed() {
     return;
   }
   const frag = document.createDocumentFragment();
-  shown.forEach((l) => frag.appendChild(feedLineNode(l)));
+  const grouped = [];
+  shown.forEach(l => { const prev = grouped[grouped.length-1]; if (/^\[checkpoint\]/.test(l.text) && prev && prev.text === l.text) prev.repeats = (prev.repeats || 1)+1; else grouped.push({...l}); });
+  grouped.forEach(l => {
+    if (/sha|tokens|\btok\b|\[model|\[checkpoint/.test(l.text)) {
+      const summary = l.text.startsWith('[checkpoint]') ? 'Checkpoint' + (l.repeats ? ' ('+l.repeats+' repeated)' : '') : 'Build activity';
+      frag.appendChild(el('details', {}, [el('summary', {text:summary}), feedLineNode(l)]));
+    } else frag.appendChild(feedLineNode(l));
+  });
+  (S.detail?.files || []).filter(p => p.endsWith('evidence.json')).forEach(p => frag.appendChild(el('div', {}, [el('a', {href:artifactURL(p), text:p, target:'_blank', rel:'noopener'})])));
   box.appendChild(frag);
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
@@ -1336,7 +1348,9 @@ function renderSessionHeader() {
   if (!meta.length && d.alive) meta.push("working");
   if (missing) meta.length = 0;
   if (d.reason) meta.push(d.reason);
-  $("sessMeta").textContent = missing ? "This session's folder was deleted" : meta.join(" · ");
+  $("engineeringMeta").textContent = meta.join(" · ");
+  $("sessMeta").textContent = missing ? "This session's folder was deleted" : (d.presentation?.sentence || "Building and checking your design") + " · " + (typeof elapsed === "number" ? dur(elapsed) + " · " : "") + (d.cost_estimate_usd != null ? "Estimated model cost: $" + d.cost_estimate_usd.toFixed(4) : "Cost estimate unavailable; set a token rate in Settings");
+  renderAnswerCard(d);
 
   const acts = clear($("sessActions"));
   const live = !!d.alive || d.state === "running" || d.state === "planned";
@@ -1345,6 +1359,13 @@ function renderSessionHeader() {
   if (missing) revise.title = "The workspace folder for this session no longer exists on the server.";
   else if (live) revise.title = "A change can only be requested when the run is not live.";
   acts.appendChild(revise);
+  const copy = el("button", {class:"btn", text:"Copy RTL", onclick:async () => {
+    try { await navigator.clipboard.writeText(Object.entries(d.rtl || {}).map(([n,c]) => "// " + n + "\n" + c).join("\n")); toast("RTL copied"); }
+    catch(e) { toast("Clipboard unavailable", "Select and copy the RTL in the RTL tab."); }
+  }});
+  copy.disabled = !Object.keys(d.rtl || {}).length;
+  acts.appendChild(copy);
+  if (!missing) acts.appendChild(el("a", {class:"btn", text:"Download RTL + report + evidence", href:"/api/runs/"+encodeURIComponent(S.current)+"/bundle.zip", download:"openchip-delivery.zip"}));
   const resumeTarget = sess || { workspace: S.current, state: d.state, alive: d.alive, accepted: o.accepted };
   if (!missing && isResumable(resumeTarget) && !live) {
     acts.appendChild(el("button", { class: "btn primary", text: resumeLabel(resumeTarget), onclick: (e) => resumeRun(resumeTarget, e.currentTarget) }));
@@ -1355,6 +1376,7 @@ const TABS = [
   { id: "rtl", label: "RTL" },
   { id: "report", label: "Report" },
   { id: "evidence", label: "Evidence" },
+  { id: "diff", label: "Contract changes" },
   { id: "request", label: "Request" },
 ];
 function renderTabs() {
@@ -1397,6 +1419,9 @@ function listBlock(title, items, renderItem) {
 }
 function renderEvidence(d) {
   const pane = el("div");
+  const f = d.presentation?.formal;
+  if (f) pane.appendChild(el("p", {class:"hint", text:(f.informational ? "Optional formal check (information): " : "Formal check: ") + f.status + ". Bounded checks do not establish a full proof."}));
+  (d.files || []).filter(p => p.endsWith('evidence.json')).forEach(p => pane.appendChild(el("p", {}, [el("a", {href:artifactURL(p), target:"_blank", rel:"noopener", text:p})])));
   const ev = d.evidence;
   if (!ev) {
     pane.appendChild(emptyPane("No evidence yet", "Verification artefacts and the sign-off decision appear here once the run reaches verification. This server did not report an evidence block."));
@@ -1416,7 +1441,7 @@ function renderEvidence(d) {
       const n = (typeof a.attempt === "number") ? a.attempt + 1 : (Number(a.attempt) >= 0 ? Number(a.attempt) + 1 : i + 1);
       const verdict = (a.accepted === true) ? "accepted"
         : (a.accepted === false ? "rejected" : (a.status || a.result || a.stage || ""));
-      const detail = a.summary || a.detail || a.reason || summary || a.stage || "";
+      const detail = optionalFormalText(a.summary || a.detail || a.reason || summary || a.stage || "");
       return el("tr", {}, [
         el("td", { text: String(n) }),
         el("td", { text: verdict }),
@@ -1478,6 +1503,7 @@ function renderPane() {
     else host.appendChild(emptyPane("No report yet", "The report is written when the run ends, and every claim in it is tied to a tool result."));
     return;
   }
+  if (S.tab === "diff") { host.appendChild(el("pre", {text:d.contract_diff || "No previous contract version to compare."})); return; }
   if (S.tab === "evidence") { host.appendChild(renderEvidence(d)); return; }
   if (S.tab === "request") {
     host.appendChild(el("pre", {}, [el("code", { text: d.request || (currentSession() || {}).request || "" })]));
@@ -1669,6 +1695,34 @@ async function submitRevise() {
   } finally {
     btn.disabled = false;
   }
+}
+
+function optionalFormalText(text) {
+  return S.detail?.presentation?.formal?.informational ? String(text).replace(/formal BMC(?: depth \d+)?\s*:/gi, 'optional formal check (information):') : text;
+}
+function appendLinkedText(node, text) {
+  String(text).split(/(\s+)/).forEach(word => {
+    const path = (S.detail?.files || []).find(p => word === p || word.endsWith('/'+p));
+    node.appendChild(path ? el('a', {href:artifactURL(path),text:path,target:'_blank',rel:'noopener'}) : document.createTextNode(word));
+  });
+}
+const artifactURL = p => "/api/runs/"+encodeURIComponent(S.current)+"/artifact?path="+encodeURIComponent(p);
+let answerKey = '';
+function renderAnswerCard(d) {
+  const qs = d.presentation?.questions || [];
+  const host = $('answerCard'); host.hidden = !qs.length || d.alive;
+  const key = JSON.stringify([S.current,d.run_id,qs]);
+  if (answerKey === key) return;
+  answerKey = key; clear(host);
+  host.appendChild(el('h3', {text:'What I need from you'}));
+  qs.forEach((q,i) => {host.appendChild(el('label', {for:'answer-'+i,text:q})); host.appendChild(el('textarea',{id:'answer-'+i,rows:'2'}));});
+  host.appendChild(el('button',{class:'btn primary',text:'Apply answers and re-verify',onclick:async e => {
+    const answers=qs.map((q,i)=>$('answer-'+i).value.trim());
+    if(answers.some(a=>!a)) {toast('Please answer each question'); return;}
+    $('change').value=qs.map((q,i)=>'Question: '+q+'\nAnswer: '+answers[i]).join('\n\n');
+    e.currentTarget.disabled=true;
+    try {await submitRevise();} finally {$("answerCard").querySelector("button").disabled=false;}
+  }}));
 }
 
 /* ---------------- wiring ---------------- */

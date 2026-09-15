@@ -1,0 +1,52 @@
+"""User-facing summaries derived from recorded run evidence."""
+from __future__ import annotations
+
+import difflib
+from pathlib import Path
+
+
+def result_summary(outcome: dict, state: str | None) -> dict:
+    questions = [str(q) for q in outcome.get("unresolved", []) if str(q).strip()]
+    questions = list(dict.fromkeys(questions))
+    provisional = bool(outcome.get("provisional"))
+    withheld = "SIGN-OFF WITHHELD" in outcome.get("status_line", "")
+    if (provisional or withheld) and not questions:
+        questions = ["The independent references disagree or lack corroboration. Please clarify the intended behavior, including timing and priority when inputs coincide."]
+    if state in {"running", "planned", "created"}:
+        sentence = "Building and checking your design"
+    elif questions:
+        sentence = f"Needs your answer on {len(questions)} question{'s' if len(questions) != 1 else ''}"
+    elif state == "completed" and outcome.get("accepted") and not provisional and not withheld:
+        sentence = "Verified and signed off"
+    elif state == "budget_exhausted":
+        sentence = "Stopped at the time limit; verification is incomplete"
+    elif state == "paused":
+        sentence = "Paused; verification is incomplete"
+    else:
+        sentence = "Needs more work before sign-off"
+    formal = outcome.get("formal") or {}
+    required = (outcome.get("verification_config") or {}).get("require_formal")
+    return {"sentence": sentence, "questions": questions,
+            "formal": {"status": formal.get("status", "not_run"),
+                       "required": required,
+                       "informational": required is False}}
+
+
+def stage_durations(events: list[dict], end: float) -> list[dict]:
+    """Checkpoint timestamps mark stage entry; accumulate repeated repair visits."""
+    durations: dict[str, float] = {}
+    checkpoints = [e for e in events if e.get("kind") == "checkpoint" and e.get("step")]
+    for index, event in enumerate(checkpoints):
+        stop = checkpoints[index + 1]["ts"] if index + 1 < len(checkpoints) else end
+        stage = event["step"]
+        durations[stage] = durations.get(stage, 0) + max(0, stop - event["ts"])
+    return [{"stage": stage, "seconds": round(seconds, 1)} for stage, seconds in durations.items()]
+
+
+def contract_diff(spec: list[Path]) -> str:
+    if len(spec) < 2:
+        return "No previous contract version to compare."
+    before, after = spec[-2:]
+    return "".join(difflib.unified_diff(before.read_text().splitlines(True),
+                                       after.read_text().splitlines(True),
+                                       fromfile=before.name, tofile=after.name)) or "No text changes."

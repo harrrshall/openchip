@@ -6,6 +6,9 @@ Run with `openchip ui` (default http://127.0.0.1:8765). Keys pasted in Settings 
 from __future__ import annotations
 
 import json
+import io
+import zipfile
+import math
 import os
 import re
 import threading
@@ -15,7 +18,8 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
+from .presentation import result_summary, stage_durations, contract_diff
 
 from ..config import Config, ModelConfig
 from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, ProviderStatus, read_keys_file, write_keys_file
@@ -242,7 +246,11 @@ class UIState:
         provider = data.get("provider") or self.settings.get("provider") or "openai-compatible"
         if provider not in PROVIDER_DEFAULTS:
             raise ValueError("unknown provider")
-        self.settings = {"provider": provider, "model": (data.get("model") or self.settings.get("model") or "").strip(),
+        rate = data.get("usd_per_million_tokens", self.settings.get("usd_per_million_tokens"))
+        rate = None if rate in (None, "") else float(rate)
+        if rate is not None and (not math.isfinite(rate) or rate < 0):
+            raise ValueError("Enter a nonnegative finite token rate.")
+        self.settings = {"usd_per_million_tokens": rate, "provider": provider, "model": (data.get("model") or self.settings.get("model") or "").strip(),
                          "base_url": (data.get("base_url") or "").strip() or PROVIDER_DEFAULTS[provider]["base_url"],
                          "session_id": self.settings.get("session_id") or str(uuid.uuid4())}
         self._write_settings(self.settings)
@@ -329,9 +337,11 @@ class UIState:
             logs.append({"t": time.time(), "msg": msg})
         return log
 
-    def _spawn(self, workspace: str, runner: Runner, run_id: str, log) -> dict:
+    def _spawn(self, workspace: str, runner: Runner, run_id: Optional[str], log, prepare=None) -> dict:
         def work() -> None:
             try:
+                if prepare is not None:
+                    prepare()
                 runner.execute()
             except Exception as e:  # noqa: BLE001
                 log(f"[error] {type(e).__name__}: {e}")
@@ -348,6 +358,12 @@ class UIState:
         return bool(t and t.is_alive())
 
     def start_run(self, name: str, request: str, budget_s: float, change: Optional[str] = None) -> dict:
+        with self.lock:
+            if change is not None:
+                self.workspace_path(name)
+            return self._start_run(name, request, budget_s, change)
+
+    def _start_run(self, name: str, request: str, budget_s: float, change: Optional[str] = None) -> dict:
         missing = self.missing_tools()
         if missing:
             raise ToolchainMissing(missing)
@@ -364,8 +380,9 @@ class UIState:
         cfg = self.config()
         log = self._logger(safe)
         runner = Runner(ws, cfg, log=log)
-        run_id = runner.start(request, budget_s=budget_s) if change is None else runner.revise(change, budget_s=budget_s)
-        return self._spawn(safe, runner, run_id, log)
+        run_id = runner.start(request, budget_s=budget_s) if change is None else None
+        prepare = (lambda: runner.revise(change, budget_s=budget_s)) if change is not None else None
+        return self._spawn(safe, runner, run_id, log, prepare)
 
     def resume_run(self, name: str, budget_s: Optional[float] = None) -> dict:
         """Continue the latest run from its checkpoint, or re-verify a completed-but-not-accepted one.
@@ -373,7 +390,7 @@ class UIState:
         A completed and accepted run has nothing to resume; a completed but not accepted run is offered
         as a re-verify, which is a fresh run of the same request (its evidence was not good enough).
         """
-        ws = Workspace(WORKSPACES / name)
+        ws = Workspace(self.workspace_path(name))
         if not ws.exists():
             raise FileNotFoundError(name)
         if self.alive(name):
@@ -461,7 +478,7 @@ class UIState:
         return out
 
     def run_detail(self, name: str, since: int = 0) -> dict:
-        ws = Workspace(WORKSPACES / name)
+        ws = Workspace(self.workspace_path(name))
         if not ws.exists():
             raise FileNotFoundError(name)
         detail: dict[str, Any] = {"workspace": name, "request": ws.request_text(), "logs": self.logs.get(name, [])[since:], "log_total": len(self.logs.get(name, [])),
@@ -478,6 +495,7 @@ class UIState:
                 outcome = run.get("outcome") or {}
                 ck = run.get("checkpoint") or {}
                 events = store.events(runs[0]["run_id"])
+                detail["stage_durations"] = stage_durations(events, time.time() if detail["alive"] else run["updated"])
                 detail.update({"run_id": runs[0]["run_id"], "state": run.get("state"), "step": run.get("step"), "outcome": outcome,
                                "events": [{k: v for k, v in e.items() if k != "error" or v} for e in events][-60:],
                                "stages": derive_stages(run, events, outcome, detail["alive"]),
@@ -504,13 +522,45 @@ class UIState:
                     detail["provider"] = outcome.get("provider_status") or ck["provider_status"]
             store.close()
         spec = sorted(ws.dir("spec").glob("contract.v*.md"), key=lambda p: int(p.stem.split(".v")[1]))
+        detail["contract_diff"] = contract_diff(spec)
+        detail["presentation"] = result_summary(detail.get("outcome", {}), "running" if detail["alive"] else detail.get("state"))
+        detail["files"] = self.deliverable_files(name)
+        rate = self.settings.get("usd_per_million_tokens")
+        tokens = detail["model_calls"].get("tokens")
+        detail["cost_estimate_usd"] = tokens * rate / 1_000_000 if tokens is not None and rate is not None else None
         detail["contract_md"] = spec[-1].read_text() if spec else ""
         detail["contract_version"] = int(spec[-1].stem.split(".v")[1]) if spec else 0
         rep = ws.root / "reports" / "report.md"
         detail["report_md"] = rep.read_text() if rep.is_file() else ""
         rtl = sorted((ws.root / "rtl").glob("*.v"))
-        detail["rtl"] = {p.name: p.read_text() for p in rtl[:3]}
+        detail["rtl"] = {p.name: p.read_text() for p in rtl}
         return detail
+
+    def workspace_path(self, name: str) -> Path:
+        root = WORKSPACES.resolve()
+        path = (root / name).resolve()
+        if path.parent != root or not name or name in {".", ".."}:
+            raise FileNotFoundError("Unknown workspace")
+        return path
+
+    def deliverable_files(self, name: str) -> list[str]:
+        root = self.workspace_path(name)
+        return sorted(str(p.relative_to(root)) for folder in ("rtl", "spec", "reports", "verification", "reference", "properties")
+                      for p in (root / folder).rglob("*")
+                      if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)
+                      and p.suffix in {".v", ".sv", ".md", ".json", ".txt", ".log", ".py", ".sby", ".ys", ".vcd"})
+
+    def artifact(self, name: str, path: str) -> bytes:
+        if path not in self.deliverable_files(name):
+            raise FileNotFoundError("Unknown evidence file")
+        return (self.workspace_path(name) / path).read_bytes()
+
+    def bundle(self, name: str) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in self.deliverable_files(name):
+                archive.writestr(path, self.artifact(name, path))
+        return buffer.getvalue()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -546,7 +596,11 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/runs":
                 return self._send(200, self.state.list_runs())
             if u.path.startswith("/api/runs/"):
-                name = u.path.split("/")[3]
+                name = unquote(u.path.split("/")[3])
+                if u.path.endswith("/bundle.zip"):
+                    return self._send(200, self.state.bundle(name), "application/zip")
+                if u.path.endswith("/artifact"):
+                    return self._send(200, self.state.artifact(name, q.get("path", [""])[0]), "text/plain; charset=utf-8")
                 return self._send(200, self.state.run_detail(name, int(q.get("since", ["0"])[0])))
             return self._send(404, {"error": "not found"})
         except FileNotFoundError as e:
