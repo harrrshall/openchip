@@ -19,7 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse, unquote
-from .presentation import result_summary, stage_durations, contract_diff
+from .presentation import result_summary, stage_durations, contract_diff, latest_contract, session_identity
+from .. import __version__
 
 from ..config import Config, ModelConfig
 from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, ProviderStatus, read_keys_file, write_keys_file
@@ -437,7 +438,8 @@ class UIState:
             entry: dict[str, Any] = {"workspace": d.name, "name": d.name, "request": ws.request_text().strip()[:200],
                                      "created": d.stat().st_ctime, "updated": d.stat().st_mtime, "state": "created", "step": "-",
                                      "accepted": None, "provisional": False, "withheld_reason": "", "alive": alive,
-                                     "resumable": False, "result": "created", "reason": ""}
+                                     "resumable": False, "result": "created", "reason": "", "needs_input": False}
+            entry.update(session_identity(latest_contract(ws.dir("spec")), ws.request_text(), d.name))
             if ws.db_path.is_file():
                 store = RunStore(ws.db_path)
                 try:
@@ -452,6 +454,8 @@ class UIState:
                         entry["result"] = session_result(entry["state"], outcome.get("accepted"), alive, bool(wh))
                         entry["resumable"] = entry["state"] != "completed" and not alive
                         entry["reason"] = state_reason(store, runs[0]["run_id"], entry["state"])
+                        # needs input means the user is actually being asked something
+                        entry["needs_input"] = bool(result_summary(outcome, "running" if alive else entry["state"])["questions"])
                 finally:
                     store.close()
             out.append(entry)
@@ -520,6 +524,8 @@ class UIState:
                 # A run parked by the provider records the cause on its checkpoint, not in an outcome.
                 if outcome.get("provider_status") or ck.get("provider_status"):
                     detail["provider"] = outcome.get("provider_status") or ck["provider_status"]
+                    # the run stopped because of the provider: the banner applies to this session
+                    detail["stopped_by_provider"] = (detail["provider"] or {}).get("kind") or ""
             store.close()
         spec = sorted(ws.dir("spec").glob("contract.v*.md"), key=lambda p: int(p.stem.split(".v")[1]))
         detail["contract_diff"] = contract_diff(spec)
@@ -528,6 +534,8 @@ class UIState:
         rate = self.settings.get("usd_per_million_tokens")
         tokens = detail["model_calls"].get("tokens")
         detail["cost_estimate_usd"] = tokens * rate / 1_000_000 if tokens is not None and rate is not None else None
+        detail["contract"] = latest_contract(ws.dir("spec"))
+        detail.update(session_identity(detail["contract"], detail["request"], name))
         detail["contract_md"] = spec[-1].read_text() if spec else ""
         detail["contract_version"] = int(spec[-1].stem.split(".v")[1]) if spec else 0
         rep = ws.root / "reports" / "report.md"
@@ -589,7 +597,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in ("/", "/index.html"):
                 return self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/status":
-                return self._send(200, {"settings": self.state.public_settings(), "doctor": self.state.doctor(), "workspaces": str(WORKSPACES),
+                return self._send(200, {"settings": self.state.public_settings(), "doctor": self.state.doctor(), "workspaces": str(WORKSPACES), "version": __version__,
                                         "runs": self.state.list_runs(), "provider": self.state.provider_status()})
             if u.path == "/api/sessions":
                 return self._send(200, self.state.list_sessions())

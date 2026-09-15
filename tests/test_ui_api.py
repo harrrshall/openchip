@@ -132,6 +132,8 @@ def test_run_to_acceptance_then_sessions_and_resume_rules(api):
     assert set(detail["provider"]) >= {"kind", "provider", "model"}
     assert detail["result"] == "accepted" and detail["resumable"] is False
     assert detail["contract_md"] and detail["report_md"] and detail["rtl"]
+    assert detail["contract"]["module_name"] == "updown_counter" and detail["contract"]["ports"]
+    assert detail["module"] == "updown_counter" and detail["intent"]
 
     code_, sessions = api.get("/api/sessions")
     assert code_ == 200 and len(sessions) == 1
@@ -140,6 +142,8 @@ def test_run_to_acceptance_then_sessions_and_resume_rules(api):
                        "provisional", "withheld_reason", "alive", "resumable", "result"}
     assert s0["workspace"] == ws and s0["result"] == "accepted" and s0["accepted"] is True
     assert s0["state"] == "completed" and s0["step"] == "done" and s0["alive"] is False and s0["resumable"] is False
+    assert s0["module"] == "updown_counter" and s0["intent"] == detail["intent"]
+    assert s0["needs_input"] is False
 
     # a completed and accepted run has nothing to resume
     code_, err = api.post(f"/api/runs/{ws}/resume")
@@ -305,3 +309,57 @@ def test_a_fresh_run_in_a_session_reports_the_previous_result(api):
     code_, detail = api.get("/api/runs/revised")
     assert code_ == 200 and detail["run_id"] == new
     assert not detail["outcome"] and detail["previous_result"] == "accepted"
+
+
+VERILOGEVAL_PROMPT = """I would like you to implement a module named TopModule with the following
+interface. All input and output ports are one bit unless otherwise
+specified.
+
+ - input  clk
+ - input  areset
+ - input  in
+ - output out
+
+The module should implement a Moore machine with the diagram described
+below:
+
+  B (1) --0--> A
+  A (0) --1--> A
+"""
+
+
+def test_sessions_and_detail_carry_module_intent_and_contract(api):
+    """Rows name the module and its intent, never the folder or the prompt boilerplate."""
+    root = S.WORKSPACES
+    root.mkdir(parents=True, exist_ok=True)
+    Workspace(root / "fsm-plain").init(request=VERILOGEVAL_PROMPT, name="fsm-plain")
+    Workspace(root / "named-system").init(
+        request="Create a two-module system named registered_sum. Use exactly these top ports: clk, rst.", name="named-system")
+    Workspace(root / "no-name").init(request="counter that wraps. More text follows here.", name="no-name")
+    with_contract = Workspace(root / "with-contract")
+    with_contract.init(request=VERILOGEVAL_PROMPT, name="with-contract")
+    spec = with_contract.dir("spec")
+    (spec / "contract.v1.json").write_text(json.dumps({"module_name": "old_name", "purpose": "Old purpose.", "ports": []}))
+    (spec / "contract.v2.json").write_text(json.dumps({
+        "module_name": "fsm1", "ports": [{"name": "clk", "direction": "input", "width": 1}],
+        "purpose": "Moore machine that outputs 1 in state B. It resets asynchronously to B and holds otherwise for as long as needed."}))
+
+    code_, sessions = api.get("/api/sessions")
+    assert code_ == 200
+    rows = {s["workspace"]: s for s in sessions}
+    assert rows["fsm-plain"]["module"] == "TopModule"
+    intent = rows["fsm-plain"]["intent"]
+    assert intent == "Moore machine with the diagram described below", intent
+    assert "would like" not in intent and "one bit" not in intent
+    assert rows["named-system"]["module"] == "registered_sum" and rows["named-system"]["intent"] == "two-module system"
+    assert rows["no-name"]["module"] == "no-name" and rows["no-name"]["intent"] == "counter that wraps"
+    # the latest contract wins: module_name, and the first sentence of its purpose
+    assert rows["with-contract"]["module"] == "fsm1"
+    assert rows["with-contract"]["intent"] == "Moore machine that outputs 1 in state B"
+    assert all(len(s["intent"]) <= 90 for s in sessions)
+
+    code_, detail = api.get("/api/runs/with-contract")
+    assert code_ == 200 and detail["contract"]["module_name"] == "fsm1" and detail["contract"]["ports"][0]["name"] == "clk"
+    assert detail["module"] == "fsm1"
+    code_, detail = api.get("/api/runs/fsm-plain")
+    assert code_ == 200 and detail["contract"] is None and detail["module"] == "TopModule"

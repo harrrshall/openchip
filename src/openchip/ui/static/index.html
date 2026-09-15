@@ -3,306 +3,317 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenChip</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http://www.w3.org/2000/svg'%20viewBox%3D'0%200%2032%2032'%3E%3Cg%20fill%3D'none'%20stroke%3D'%236b8cff'%20stroke-width%3D'2.4'%3E%3Crect%20x%3D'9'%20y%3D'9'%20width%3D'14'%20height%3D'14'%20rx%3D'2'/%3E%3Crect%20x%3D'14'%20y%3D'14'%20width%3D'4'%20height%3D'4'/%3E%3Cpath%20d%3D'M13%209V4M19%209V4M13%2023v5M19%2023v5M9%2013H4M9%2019H4M23%2013h5M23%2019h5'/%3E%3C/g%3E%3C/svg%3E">
+<title>openchip</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http://www.w3.org/2000/svg'%20viewBox%3D'0%200%2032%2032'%3E%3Cg%20fill%3D'none'%20stroke%3D'%23b4541a'%20stroke-width%3D'2.4'%3E%3Crect%20x%3D'9'%20y%3D'9'%20width%3D'14'%20height%3D'14'%20rx%3D'1'/%3E%3Crect%20x%3D'14'%20y%3D'14'%20width%3D'4'%20height%3D'4'/%3E%3Cpath%20d%3D'M13%209V4M19%209V4M13%2023v5M19%2023v5M9%2013H4M9%2019H4M23%2013h5M23%2019h5'/%3E%3C/g%3E%3C/svg%3E">
 <style>
-/* ---------- tokens: neutral greys, one accent, 8 px grid, 12 px radii, 1 px lines ---------- */
+/* ---------- tokens: datasheet (light) and board (dark) ---------- */
 :root {
-  --bg: #f6f6f7;
-  --panel: #ffffff;
-  --panel-2: #fbfbfc;
-  --ink: #17181c;
-  --ink-2: #3d4047;
-  --muted: #6b6f78;
-  --line: #e2e3e7;
-  --line-strong: #cfd1d7;
-  --accent: #2f55d4;
-  --accent-ink: #ffffff;
-  --accent-soft: #eef1fc;
-  --ok: #17693a;
-  --ok-soft: #e9f3ec;
-  --warn: #8a5300;
-  --warn-soft: #fbf1e2;
-  --bad: #a52020;
-  --bad-soft: #fbeceb;
-  --overlay: rgba(23, 24, 28, .38);
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px;
-  --r: 12px; --r-sm: 8px;
+  --paper: #f6f5f1; --surface: #fbfaf7; --ink: #111110; --ink2: #3a3936; --muted: #77746c;
+  --rule: #dcd8cf; --rule2: #bdb8ac; --accent: #b4541a; --pass: #1f6b3a; --fail: #b3261e; --hold: #8a6300;
+  --overlay: rgba(17, 17, 16, .28);
+  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #101114;
-    --panel: #171a1e;
-    --panel-2: #1c1f24;
-    --ink: #e9eaee;
-    --ink-2: #c3c6cd;
-    --muted: #9298a3;
-    --line: #272b31;
-    --line-strong: #363b43;
-    --accent: #7c9bff;
-    --accent-ink: #0d1120;
-    --accent-soft: #1b2233;
-    --ok: #64c98a;
-    --ok-soft: #14251a;
-    --warn: #e2a961;
-    --warn-soft: #2a2015;
-    --bad: #f08b84;
-    --bad-soft: #2b1717;
-    --overlay: rgba(0, 0, 0, .55);
+  :root:not([data-theme="light"]) {
+    --paper: #0f0f0e; --surface: #161614; --ink: #ecebe6; --ink2: #c9c7c0; --muted: #8f8c83;
+    --rule: #2a2926; --rule2: #3d3b37; --accent: #e07a3c; --pass: #5fae7b; --fail: #e36a5f; --hold: #d6a84a;
+    --overlay: rgba(0, 0, 0, .6); color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --paper: #0f0f0e; --surface: #161614; --ink: #ecebe6; --ink2: #c9c7c0; --muted: #8f8c83;
+  --rule: #2a2926; --rule2: #3d3b37; --accent: #e07a3c; --pass: #5fae7b; --fail: #e36a5f; --hold: #d6a84a;
+  --overlay: rgba(0, 0, 0, .6); color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 [hidden] { display: none !important; }
-body {
-  background: var(--bg); color: var(--ink);
-  font: 14px/1.55 var(--sans);
-  -webkit-font-smoothing: antialiased;
-}
+body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; color: inherit; }
-a { color: var(--accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mono, code, pre, .label, .btn { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.p { color: var(--pass); } .f { color: var(--fail); } .h { color: var(--hold); } .i { color: var(--muted); } .a { color: var(--accent); }
 
-/* ---------- shell ---------- */
-.app { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
-.rail {
-  border-right: 1px solid var(--line); background: var(--panel);
-  display: flex; flex-direction: column; gap: var(--s2);
-  padding: var(--s2); position: sticky; top: 0; height: 100vh; min-height: 0;
-}
-.rail-head { display: flex; align-items: center; gap: var(--s1); }
-.brand { display: flex; align-items: center; gap: var(--s1); font-weight: 650; letter-spacing: .2px; }
-.brand { color: inherit; text-decoration: none; cursor: pointer; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
-.brand:hover { background: var(--accent-soft); } .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mark { width: 20px; height: 20px; color: var(--accent); flex: none; }
-.rail-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
-.rail-foot { border-top: 1px solid var(--line); padding-top: var(--s2); display: flex; flex-direction: column; gap: var(--s1); }
-.rail-toggle { display: none !important; }
-main { min-width: 0; padding: var(--s4) var(--s4) 64px; }
-.wrap { max-width: 880px; margin: 0 auto; }
-.wrap.wide { max-width: 1040px; }
-
-/* ---------- controls ---------- */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: var(--s1);
-  border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink);
-  border-radius: var(--r-sm); padding: 7px 12px; cursor: pointer; text-decoration: none;
-}
-.btn:hover:not(:disabled) { border-color: var(--accent); }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
-.btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
-.btn.quiet { border-color: transparent; background: transparent; color: var(--muted); }
-.btn.quiet:hover { color: var(--ink); border-color: var(--line); }
-.btn.block { width: 100%; }
-.btn.small { padding: 4px 8px; font-size: 12.5px; }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-input[type=text], input[type=password], input[type=search], select, textarea {
-  width: 100%; background: var(--panel); border: 1px solid var(--line-strong);
-  color: var(--ink); border-radius: var(--r-sm); padding: 8px 10px;
-}
-textarea { resize: vertical; line-height: 1.55; }
-label, .label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3); }
-.card + .card { margin-top: var(--s2); }
-.card.flat { padding: var(--s2); }
-.row { display: flex; gap: var(--s1); align-items: center; flex-wrap: wrap; }
-.row.tight { gap: 4px; }
-.spread { display: flex; gap: var(--s2); align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
-h1 { font-size: 21px; line-height: 1.3; margin: 0 0 var(--s1); font-weight: 640; }
-h2 { font-size: 15px; margin: 0 0 var(--s1); font-weight: 640; }
-h3 { font-size: 13.5px; margin: 0 0 4px; font-weight: 640; }
-p { margin: 0 0 var(--s1); }
-.lead { color: var(--muted); margin: 0 0 var(--s3); max-width: 62ch; }
-.hint { font-size: 12.5px; color: var(--muted); }
-.mono { font-family: var(--mono); }
-
-/* ---------- pills ---------- */
-.pill {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px;
-  border: 1px solid var(--line-strong); border-radius: 999px;
-  font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--panel-2); color: var(--ink-2);
-}
-.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-.pill.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
-.pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
-.pill.bad { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
-.pill.run { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-/* The rail provider pill stacks its lines: a rate-limit countdown gets a line of its own. */
-.pill-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; flex: 1 1 auto; }
-.one-line { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#providerPill { align-items: flex-start; }
+/* ---------- status glyphs ---------- */
+.sq { width: 8px; height: 8px; display: inline-block; flex: none; vertical-align: baseline; transform: translateY(-1px); }
+.sq.pass { background: var(--pass); } .sq.fail { background: var(--fail); } .sq.hold { background: var(--hold); }
+.sq.run { background: var(--accent); } .sq.stop { border: 1.5px solid var(--muted); }
+.st { font-family: var(--mono); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.st.pass { color: var(--pass); } .st.fail { color: var(--fail); } .st.hold { color: var(--hold); } .st.run { color: var(--accent); } .st.stop { color: var(--muted); }
 .pulse { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
 
-/* ---------- session list ---------- */
-.sess {
-  display: block; width: 100%; text-align: left; background: transparent;
-  border: 1px solid transparent; border-radius: var(--r-sm); padding: var(--s1); cursor: pointer;
-}
-.sess:hover { background: var(--panel-2); border-color: var(--line); }
-.sess[aria-current="true"] { background: var(--accent-soft); border-color: var(--line); }
-.sess .nm { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sess .sub { display: flex; gap: 6px; align-items: center; margin-top: 3px; }
-.sess .rq { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
+.rail { border-right: 1px solid var(--rule); padding: 20px 18px; display: flex; flex-direction: column; gap: 18px;
+  position: sticky; top: 0; height: 100vh; min-height: 0; background: var(--paper); }
+.rail-head { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; font: 600 15px/1 var(--mono); letter-spacing: .2px; color: var(--ink); padding: 2px 0; }
+.brand:hover { text-decoration: none; }
+.brand svg { color: var(--accent); flex: none; }
+.brand small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 11px; }
+.rail-toggle { display: none !important; }
+.rail-body { display: flex; flex-direction: column; gap: 18px; flex: 1 1 auto; min-height: 0; }
+.rail-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.rail-foot { border-top: 1px solid var(--rule); padding-top: 12px; font: 12px/1.6 var(--mono); color: var(--muted); }
+.rail-foot .k { color: var(--ink2); }
+.rail-foot .ln { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-foot .wrapln { overflow-wrap: anywhere; }
+main { min-width: 0; padding: 40px 56px 80px; }
+.wrap { max-width: 1080px; }
 
-/* ---------- composer + palette ---------- */
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 500; font-size: 13px; line-height: 1;
+  color: var(--ink); background: transparent; border: 1px solid var(--rule2); border-radius: 2px; padding: 9px 12px;
+  cursor: pointer; letter-spacing: .2px; text-decoration: none; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink); text-decoration: none; }
+.btn.fill { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn.fill:hover:not(:disabled) { background: var(--ink2); }
+.btn.fill:focus-visible { background: var(--accent); border-color: var(--accent); }
+.btn.block { width: 100%; }
+.btn.small { padding: 6px 9px; font-size: 12px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font: inherit; text-align: left; }
+.linkbtn:hover { text-decoration: underline; }
+.under { width: 100%; background: transparent; color: var(--ink); border: 0; border-bottom: 1px solid var(--rule2); border-radius: 0;
+  padding: 6px 0; font: 13px var(--mono); }
+.under:focus { border-bottom-color: var(--accent); outline: none; }
+.under:focus-visible { outline: none; }
+select.under { appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 55%, calc(100% - 5px) 55%; background-size: 4px 4px; background-repeat: no-repeat; }
+select.under option { background: var(--paper); color: var(--ink); }
+input[type=search]::-webkit-search-cancel-button { filter: grayscale(1); }
+.field { display: block; font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .8px; }
+.field .under { margin-top: 6px; letter-spacing: 0; }
+textarea.box { width: 100%; resize: vertical; border: 1px solid var(--rule2); border-radius: 2px; background: var(--surface); color: var(--ink);
+  font: 13.5px/1.7 var(--mono); padding: 14px 16px; }
+textarea.box:focus { border-color: var(--accent); outline: none; }
+textarea.box::placeholder, .under::placeholder { color: var(--muted); opacity: .85; }
+.label { font-weight: 500; font-size: 11px; line-height: 1.2; color: var(--muted); letter-spacing: .8px; text-transform: lowercase; }
+.label b { color: var(--ink2); font-weight: 500; margin-right: 8px; }
+.sub { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.sub .label:last-child:not(:first-child) { text-align: right; }
+.hint { font-size: 12.5px; color: var(--muted); }
+p { margin: 0 0 8px; }
+h1, h2, h3 { margin: 0; }
+.display { font: 600 30px/1.1 var(--mono); letter-spacing: -.3px; margin: 10px 0 0; overflow-wrap: anywhere; }
+.display .kw { color: var(--muted); font-weight: 400; }
+.crumb { font: 12px var(--mono); color: var(--muted); }
+.crumb a { color: var(--muted); }
+.crumb a:hover { color: var(--ink); }
+
+/* ---------- session index (rail) ---------- */
+.row-s { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 2px; align-items: baseline;
+  width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--rule); padding: 9px 0; cursor: pointer; }
+.row-s .nm { font: 500 13px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.row-s .age { font: 11px var(--mono); color: var(--muted); }
+.row-s .intent { grid-column: 2 / 4; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-s:hover .nm { color: var(--accent); }
+.row-s[aria-current="true"] .nm { color: var(--accent); }
+.empty-line { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+
+/* ---------- home ---------- */
+.lead { color: var(--ink2); max-width: 620px; margin: 8px 0 28px; font-size: 15px; }
+.sect-top { border-top: 1px solid var(--ink); padding-top: 18px; }
 .composer { position: relative; }
-.palette {
-  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
-  background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r);
-  padding: 4px; max-height: 260px; overflow: auto;
-}
-.palette[hidden] { display: none !important; }
-.pal-item {
-  display: flex; gap: var(--s1); align-items: baseline; width: 100%; text-align: left;
-  background: transparent; border: 0; border-radius: var(--r-sm); padding: 8px 10px; cursor: pointer;
-}
-.pal-item[aria-selected="true"] { background: var(--accent-soft); }
-.pal-item .cmd { font-family: var(--mono); font-weight: 600; }
+.form-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; gap: 12px; align-items: end; margin-top: 12px; }
+.facts { margin-top: 16px; font: 12px/1.6 var(--mono); color: var(--muted); display: flex; gap: 6px 18px; flex-wrap: wrap; }
+.facts > span { display: inline-flex; align-items: baseline; gap: 8px; }
+.sect { margin-top: 48px; }
+.palette { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--paper);
+  border: 1px solid var(--rule2); border-radius: 2px; padding: 4px 0; max-height: 260px; overflow: auto; }
+.pal-item { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: baseline; width: 100%; text-align: left;
+  background: transparent; border: 0; padding: 8px 14px; cursor: pointer; }
+.pal-item[aria-selected="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+.pal-item .cmd { font: 500 13px var(--mono); color: var(--ink); }
 .pal-item .ds { color: var(--muted); font-size: 12.5px; }
 
-/* ---------- banner ---------- */
-.banner {
-  border: 1px solid var(--line-strong); border-left: 3px solid var(--warn);
-  background: var(--warn-soft); border-radius: var(--r); padding: var(--s2);
-  margin-bottom: var(--s2); display: flex; gap: var(--s2); justify-content: space-between; flex-wrap: wrap;
-}
-.banner.bad { border-left-color: var(--bad); background: var(--bad-soft); }
-.banner .t { font-weight: 640; }
+/* ---------- datasheet tables ---------- */
+table.dt { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
+table.dt th { text-align: left; font: 500 11px var(--mono); color: var(--muted); letter-spacing: .8px; padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule2); }
+table.dt td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+table.dt td:last-child, table.dt th:last-child { padding-right: 0; }
+table.dt td.r, table.dt th.r { text-align: right; white-space: nowrap; }
+table.dt td.prose { font-family: var(--sans); color: var(--muted); }
+table.dt tr.click { cursor: pointer; }
+table.dt tr.click:hover td.nm { color: var(--accent); }
+table.dt tr.click:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.dt td.nm { white-space: nowrap; }
+table.dt td.g { width: 16px; padding-right: 8px; }
+.tbl-scroll { overflow-x: auto; }
+table.so td:first-child { color: var(--ink2); width: 34%; }
+table.so td.d { color: var(--ink2); overflow-wrap: anywhere; }
+table.so tr.hold td { color: var(--hold); }
+table.so tr.failrow td { color: var(--fail); }
 
-/* ---------- stage strip ---------- */
-.stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s1); margin-bottom: var(--s2); }
-.stage { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: var(--s1) 10px; min-width: 0; }
-.stage .top { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 640; }
-.stage .top .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
-.stage .dt { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
-.stage.running { border-color: var(--accent); }
-.stage.running .dot { background: var(--accent); }
-.stage.done .dot { background: var(--ok); }
-.stage.withheld .dot { background: var(--warn); }
-.stage.failed { border-color: var(--bad); }
-.stage.failed .dot { background: var(--bad); }
+/* ---------- session header ---------- */
+.head { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.head .display { flex: 1 1 320px; min-width: 0; }
+.acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.verdict { font: 14px var(--mono); color: var(--ink2); margin: 10px 0 0; display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; }
+.verdict .word { font-weight: 600; }
+.verdict .sep { color: var(--rule2); }
+.meta { font: 12px/1.6 var(--mono); color: var(--muted); margin: 6px 0 0; overflow-wrap: anywhere; }
+.answer { margin-top: 20px; border-top: 1px solid var(--hold); padding: 14px 0 4px; }
+.answer .q { font-size: 14px; color: var(--ink); margin: 12px 0 6px; max-width: 72ch; }
+.answer textarea { min-height: 64px; padding: 10px 12px; font-size: 13px; }
+.banner { margin-top: 20px; border-top: 1px solid var(--hold); padding: 10px 0 0;
+  display: flex; gap: 8px 24px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; font: 13px/1.6 var(--mono); }
+.banner.bad { border-color: var(--fail); }
+.banner .t { font-weight: 600; }
+.banner .b-acts { display: flex; gap: 16px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; padding: 24px 0; margin-top: 28px;
+  border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.sym text { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+.sym .w { fill: var(--muted); font-size: 10px; }
+.sym .body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+.sym .pin { stroke: var(--ink); stroke-width: 1.5; }
+.sym .bus { stroke: var(--ink); stroke-width: 3; }
+.sym .thin { stroke: var(--ink); stroke-width: 1; fill: none; }
+.sym .title { font-weight: 600; font-size: 13px; }
+.pipe { padding: 24px 0; border-bottom: 1px solid var(--rule); }
+.pipe-scroll { overflow-x: auto; }
+.lanes { display: block; }
+.lanes text { font-family: var(--mono); font-size: 11.5px; fill: var(--ink2); }
+.lanes .t { fill: var(--muted); font-size: 10.5px; }
+.lanes .axis { fill: var(--muted); font-size: 10px; }
+.lanes .grid { stroke: var(--rule); stroke-width: 1; }
+.lanes .sig { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
+.lanes .fillp { stroke: none; fill-opacity: .1; }
+.lanes .pass { stroke: var(--pass); fill: var(--pass); color: var(--pass); }
+.lanes .fail { stroke: var(--fail); fill: var(--fail); }
+.lanes .hold { stroke: var(--hold); fill: var(--hold); }
+.lanes .run { stroke: var(--accent); fill: var(--accent); }
+.lanes .pend { stroke: var(--rule2); stroke-dasharray: 4 4; }
+.lanes .x { stroke: var(--fail); stroke-width: 1.8; }
 
-/* ---------- feed ---------- */
-details.feed { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
-details.feed > summary { cursor: pointer; padding: 10px var(--s2); font-weight: 640; display: flex; gap: var(--s1); align-items: center; list-style: none; }
-details.feed > summary::-webkit-details-marker { display: none; }
-details.feed > summary::before { content: "\25B8"; color: var(--muted); }
-details.feed[open] > summary::before { content: "\25BE"; }
-.feed-body { border-top: 1px solid var(--line); padding: var(--s1) var(--s2) var(--s2); }
-.log { font-family: var(--mono); font-size: 12px; line-height: 1.6; max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* ---------- tabs and panes ---------- */
+.tabs { display: flex; gap: 28px; margin-top: 28px; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+.tabs [role=tab] { font: 500 12.5px var(--mono); color: var(--muted); padding: 10px 0; border: 0; border-bottom: 2px solid transparent;
+  background: transparent; cursor: pointer; white-space: nowrap; }
+.tabs [role=tab]:hover { color: var(--ink); }
+.tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs [role=tab] b { font-weight: 400; color: var(--rule2); margin-right: 6px; }
+.tabs [role=tab] small { color: var(--muted); font-size: 11px; margin-left: 6px; }
+.pane { padding-top: 20px; min-height: 120px; }
+.pane:focus-visible { outline-offset: 4px; }
+pre.code { font: 12.5px/1.65 var(--mono); color: var(--ink2); margin: 0 0 24px; padding: 0; overflow: auto; tab-size: 4; }
+pre.code .kw { color: var(--accent); } pre.code .cm { color: var(--muted); }
+pre.code .ln { color: var(--rule2); user-select: none; -webkit-user-select: none; display: inline-block; width: 4ch; margin-right: 14px; text-align: right; }
+pre.code .add { color: var(--pass); } pre.code .del { color: var(--fail); } pre.code .hunk { color: var(--muted); }
+.file-h { font: 500 12px var(--mono); color: var(--muted); margin: 0 0 10px; }
+.log { font: 12px/1.65 var(--mono); color: var(--ink2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 560px; overflow: auto; }
 .log .ts { color: var(--muted); }
 .log .role { color: var(--accent); }
-.log .l-error .role, .log .l-error { color: var(--bad); }
-.log .l-provider .role { color: var(--warn); }
-
-/* ---------- tabs ---------- */
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: var(--s3) 0 var(--s2); overflow-x: auto; }
-.tabs [role=tab] {
-  border: 0; background: transparent; color: var(--muted); cursor: pointer;
-  padding: 8px 12px; border-bottom: 2px solid transparent; white-space: nowrap;
-}
-.tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 640; }
-
-/* ---------- tables, markdown ---------- */
-.tbl-scroll { overflow-x: auto; }
-table.t { border-collapse: collapse; width: 100%; font-size: 13px; }
-table.t th, table.t td { border: 1px solid var(--line); padding: 6px var(--s1); text-align: left; vertical-align: top; }
-table.t th { background: var(--panel-2); font-weight: 640; }
+.log .l-error, .log .l-error .role { color: var(--fail); }
+.log .l-provider .role { color: var(--hold); }
+.log .rep { color: var(--muted); }
+.md { max-width: 80ch; }
 .md > :first-child { margin-top: 0; }
-.md h1 { font-size: 17px; margin: var(--s3) 0 var(--s1); }
-.md h2 { font-size: 15px; margin: var(--s3) 0 var(--s1); }
-.md h3 { font-size: 13.5px; margin: var(--s2) 0 4px; }
+.md h1 { font: 600 17px var(--mono); margin: 24px 0 8px; }
+.md h2 { font: 600 13px var(--mono); margin: 24px 0 8px; letter-spacing: .3px; }
+.md h3 { font: 600 13px var(--mono); margin: 16px 0 4px; }
 .md p { margin: 6px 0; }
 .md ul, .md ol { padding-left: 22px; margin: 6px 0; }
-.md code { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
-.md pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px var(--s2); overflow-x: auto; }
-.md pre code { background: none; border: 0; padding: 0; }
-.md table { border-collapse: collapse; width: 100%; font-size: 13px; margin: var(--s1) 0; display: block; overflow-x: auto; }
-.md th, .md td { border: 1px solid var(--line); padding: 6px var(--s1); text-align: left; vertical-align: top; }
-.md th { background: var(--panel-2); }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px var(--s2); font-size: 13px; }
-.kv dt { color: var(--muted); }
-.kv dd { margin: 0; }
+.md code { font-size: 12.5px; color: var(--ink2); }
+.md pre { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 10px 0; overflow-x: auto; }
+.md table { border-collapse: collapse; width: 100%; font: 12.5px var(--mono); margin: 8px 0; display: block; overflow-x: auto; }
+.md th, .md td { border-bottom: 1px solid var(--rule); padding: 6px 12px 6px 0; text-align: left; vertical-align: top; }
+.md th { color: var(--muted); font-weight: 500; border-bottom-color: var(--rule2); }
+.md hr { border: 0; border-top: 1px solid var(--rule); }
+.ev-sect { margin-top: 28px; }
+.ev-sect ul { margin: 0; padding-left: 18px; }
+.ev-sect li { margin: 4px 0; }
+.empty { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 20px 0; color: var(--muted); }
+.empty .t { color: var(--ink); font: 500 13px var(--mono); margin-bottom: 4px; }
+.empty .acts { margin: 12px 0 0; justify-content: flex-start; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--ink2); font-family: var(--mono); }
+.kv dd { margin: 0; color: var(--ink2); }
 
-/* ---------- empty state ---------- */
-.empty { border: 1px dashed var(--line-strong); border-radius: var(--r); padding: var(--s4) var(--s3); text-align: center; color: var(--muted); }
-.empty .t { color: var(--ink); font-weight: 640; margin-bottom: 4px; }
-.empty .acts { margin-top: var(--s2); display: flex; gap: var(--s1); justify-content: center; flex-wrap: wrap; }
-
-/* ---------- provider cards ---------- */
-.prov { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1); }
-.prov-card {
-  text-align: left; background: var(--panel); border: 1px solid var(--line-strong);
-  border-radius: var(--r); padding: 10px var(--s2); cursor: pointer;
-}
-.prov-card[aria-checked=true] { border-color: var(--accent); background: var(--accent-soft); }
-.prov-card .nm { font-weight: 640; }
-.prov-card .ds { color: var(--muted); font-size: 12.5px; }
-
-/* ---------- modal ---------- */
-.scrim { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center; padding: var(--s3) var(--s2); overflow: auto; z-index: 40; }
-.scrim[hidden] { display: none !important; }
-.modal { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); width: min(640px, 100%); padding: var(--s3); margin: auto; }
-.modal.wide { width: min(760px, 100%); }
-.modal-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s2); }
-.modal-sect { border-top: 1px solid var(--line); margin-top: var(--s3); padding-top: var(--s2); }
-.res-row { display: flex; gap: var(--s2); justify-content: space-between; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--r); padding: 10px var(--s2); }
-.res-row + .res-row { margin-top: var(--s1); }
-.res-row:focus-visible { outline: 2px solid var(--accent); }
-.res-row .nm { font-weight: 640; }
+/* ---------- modals ---------- */
+.scrim { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center;
+  padding: 48px 16px; overflow: auto; z-index: 40; }
+.modal { background: var(--paper); border: 1px solid var(--rule2); width: min(620px, 100%); padding: 24px 28px 28px; margin: 0 auto; }
+.modal.wide { width: min(820px, 100%); }
+.modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--ink); }
+.modal-head h2 { font: 600 16px var(--mono); }
+.modal-sect { margin-top: 28px; }
+.modal .stack { display: grid; gap: 18px; }
+.modal .btns { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+.prov { border-top: 1px solid var(--rule2); }
+.prov-row { display: grid; grid-template-columns: 16px 130px minmax(0, 1fr); gap: 12px; align-items: baseline; width: 100%; text-align: left;
+  background: transparent; border: 0; border-bottom: 1px solid var(--rule); padding: 9px 0; cursor: pointer; }
+.prov-row .rd { width: 10px; height: 10px; border: 1.5px solid var(--rule2); border-radius: 50%; display: inline-block; transform: translateY(1px); }
+.prov-row[aria-checked=true] .rd { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 45%, transparent 50%); }
+.prov-row .nm { font: 500 13px var(--mono); color: var(--ink); }
+.prov-row[aria-checked=true] .nm { color: var(--accent); }
+.prov-row .ds { color: var(--muted); font-size: 12.5px; }
+.prov-row:focus-visible { outline-offset: -2px; }
+.test-line { font: 12.5px/1.6 var(--mono); color: var(--ink2); margin-top: 14px; min-height: 20px; overflow-wrap: anywhere; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 
 /* ---------- toasts ---------- */
-.toasts { position: fixed; right: var(--s2); bottom: var(--s2); z-index: 60; display: flex; flex-direction: column; gap: var(--s1); max-width: min(380px, calc(100vw - 32px)); }
-.toast { background: var(--panel); border: 1px solid var(--bad); border-left-width: 3px; border-radius: var(--r-sm); padding: 10px var(--s2); font-size: 13px; }
-.toast .t { font-weight: 640; }
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--paper); border: 1px solid var(--rule2); border-left: 2px solid var(--accent); padding: 10px 14px; font-size: 13px; }
+.toast .t { font: 500 13px var(--mono); }
 
 /* ---------- narrow ---------- */
+@media (max-width: 1100px) {
+  main { padding: 32px 32px 64px; }
+  .pair { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+}
 @media (max-width: 900px) {
   .app { grid-template-columns: minmax(0, 1fr); }
-  .rail {
-    position: sticky; top: 0; height: auto; border-right: 0; border-bottom: 1px solid var(--line);
-    padding: 10px var(--s2); gap: var(--s1); z-index: 30;
-  }
+  .rail { position: sticky; top: 0; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 12px 16px; gap: 10px; z-index: 30; }
   .rail-toggle { display: inline-flex !important; }
-  .rail-head { justify-content: space-between; }
+  .brand small { margin-left: 4px; }
   .rail.collapsed .rail-body { display: none; }
-  .rail-body { display: flex; flex-direction: column; gap: var(--s1); }
-  .rail-scroll { max-height: 40vh; }
-  .rail-foot { border-top: 1px solid var(--line); padding-top: var(--s1); }
-  main { padding: var(--s2) var(--s2) 48px; }
-  .stages { grid-template-columns: 1fr 1fr; }
-  .prov { grid-template-columns: 1fr; }
+  .rail-body { gap: 12px; }
+  .rail-scroll { max-height: 42vh; }
+  main { padding: 20px 16px 48px; }
+  .form-row { grid-template-columns: minmax(0, 1fr) 120px; }
+  .form-row .go { grid-column: 1 / -1; }
+  .form-row .go .btn { width: 100%; }
+  .display { font-size: 24px; }
+  .head .acts { margin-left: 0; }
+  .lanes { min-width: 640px; }
+  .two { grid-template-columns: 1fr; }
+  .prov-row { grid-template-columns: 16px minmax(0, 1fr); }
+  .prov-row .ds { grid-column: 2; }
 }
-@media (max-width: 480px) {
-  .stages { grid-template-columns: 1fr; }
-  .card { padding: var(--s2); }
+@media (max-width: 600px) {
+  table.dt .hide-narrow { display: none; }
+  .tabs { gap: 20px; }
+  .modal { padding: 20px 16px; }
 }
 </style>
 </head>
 <body>
 <div class="app">
   <!-- ================= rail ================= -->
-  <aside class="rail collapsed" id="rail" aria-label="Sessions">
+  <aside class="rail collapsed" id="rail" aria-label="sessions">
     <div class="rail-head">
-      <a class="brand" href="#/" id="brandHome" title="OpenChip home: all sessions" onclick="event.preventDefault(); showHome(); location.hash='#/';"><svg class='mark' viewBox='0 0 32 32' width='20' height='20' aria-hidden='true' focusable='false'><g fill='none' stroke='currentColor' stroke-width='2'><rect x='9' y='9' width='14' height='14' rx='2'/><rect x='14' y='14' width='4' height='4'/><path d='M13 9V4M19 9V4M13 23v5M19 23v5M9 13H4M9 19H4M23 13h5M23 19h5'/></g></svg>OpenChip</a>
-      <button class="btn small quiet rail-toggle" id="railToggle" aria-expanded="false" aria-controls="railBody">Menu</button>
+      <a class="brand" href="#/" id="brandHome" title="openchip home: all sessions"><svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="9" width="14" height="14" rx="1"/><rect x="14" y="14" width="4" height="4"/><path d="M13 9V4M19 9V4M13 23v5M19 23v5M9 13H4M9 19H4M23 13h5M23 19h5"/></g></svg>openchip<small id="version"></small></a>
+      <button class="btn small rail-toggle" id="railToggle" aria-expanded="false" aria-controls="railBody">menu</button>
     </div>
     <div class="rail-body" id="railBody">
-      <button class="btn primary block" id="newBtn">New design</button>
+      <button class="btn fill block" id="newBtn">new design</button>
       <div>
-        <label class="vh" for="search">Filter sessions</label>
-        <input type="search" id="search" placeholder="Search sessions" autocomplete="off">
+        <label class="vh" for="search">filter sessions</label>
+        <input type="search" class="under" id="search" placeholder="search modules" autocomplete="off">
       </div>
+      <div class="label"><b>00</b>sessions</div>
       <div class="rail-scroll" id="sessionList"></div>
-      <div class="rail-foot">
-        <div id="railProvider"></div>
-        <button class="btn block" id="settingsBtn">Settings</button>
-      </div>
+      <div class="rail-foot" id="railFoot"></div>
     </div>
   </aside>
 
@@ -310,95 +321,104 @@ table.t th { background: var(--panel-2); font-weight: 640; }
   <main>
     <!-- home / composer -->
     <section class="wrap" id="homeView">
-      <h1>Describe the module you need</h1>
-      <p class="lead">OpenChip turns the description into a reviewable contract, an independent reference model, Verilog RTL and tool-backed evidence. Be precise about ports, reset behaviour and what happens on each clock.</p>
-      <div class="card">
+      <div class="crumb">new design</div>
+      <h1 class="display">describe the module.</h1>
+      <p class="lead">openchip writes a contract, an independent reference model and verilog, then proves the rtl against the reference with real tools. name the ports, the reset and what changes on each clock.</p>
+      <div class="sect-top">
+        <div class="sub"><label class="label" for="request"><b>01</b>request</label><span class="label">type / for commands</span></div>
         <div class="composer">
-          <label for="request">Request</label>
-          <textarea id="request" rows="8" placeholder="Example: a synchronous FIFO named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports clk, rst (active high, synchronous), push, din[WIDTH-1:0], pop, dout[WIDTH-1:0], full, empty, count. Type / for commands." aria-describedby="composerHelp" aria-autocomplete="list" aria-controls="palette" aria-expanded="false"></textarea>
-          <div class="palette" id="palette" role="listbox" aria-label="Commands" hidden></div>
+          <textarea class="box" id="request" rows="8" spellcheck="false" placeholder="module sync_fifo #(parameter WIDTH = 8, DEPTH = 16)
+
+ports      clk, rst (sync, active high), push, din[WIDTH-1:0], pop,
+           dout[WIDTH-1:0], full, empty, count
+behaviour  push is accepted when push = 1 and full = 0 ..." aria-describedby="composerHelp" aria-autocomplete="list" aria-controls="palette" aria-expanded="false"></textarea>
+          <div class="palette" id="palette" role="listbox" aria-label="commands" hidden></div>
         </div>
-        <p class="hint" id="composerHelp">Typically 1 to 3 minutes; complex designs and repairs can take longer. Type / at the start of the box for commands: /resume, /settings, /help.</p>
-        <div class="row" style="margin-top:8px">
-          <div style="flex:1 1 220px"><label for="projname">Project name</label><input type="text" id="projname" placeholder="sync_fifo" autocomplete="off"></div>
-          <div style="flex:0 0 140px"><label for="budget">Budget</label>
-            <select id="budget">
-              <option value="600">10 minutes</option>
-              <option value="1200" selected>20 minutes</option>
+        <p class="vh" id="composerHelp">type / at the start of the box for commands: /resume, /settings, /help. ctrl or cmd plus enter starts the run.</p>
+        <div class="form-row">
+          <label class="field" for="projname">name<input type="text" class="under" id="projname" placeholder="sync_fifo" autocomplete="off"></label>
+          <label class="field" for="budget">budget
+            <select class="under" id="budget">
+              <option value="600">10 min</option>
+              <option value="1200" selected>20 min</option>
               <option value="3600">1 hour</option>
               <option value="14400">4 hours</option>
             </select>
-          </div>
-          <div style="flex:0 0 auto;align-self:flex-end"><button class="btn primary" id="startBtn">Build and verify</button></div>
+          </label>
+          <div class="go"><button class="btn fill" id="startBtn" style="padding:11px 22px">build and verify</button></div>
         </div>
-        <div id="readiness" style="margin-top:12px"></div>
+        <div class="facts" id="readiness"></div>
       </div>
-      <div style="margin-top:24px">
-        <h2>Sessions</h2>
+      <div class="sect">
+        <div class="sub"><span class="label"><b>02</b>sessions</span><span class="label" id="homeCount"></span></div>
         <div id="homeSessions"></div>
       </div>
     </section>
 
     <!-- session view -->
-    <section class="wrap wide" id="sessionView" hidden>
-      <div class="spread" style="margin-bottom:16px">
-        <div style="min-width:0">
-          <button class="btn small quiet" id="backBtn">Back to composer</button>
-          <h1 id="sessTitle" style="margin-top:8px">session</h1>
-          <div class="row tight" id="sessChips"></div>
-          <div class="hint" id="sessMeta" style="margin-top:4px"></div><details><summary>Engineering details</summary><div id="engineeringMeta" class="hint"></div></details><div id="answerCard" class="card" hidden></div>
-        </div>
-        <div class="row" id="sessActions"></div>
+    <section class="wrap" id="sessionView" hidden>
+      <div class="crumb"><a href="#/" id="backBtn">sessions</a> / <span id="crumbWs"></span><span id="crumbRun"></span></div>
+      <div class="head">
+        <h1 class="display" id="sessTitle"><span class="kw">module </span><span id="sessModule"></span></h1>
+        <div class="acts" id="sessActions"></div>
       </div>
+      <div class="verdict" id="sessVerdict"></div>
+      <div class="meta" id="sessMeta"></div>
+      <div id="answerCard" class="answer" hidden></div>
       <div id="blocker"></div>
-      <div id="stageStrip"></div>
-      <details class="feed" id="feedBox" open>
-        <summary>Activity <span class="hint" id="feedCount"></span></summary>
-        <div class="feed-body">
-          <div class="row" style="justify-content:space-between;margin-bottom:4px">
-            <button class="btn small quiet" id="showEarlier" hidden>Show earlier</button>
-            <span class="hint" id="feedNote"></span>
-          </div>
-          <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
-        </div>
-      </details>
-      <div class="tabs" role="tablist" aria-label="Session detail" id="tabs"></div>
-      <div class="card md" id="pane" role="tabpanel" tabindex="0"></div>
+      <section class="pair" id="pair">
+        <div id="iface"></div>
+        <div id="signoff"></div>
+      </section>
+      <section class="pipe" id="pipe"></section>
+      <div class="tabs" role="tablist" aria-label="session detail" id="tabs"></div>
+      <div class="pane md-host" id="pane" role="tabpanel" tabindex="0"></div>
+      <div class="pane" id="logPane" role="tabpanel" tabindex="0" hidden>
+        <div class="sub"><button class="linkbtn mono" id="showEarlier" hidden>show earlier</button><span class="label" id="feedNote"></span></div>
+        <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      </div>
     </section>
   </main>
 </div>
 
 <!-- ================= settings modal ================= -->
 <div class="scrim" id="settingsScrim" hidden>
-  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" id="settingsModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" id="settingsModal">
     <div class="modal-head">
-      <h2 id="settingsTitle">Settings</h2>
-      <button class="btn small quiet" data-close="settingsScrim">Close</button>
+      <h2 id="settingsTitle">settings</h2>
+      <button class="btn small" data-close="settingsScrim">close</button>
     </div>
-    <p class="hint">Bring your own key. Keys are stored only in <code>~/.config/openchip/keys.env</code> on this machine.</p>
-    <div class="prov" id="provCards" role="radiogroup" aria-label="Provider"></div>
-    <div style="margin-top:16px" class="row">
-      <div style="flex:1 1 260px">
-        <label for="model">Model</label>
-        <input type="text" id="model" list="modelPresets" autocomplete="off" placeholder="model id">
-        <datalist id="modelPresets"></datalist>
-      </div>
-      <div style="flex:1 1 260px" id="baseUrlWrap">
-        <label for="baseurl">Base URL <span class="hint">(optional)</span></label>
-        <input type="text" id="baseurl" autocomplete="off" placeholder="https://">
-      </div>
-    </div>
-    <div style="margin-top:16px">
-      <label for="tokenrate">Estimated blended cost (USD per million tokens, optional)</label><input id="tokenrate" type="number" min="0" step="any"><p class="hint">Approximate model cost at your configured rate; excludes hosting and tools.</p><label for="apikey">API key <span class="hint" id="keyHint"></span></label>
-      <input type="password" id="apikey" autocomplete="off" placeholder="paste a key, or leave empty to keep the saved one">
-    </div>
-    <div class="row" style="margin-top:16px">
-      <button class="btn" id="testBtn">Test connection</button>
-      <button class="btn primary" id="saveBtn">Save</button>
-    </div>
-    <div id="testResult" style="margin-top:12px"></div>
+    <p class="hint">bring your own key. keys are stored only in <code>~/.config/openchip/keys.env</code> on this machine.</p>
     <div class="modal-sect">
-      <h3>Toolchain</h3>
+      <div class="sub"><span class="label"><b>01</b>provider</span></div>
+      <div class="prov" id="provCards" role="radiogroup" aria-label="provider"></div>
+    </div>
+    <div class="modal-sect stack">
+      <div class="sub" style="margin-bottom:0"><span class="label"><b>02</b>model and key</span></div>
+      <div class="two">
+        <label class="field" for="model">model
+          <input type="text" class="under" id="model" list="modelPresets" autocomplete="off" placeholder="model id">
+        </label>
+        <datalist id="modelPresets"></datalist>
+        <label class="field" for="baseurl" id="baseUrlWrap">base url (optional)
+          <input type="text" class="under" id="baseurl" autocomplete="off" placeholder="https://">
+        </label>
+      </div>
+      <label class="field" for="apikey">api key <span id="keyHint" style="letter-spacing:0"></span>
+        <input type="password" class="under" id="apikey" autocomplete="off" placeholder="paste a key, or leave empty to keep the saved one">
+      </label>
+      <label class="field" for="tokenrate">blended cost, usd per million tokens (optional)
+        <input id="tokenrate" class="under" type="number" min="0" step="any">
+        <span class="hint" style="display:block;margin-top:6px;font-family:var(--sans);letter-spacing:0">approximate model cost at your rate; excludes hosting and tools.</span>
+      </label>
+    </div>
+    <div class="btns">
+      <button class="btn" id="testBtn">test connection</button>
+      <button class="btn fill" id="saveBtn">save</button>
+    </div>
+    <div class="test-line" id="testResult" aria-live="polite"></div>
+    <div class="modal-sect">
+      <div class="sub"><span class="label"><b>03</b>toolchain</span></div>
       <div id="toolchain"></div>
     </div>
   </div>
@@ -408,11 +428,11 @@ table.t th { background: var(--panel-2); font-weight: 640; }
 <div class="scrim" id="resumeScrim" hidden>
   <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="resumeTitle" id="resumeModal">
     <div class="modal-head">
-      <h2 id="resumeTitle">Sessions</h2>
-      <button class="btn small quiet" data-close="resumeScrim">Close</button>
+      <h2 id="resumeTitle">/resume</h2>
+      <button class="btn small" data-close="resumeScrim">close</button>
     </div>
-    <p class="hint">Newest first. Enter opens a session. A session whose last run stopped before finishing can be resumed from its last checkpoint.</p>
-    <div id="resumeList"></div>
+    <p class="hint">newest first. enter opens a session. a run that stopped before finishing resumes from its last checkpoint; a run that finished without sign-off is re-verified.</p>
+    <div id="resumeList" style="margin-top:16px"></div>
   </div>
 </div>
 
@@ -420,16 +440,16 @@ table.t th { background: var(--panel-2); font-weight: 640; }
 <div class="scrim" id="helpScrim" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" id="helpModal">
     <div class="modal-head">
-      <h2 id="helpTitle">Help</h2>
-      <button class="btn small quiet" data-close="helpScrim">Close</button>
+      <h2 id="helpTitle">help</h2>
+      <button class="btn small" data-close="helpScrim">close</button>
     </div>
     <dl class="kv">
-      <dt>/resume</dt><dd>List every session, open one, or restart a run that stopped before finishing.</dd>
-      <dt>/settings</dt><dd>Provider, model, API key and the local toolchain check.</dd>
-      <dt>/help</dt><dd>This list.</dd>
-      <dt>Keyboard</dt><dd>Arrow keys and Enter drive the command palette, Escape closes it. Tab reaches every control, Escape closes any dialog.</dd>
-      <dt>What a run does</dt><dd>Intake, review, an independent reference, RTL, verification against the reference, then sign-off. Every claim in the report is tied to a tool result.</dd>
-      <dt>Withheld</dt><dd>OpenChip refuses to accept a design it could not verify, and says which check was missing.</dd>
+      <dt>/resume</dt><dd>list every session, open one, or restart a run that stopped before finishing.</dd>
+      <dt>/settings</dt><dd>provider, model, api key and the local toolchain check.</dd>
+      <dt>/help</dt><dd>this list.</dd>
+      <dt>keyboard</dt><dd>arrow keys and enter drive the command palette, escape closes it. tab reaches every control, escape closes any dialog, arrow keys move between tabs.</dd>
+      <dt>a run</dt><dd>intake, review, an independent reference, rtl, verification against the reference, then sign-off. every claim in the report is tied to a tool result.</dd>
+      <dt>withheld</dt><dd>openchip refuses to sign off a design it could not verify, and says which check was missing.</dd>
     </dl>
   </div>
 </div>
@@ -438,15 +458,15 @@ table.t th { background: var(--panel-2); font-weight: 640; }
 <div class="scrim" id="reviseScrim" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reviseTitle" id="reviseModal">
     <div class="modal-head">
-      <h2 id="reviseTitle">Request a change</h2>
-      <button class="btn small quiet" data-close="reviseScrim">Close</button>
+      <h2 id="reviseTitle">request a change</h2>
+      <button class="btn small" data-close="reviseScrim">close</button>
     </div>
-    <p class="hint">A change creates a new contract version, invalidates the previous evidence and verifies again.</p>
-    <label for="change">Change</label>
-    <textarea id="change" rows="5" placeholder="Example: register dout, and add almost_full when count is at least DEPTH-2."></textarea>
-    <div class="row" style="margin-top:16px">
-      <button class="btn primary" id="reviseBtn">Apply change</button>
-      <button class="btn" data-close="reviseScrim">Cancel</button>
+    <p class="hint">a change creates a new contract version, invalidates the previous evidence and verifies again.</p>
+    <label class="label" for="change" style="display:block;margin:16px 0 8px"><b>01</b>change</label>
+    <textarea class="box" id="change" rows="5" placeholder="register dout, and add almost_full when count is at least DEPTH-2."></textarea>
+    <div class="btns">
+      <button class="btn fill" id="reviseBtn">apply change</button>
+      <button class="btn" data-close="reviseScrim">cancel</button>
     </div>
   </div>
 </div>
@@ -456,10 +476,12 @@ table.t th { background: var(--panel-2); font-weight: 640; }
 <script>
 "use strict";
 /* =======================================================================
-   OpenChip UI. Single page, no dependencies, no build step.
-   Backend contract: docs/product/ui-redesign-2026-09-15.md section 3.
-   Every field is optional on the wire: anything missing is hidden, never
-   rendered as "undefined".
+   openchip ui. single page, no dependencies, no build step.
+   backend contract: docs/product/ui-redesign-2026-09-15.md section 3.
+   visual contract: docs/product/ui-visual-direction-2026-09-15.md.
+   every field is optional on the wire: anything missing is hidden, never
+   rendered as "undefined". user and model text is only ever inserted as
+   text nodes, or escaped before any markup is added.
    ======================================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -474,28 +496,41 @@ const el = (tag, attrs, kids) => {
     else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
     else n.setAttribute(k, v === true ? "" : String(v));
   }
-  (kids || []).forEach((c) => c && n.appendChild(c));
+  (kids || []).forEach((c) => { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+  return n;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs, text) => {
+  const n = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, String(attrs[k]));
+  if (text !== undefined && text !== null) n.textContent = text;
   return n;
 };
 const esc = (s) => String(s === null || s === undefined ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const clear = (n) => { while (n.firstChild) n.removeChild(n.firstChild); return n; };
+const lower1 = (s) => String(s || "").charAt(0).toLowerCase() + String(s || "").slice(1);
+const clip = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s; };
 
 const STAGE_NAMES = ["Intake", "Review", "Reference", "RTL", "Verify", "Sign-off"];
 const FEED_CAP = 500;
+const BLOCKING = ["rate_limited", "quota", "invalid_key", "no_key", "unreachable"];
 const PROVIDERS = [
-  { id: "opencode-go", name: "OpenCode Go", desc: "OpenCode gateway, one key for the hosted models.",
+  { id: "opencode-go", name: "opencode go", desc: "opencode gateway, one key for the hosted models.",
     base: "https://opencode.ai/zen/go/v1", env: "OPENCODE_GO_API_KEY", baseEditable: true,
     presets: ["kimi-k3", "glm-5.3", "qwen3.8-max", "minimax-m3", "muse-spark-1.3-contributor", "gpt-5.6-luna", "grok-4.6", "deepseek-v4-flash"] },
-  { id: "openrouter", name: "OpenRouter", desc: "Many providers behind one key.",
+  { id: "openrouter", name: "openrouter", desc: "many providers behind one key.",
     base: "https://openrouter.ai/api/v1", env: "OPENROUTER_API_KEY", baseEditable: true,
     presets: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "anthropic/claude-sonnet-5", "openai/gpt-5-codex"] },
-  { id: "openai", name: "OpenAI", desc: "Direct OpenAI API key.",
+  { id: "openai", name: "openai", desc: "direct openai api key.",
     base: "https://api.openai.com/v1", env: "OPENAI_API_KEY", baseEditable: false,
     presets: ["gpt-5-codex", "gpt-5", "gpt-oss-120b"] },
-  { id: "anthropic", name: "Anthropic", desc: "Direct Anthropic API key.",
+  { id: "anthropic", name: "anthropic", desc: "direct anthropic api key.",
     base: "https://api.anthropic.com", env: "ANTHROPIC_API_KEY", baseEditable: false,
     presets: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"] },
+  { id: "openai-compatible", name: "self-hosted", desc: "your own vllm or openai-compatible server",
+    base: "http://127.0.0.1:8000/v1", env: "OPENCHIP_MODEL_API_KEY", baseEditable: true,
+    presets: ["openai/gpt-oss-120b", "Qwen/Qwen3.8-27B", "Qwen/Qwen3-8B"] },
 ];
 const providerMeta = (id) => PROVIDERS.find((p) => p.id === id) ||
   { id: id || "unknown", name: id || "unknown", desc: "", base: "", env: "", baseEditable: true, presets: [] };
@@ -507,7 +542,7 @@ const S = {
   sessionsOk: false,     // true when the real endpoint answered
   detail: null,          // GET /api/runs/<ws>
   current: null,         // open workspace
-  tab: "contract",
+  tab: null,             // null until the user picks a tab: then the page picks a sensible one
   filter: "",
   logSeen: 0,
   feed: [],              // {t, text, kind}
@@ -524,9 +559,8 @@ function opencodeSession() {
   let id = null;
   try { id = localStorage.getItem("openchip.opencode.session"); } catch (e) { id = null; }
   if (!id) {
-    const rnd = (self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID()
+    id = (self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID()
       : "s-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-    id = rnd;
     try { localStorage.setItem("openchip.opencode.session", id); } catch (e) { /* private window */ }
   }
   return id;
@@ -534,7 +568,7 @@ function opencodeSession() {
 const OC_SESSION = opencodeSession();
 
 /* ---------------- fetch ---------------- */
-async function api(path, body, opts) {
+async function api(path, body) {
   const init = { headers: { "x-opencode-session": OC_SESSION } };
   if (body !== undefined) {
     init.method = "POST";
@@ -543,7 +577,7 @@ async function api(path, body, opts) {
   }
   let r;
   try { r = await fetch(path, init); }
-  catch (e) { const err = new Error("cannot reach the OpenChip server"); err.offline = true; throw err; }
+  catch (e) { const err = new Error("cannot reach the openchip server"); err.offline = true; throw err; }
   let j = null;
   const txt = await r.text();
   if (txt) { try { j = JSON.parse(txt); } catch (e) { j = null; } }
@@ -557,12 +591,11 @@ async function api(path, body, opts) {
 
 /* ---------------- toasts ---------------- */
 function toast(title, detail) {
-  const box = $("toasts");
   const t = el("div", { class: "toast", role: "status" }, [
     el("div", { class: "t", text: title }),
     detail ? el("div", { class: "hint", text: detail }) : null,
   ]);
-  box.appendChild(t);
+  $("toasts").appendChild(t);
   setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 7000);
 }
 
@@ -573,22 +606,32 @@ function parseTime(v) {
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
-function relTime(v) {
+function ago(v) {
   const d = parseTime(v);
   if (!d) return "";
   const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
-  if (s < 45) return "just now";
-  if (s < 3600) return Math.round(s / 60) + " min ago";
-  if (s < 86400) return Math.round(s / 3600) + " h ago";
-  if (s < 86400 * 7) return Math.round(s / 86400) + " d ago";
-  return d.toLocaleDateString();
+  if (s < 60) return "now";
+  if (s < 3600) return Math.round(s / 60) + "m";
+  if (s < 86400) return Math.round(s / 3600) + "h";
+  if (s < 86400 * 60) return Math.round(s / 86400) + "d";
+  return Math.round(s / (86400 * 7)) + "w";
 }
-function absTime(v) { const d = parseTime(v); return d ? d.toLocaleString() : ""; }
-function clock(v) { const d = parseTime(v); return d ? d.toLocaleTimeString() : ""; }
+function absTime(v) {
+  const d = parseTime(v);
+  if (!d) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function clock(v) {
+  const d = parseTime(v);
+  if (!d) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
 function dur(s) {
   if (typeof s !== "number" || !isFinite(s)) return "";
+  if (s < 60) return (s < 10 ? s.toFixed(1) : Math.round(s)) + " s";
   const t = Math.round(s);
-  if (t < 60) return t + " s";
   const m = Math.floor(t / 60), r = t % 60;
   if (m < 60) return m + " min " + r + " s";
   return Math.floor(m / 60) + " h " + (m % 60) + " min";
@@ -597,8 +640,7 @@ function countdownText(ps) {
   const until = parseTime(ps && ps.until);
   if (until) {
     const left = Math.max(0, Math.round((until.getTime() - Date.now()) / 1000));
-    return left > 0 ? "retry in " + dur(left) + " (at " + until.toLocaleTimeString() + ")"
-                    : "retry now (was " + until.toLocaleTimeString() + ")";
+    return left > 0 ? "retry in " + dur(left) + " (at " + clock(until) + ")" : "retry now (was " + clock(until) + ")";
   }
   if (ps && typeof ps.retry_after_s === "number") return "retry in " + dur(ps.retry_after_s);
   return "";
@@ -659,6 +701,33 @@ function md(src) {
   return out.join("\n");
 }
 
+/* ---------------- verilog: line numbers and light keyword colouring ---------------- */
+const VKW = new Set(["module", "input", "output", "inout", "reg", "wire", "always", "begin", "end", "if", "else", "assign", "case",
+  "endcase", "parameter", "localparam", "posedge", "negedge", "endmodule"]);
+function hlLine(line) {
+  /* escape first, then wrap whole-word keywords; entities such as &lt; never match a keyword */
+  let code = line, cm = "";
+  const at = line.indexOf("//");
+  if (at >= 0) { code = line.slice(0, at); cm = line.slice(at); }
+  const body = esc(code).replace(/\b[a-z]+\b/g, (w) => VKW.has(w) ? '<span class="kw">' + w + "</span>" : w);
+  return body + (cm ? '<span class="cm">' + esc(cm) + "</span>" : "");
+}
+function codeBlock(src, verilog) {
+  const lines = String(src || "").replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+  const pre = el("pre", { class: "code" });
+  pre.innerHTML = lines.map((l, i) => '<span class="ln">' + (i + 1) + "</span>" + (verilog ? hlLine(l) : esc(l))).join("\n");
+  return pre;
+}
+function diffBlock(src) {
+  const pre = el("pre", { class: "code" });
+  String(src || "").split("\n").forEach((l, i) => {
+    if (i) pre.appendChild(document.createTextNode("\n"));
+    const cls = /^(\+\+\+|---)/.test(l) ? "hunk" : (/^\+/.test(l) ? "add" : (/^-/.test(l) ? "del" : (/^@@/.test(l) ? "hunk" : "")));
+    pre.appendChild(cls ? el("span", { class: cls, text: l }) : document.createTextNode(l));
+  });
+  return pre;
+}
+
 /* ---------------- state and result labels ---------------- */
 function resultOf(s) {
   if (!s) return "created";
@@ -673,35 +742,32 @@ function resultOf(s) {
   if (st === "paused" || st === "stalled" || st === "budget_exhausted" || st === "interrupted") return "interrupted";
   return st;
 }
+/* status is text with a square glyph: pass, fail, needs input, running, stopped */
+function statusOf(s) {
+  const r = resultOf(s);
+  const prev = s && s.previous_result;
+  if (prev && (r === "running" || r === "created")) return { cls: "run", word: "revising", pulse: true };
+  if (r === "running") return { cls: "run", word: "running", pulse: true };
+  /* needs input only when the user is actually being asked something */
+  if (s && s.needs_input && r !== "interrupted" && r !== "created") return { cls: "hold", word: "needs input" };
+  if (r === "accepted") return { cls: "pass", word: "pass" };
+  if (r === "withheld" || r === "not_accepted") return { cls: "fail", word: "fail" };
+  if (r === "failed") return { cls: "fail", word: "fail" };
+  if (r === "interrupted") return { cls: "stop", word: "stopped" };
+  if (r === "created") return { cls: "stop", word: "created" };
+  return { cls: "stop", word: String(r).replace(/_/g, " ") };
+}
+const ST_TEXT = { pass: "p", fail: "f", hold: "h", run: "a", stop: "i" };
+function glyph(cls, pulse) { return el("span", { class: "sq " + cls + (pulse ? " pulse" : ""), "aria-hidden": "true" }); }
+function statusNode(st, title) {
+  return el("span", { class: "st " + st.cls, title: title || null }, [glyph(st.cls, st.pulse), el("span", { class: "word", text: st.word })]);
+}
 const RESULT_LABEL = {
   accepted: "accepted", withheld: "withheld", not_accepted: "not accepted",
   interrupted: "interrupted", failed: "failed", running: "running", created: "created",
 };
-const RESULT_TONE = {
-  accepted: "ok", withheld: "warn", not_accepted: "warn",
-  interrupted: "warn", failed: "bad", running: "run", created: "",
-};
-function resultPill(s) {
-  const r = resultOf(s);
-  let tone = RESULT_TONE[r] === undefined ? "" : RESULT_TONE[r];
-  let label = RESULT_LABEL[r] || String(r).replace(/_/g, " ");
-  const prev = s && s.previous_result;
-  let pulse = r === "running";
-  /* A revision has no verdict of its own yet: keep the previous result's colour rather than blanking
-     the pill, and say what is happening to it. */
-  if (prev && (r === "running" || r === "created")) {
-    tone = RESULT_TONE[prev] === undefined ? "run" : RESULT_TONE[prev];
-    label = "revising";
-    pulse = true;
-  }
-  const p = el("span", { class: "pill " + tone });
-  if (s && s.reason) p.title = s.reason;       // e.g. the provider cause that paused the run
-  p.appendChild(el("span", { class: "dot" + (pulse ? " pulse" : ""), "aria-hidden": "true" }));
-  p.appendChild(document.createTextNode(label));
-  return p;
-}
-/* A run that stopped part-way through is resumed; a run that completed without acceptance (not
-   accepted, or sign-off withheld) is re-verified, which POST /resume also accepts. An accepted run
+/* a run that stopped part-way through is resumed; a run that completed without acceptance (not
+   accepted, or sign-off withheld) is re-verified, which POST /resume also accepts. an accepted run
    has no action: request a change instead. */
 function isReverify(s) {
   const r = resultOf(s);
@@ -717,17 +783,28 @@ function isResumable(s) {
   const st = s.state || "";
   return ["planned", "running", "paused", "stalled", "budget_exhausted", "interrupted", "failed"].indexOf(st) >= 0;
 }
-function resumeLabel(s) {
-  return isReverify(s) ? "Re-verify" : "Resume run";
+function resumeLabel(s) { return isReverify(s) ? "re-verify" : "resume run"; }
+function moduleOf(s) { return (s && (s.module || s.name || s.workspace)) || ""; }
+/* when two sessions share a module name, the workspace tells them apart */
+function dupModules() {
+  const n = {};
+  S.sessions.forEach((x) => { const m = moduleOf(x); n[m] = (n[m] || 0) + 1; });
+  return n;
+}
+function moduleNode(s, counts, tag, cls) {
+  const node = el(tag || "span", { class: cls || null }, [moduleOf(s)]);
+  if ((counts || dupModules())[moduleOf(s)] > 1 && s.workspace && s.workspace !== moduleOf(s)) {
+    node.appendChild(el("span", { class: "i", style: "font-weight:400", text: " \u00b7 " + s.workspace }));
+  }
+  return node;
 }
 
-/* ---------------- provider pill / blocker (one component, section 4) ---------------- */
-/* The gateway puts its own page in the error body (a 429 GoUsageLimitError names it). Any kind of
-   status may carry one, so the first http(s) URL in the message becomes the "open the gateway" link. */
+/* ---------------- provider view: rail footer and blocker banner share it (section 4) ---------------- */
+/* the gateway puts its own page in the error body (a 429 GoUsageLimitError names it). any kind of
+   status may carry one, so the first http(s) url in the message becomes the "open the gateway" link. */
 function firstUrl(text) {
   const m = /https?:\/\/[^\s"'<>)\]},]+/.exec(String(text || ""));
-  if (!m) return "";
-  return m[0].replace(/[.,;:]+$/, "");
+  return m ? m[0].replace(/[.,;:]+$/, "") : "";
 }
 function providerView(ps, settings) {
   const set = settings || (S.status && S.status.settings) || {};
@@ -737,169 +814,171 @@ function providerView(ps, settings) {
   const cd = countdownText(ps);
   const msg = (ps && ps.message) || "";
   const map = {
-    ok: { tone: "ok", short: "connected", title: "Provider connected", body: "" },
-    no_key: { tone: "warn", short: "add an API key", title: "No API key", body: "Add a key for " + meta.name + " in Settings before starting a run." },
-    invalid_key: { tone: "bad", short: "key rejected", title: "The key was rejected", body: msg || (meta.name + " rejected the key. Paste a new one in Settings.") },
-    rate_limited: { tone: "warn", short: "rate limited", second: cd, title: "Rate limited by " + meta.name,
-      body: msg || (meta.name + " is throttling requests. The run waits and retries.") },
-    quota: { tone: "bad", short: "usage limit reached", second: cd ? "resets " + cd.replace(/^retry (in|now) ?/, "") : "",
-      title: "Usage limit reached on " + meta.name, body: msg || "The gateway reports the allowance is spent." },
-    unreachable: { tone: "bad", short: "cannot reach " + meta.name, title: "Cannot reach " + meta.name, body: msg || "The network or the endpoint is down. The run waits until it answers." },
-    server_error: { tone: "bad", short: meta.name + " error", title: meta.name + " returned a server error", body: msg || "Retrying with backoff." },
-    unknown: { tone: "", short: "not checked", title: "Provider not checked yet", body: "Open Settings and use Test connection." },
+    ok: { tone: "p", short: "connected", title: "provider connected", body: "" },
+    no_key: { tone: "h", short: "add an api key", title: "no api key", body: "add a key for " + meta.name + " in settings before starting a run." },
+    invalid_key: { tone: "f", short: "key rejected", title: "the key was rejected", body: msg || (meta.name + " rejected the key. paste a new one in settings.") },
+    rate_limited: { tone: "h", short: "rate limited", second: cd, title: "rate limited by " + meta.name,
+      body: msg || (meta.name + " is throttling requests. the run waits and retries.") },
+    quota: { tone: "f", short: "usage limit reached", second: cd ? "resets " + cd.replace(/^retry (in|now) ?/, "") : "",
+      title: "usage limit reached on " + meta.name, body: msg || "the gateway reports the allowance is spent." },
+    unreachable: { tone: "f", short: "cannot reach " + meta.name, title: "cannot reach " + meta.name, body: msg || "the network or the endpoint is down. the run waits until it answers." },
+    server_error: { tone: "f", short: meta.name + " error", title: meta.name + " returned a server error", body: msg || "retrying with backoff." },
+    unknown: { tone: "i", short: "not checked", title: "provider not checked yet", body: "open settings and use test connection." },
   };
   const info = map[kind] || map.unknown;
-  /* `second` is the countdown or reset time: its own line in the rail pill so it is never ellipsised,
-     and printed once (not folded into `short` and again into `body`). */
-  const link = (ps && ps.link) || firstUrl(msg) ||
-    (kind === "quota" && meta.id === "opencode-go" ? "https://opencode.ai/" : "");
+  const link = (ps && ps.link) || firstUrl(msg) || (kind === "quota" && meta.id === "opencode-go" ? "https://opencode.ai/" : "");
   return { kind: kind, tone: info.tone, short: info.short, second: info.second || "", title: info.title,
            body: info.body, link: link, meta: meta, model: model, ps: ps || null };
 }
-function renderProviderPill(target) {
+const TONE_GLYPH = { p: "pass", h: "hold", f: "fail", i: "stop" };
+function renderRailFoot() {
+  const host = clear($("railFoot"));
   const v = providerView(S.provider, S.status && S.status.settings);
-  clear(target);
-  const btn = el("button", {
-    class: "btn small block", id: "providerPill", style: "justify-content:flex-start;text-align:left",
-    title: v.title + (v.body ? ": " + v.body : ""),
-    onclick: () => openSettings(),
-  });
-  btn.appendChild(el("span", { class: "pill " + v.tone }, [el("span", { class: "dot", "aria-hidden": "true" })]));
-  /* Rate limits and usage limits carry a countdown: give it its own line so it is never ellipsised. */
-  const lines = el("span", { class: "pill-lines" }, [
-    el("span", { class: "hint one-line", style: "color:inherit", text: [v.meta.name, v.model, v.short].filter(Boolean).join(" · ") }),
-  ]);
-  if (v.second) lines.appendChild(el("span", { class: "hint one-line", style: "color:inherit", text: v.second }));
-  btn.appendChild(lines);
-  target.appendChild(btn);
+  host.appendChild(el("div", { class: "ln", title: v.model }, [el("span", { class: "k", text: "model " }), v.model || "not set"]));
+  host.appendChild(el("div", { class: "wrapln" }, [
+    el("button", { class: "linkbtn", style: "color:inherit", title: v.title + (v.body ? ": " + v.body : ""), onclick: () => openSettings() }, [
+      el("span", { class: "k", text: "provider " }), v.meta.name + " · ", el("span", { class: v.tone, text: v.short })]),
+  ]));
+  if (v.second) host.appendChild(el("div", { class: "wrapln " + v.tone, text: v.second }));
+  const tools = (S.status && S.status.doctor && S.status.doctor.tools) || {};
+  const names = Object.keys(tools).filter((n) => n !== "vvp");
+  if (names.length) {
+    const line = el("div", {}, [el("span", { class: "k", text: "tools " })]);
+    names.forEach((n, i) => {
+      if (i) line.appendChild(document.createTextNode(" "));
+      line.appendChild(el("span", { class: tools[n].ok ? "" : (n === "sby" ? "i" : "f"), title: tools[n].ok ? (tools[n].version || "") : "not on PATH",
+        text: n + (tools[n].ok ? "" : (n === "sby" ? " (absent)" : " (missing)")) }));
+    });
+    host.appendChild(line);
+  }
+  host.appendChild(el("div", { style: "margin-top:8px" }, [el("button", { class: "linkbtn", id: "settingsBtn", text: "settings", onclick: () => openSettings() })]));
+}
+function blockerApplies() {
+  const d = S.detail;
+  if (!d || d.missing) return false;
+  const ps = S.provider;
+  if (!ps || BLOCKING.indexOf(ps.kind) < 0) return false;
+  /* only when it blocks this session: the run is live, or it stopped because of the provider.
+     an old failed or stalled run is not blocked by a key; the rail footer and home readiness say that. */
+  if (d.alive) return true;
+  return d.state !== "completed" && BLOCKING.indexOf(d.stopped_by_provider || "") >= 0;
 }
 function renderBlocker() {
-  const host = $("blocker");
-  clear(host);
-  const ps = S.provider;
-  if (!ps || !ps.kind || ps.kind === "ok") return;
-  const v = providerView(ps, S.status && S.status.settings);
+  const host = clear($("blocker"));
+  if (!blockerApplies()) return;
+  const v = providerView(S.provider, S.status && S.status.settings);
   const left = el("div", {}, [
-    el("div", { class: "t", text: v.title }),
-    el("div", { class: "hint", text: [v.body, v.second, v.model ? "model " + v.model : ""].filter(Boolean).join(" · ") }),
+    glyph(v.tone === "f" ? "fail" : "hold"), " ",
+    el("span", { class: "t " + v.tone, text: v.title }),
+    el("span", { class: "muted", text: " · " + [v.body, v.second, v.model ? "model " + v.model : ""].filter(Boolean).join(" · ") }),
   ]);
-  const acts = el("div", { class: "row" });
-  if (v.link) acts.appendChild(el("a", { class: "btn small", href: v.link, target: "_blank", rel: "noreferrer noopener", text: "Open the gateway page" }));
-  acts.appendChild(el("button", { class: "btn small", text: "Settings", onclick: () => openSettings() }));
-  host.appendChild(el("div", { class: "banner" + (v.tone === "bad" ? " bad" : ""), role: "status" }, [left, acts]));
+  const acts = el("div", { class: "b-acts" });
+  if (v.link) acts.appendChild(el("a", { href: v.link, target: "_blank", rel: "noreferrer noopener", text: "open the gateway page" }));
+  acts.appendChild(el("button", { class: "linkbtn", text: "settings", onclick: () => openSettings() }));
+  host.appendChild(el("div", { class: "banner" + (v.tone === "f" ? " bad" : ""), role: "status" }, [left, acts]));
 }
 
 /* ---------------- rail ---------------- */
 function matchesFilter(s) {
   if (!S.filter) return true;
   const q = S.filter.toLowerCase();
-  return [(s.name || s.workspace || ""), (s.request || ""), (s.state || "")]
-    .some((v) => String(v).toLowerCase().indexOf(q) >= 0);
+  return [s.module, s.name, s.workspace, s.intent, s.request, s.state, statusOf(s).word]
+    .some((v) => String(v || "").toLowerCase().indexOf(q) >= 0);
 }
-function sessionButton(s) {
+function sessionRow(s, counts) {
   const ws = s.workspace;
-  const b = el("button", { class: "sess", "aria-current": S.current === ws ? "true" : "false", onclick: () => openSession(ws) });
-  if (s.reason) b.title = s.reason;            // an interrupted run says why, e.g. the provider cause
-  b.appendChild(el("div", { class: "nm", text: s.name || ws }));
-  const sub = el("div", { class: "sub" });
-  sub.appendChild(resultPill(s));
-  const when = relTime(s.updated || s.created);
-  if (when) sub.appendChild(el("span", { class: "hint", text: when }));
-  b.appendChild(sub);
-  if (s.request) b.appendChild(el("div", { class: "rq", text: s.request }));
+  const st = statusOf(s);
+  const b = el("button", { class: "row-s", "aria-current": S.current === ws ? "true" : "false", onclick: () => openSession(ws),
+    title: [ws, st.word, s.reason].filter(Boolean).join(" · "), "aria-label": moduleOf(s) + ", " + st.word });
+  b.appendChild(glyph(st.cls, st.pulse));
+  b.appendChild(moduleNode(s, counts, "span", "nm"));
+  b.appendChild(el("span", { class: "age", text: ago(s.updated || s.created) }));
+  const intent = s.intent || (s.request || "").split("\n")[0];
+  if (intent) b.appendChild(el("span", { class: "intent", text: intent }));
   return b;
 }
 function renderRail() {
   const host = clear($("sessionList"));
   const list = S.sessions.filter(matchesFilter);
-  if (!S.sessions.length) {
-    host.appendChild(el("p", { class: "hint", style: "padding:8px", text: "No sessions yet. Describe a module to start one." }));
-  } else if (!list.length) {
-    host.appendChild(el("p", { class: "hint", style: "padding:8px", text: "No session matches that search." }));
-  } else {
-    list.forEach((s) => host.appendChild(sessionButton(s)));
-  }
-  renderProviderPill($("railProvider"));
+  if (!S.sessions.length) host.appendChild(el("p", { class: "empty-line", text: "no sessions yet. describe a module to start one." }));
+  else if (!list.length) host.appendChild(el("p", { class: "empty-line", text: "no session matches that search." }));
+  else { const counts = dupModules(); list.forEach((s) => host.appendChild(sessionRow(s, counts))); }
+  const ver = S.status && S.status.version;
+  $("version").textContent = ver ? String(ver).replace(/\.0$/, "") : "";
+  renderRailFoot();
 }
 
 /* ---------------- home ---------------- */
+function shortVersion(v) { const m = /(\d+(?:\.\d+)*)/.exec(String(v || "")); return m ? m[1] : ""; }
 function renderReadiness() {
   const host = clear($("readiness"));
   const st = S.status;
   if (!st) return;
   const set = st.settings || {};
-  const doctor = st.doctor || {};
-  const tools = doctor.tools || {};
-  const missing = Object.keys(tools).filter((k) => tools[k] && !tools[k].ok && k !== "sby");
-  const row = el("div", { class: "row" });
+  const tools = (st.doctor && st.doctor.tools) || {};
+  const names = Object.keys(tools);
+  const missing = names.filter((k) => tools[k] && !tools[k].ok && k !== "sby");
+  if (missing.length) {
+    host.appendChild(el("span", { title: "a run is refused while a required tool is missing; install the oss cad suite (icarus verilog, verilator, yosys)" },
+      [glyph("hold"), el("span", { class: "h", text: "toolchain missing " + missing.join(", ") })]));
+  } else if (names.length) {
+    const bits = names.filter((n) => n !== "vvp").map((n) => tools[n].ok ? (n + (shortVersion(tools[n].version) && n !== "sby" ? " " + shortVersion(tools[n].version) : "")) : n + " not found");
+    host.appendChild(el("span", {}, [glyph("pass"), "toolchain  " + bits.join(" · ")]));
+  }
   const v = providerView(S.provider, set);
   const keyOk = set.key_present === true || v.kind === "ok";
+  const settingsLink = el("button", { class: "linkbtn", text: "settings", onclick: () => openSettings() });
   if (!keyOk) {
-    row.appendChild(el("span", { class: "pill warn" }, [el("span", { class: "dot" }), document.createTextNode("no API key")]));
+    host.appendChild(el("span", {}, [glyph("hold"), el("span", { class: "h", text: "model key missing" }), " · ", settingsLink]));
+  } else if (BLOCKING.indexOf(v.kind) >= 0 || v.kind === "server_error") {
+    host.appendChild(el("span", {}, [glyph(v.tone === "f" ? "fail" : "hold"), el("span", { class: v.tone, text: (v.model || "model") + " " + v.short + (v.second ? ", " + v.second : "") }), " · ", settingsLink]));
   } else {
-    row.appendChild(el("span", { class: "pill ok" }, [el("span", { class: "dot" }), document.createTextNode("key set" + (set.key_hint ? " " + set.key_hint : ""))]));
+    host.appendChild(el("span", {}, [glyph("pass"), (v.model || "model") + " · key " + (set.key_hint || "set") + " · ", settingsLink]));
   }
-  if (missing.length) {
-    row.appendChild(el("span", { class: "pill warn" }, [el("span", { class: "dot" }), document.createTextNode("toolchain missing: " + missing.join(", "))]));
-  } else if (Object.keys(tools).length) {
-    row.appendChild(el("span", { class: "pill ok" }, [el("span", { class: "dot" }), document.createTextNode("toolchain ready")]));
-  }
-  host.appendChild(row);
-  if (!keyOk) {
-    host.appendChild(el("p", { class: "hint", style: "margin-top:8px" }, [
-      document.createTextNode("A run needs a model key. "),
-      el("button", { class: "btn small", text: "Open Settings", onclick: () => openSettings() }),
-    ]));
-  } else if (missing.length) {
-    host.appendChild(el("p", { class: "hint", style: "margin-top:8px", text: "Verification needs " + missing.join(", ") + " on PATH. Install the OSS CAD Suite (Icarus Verilog, Verilator, Yosys); a run is refused while a required tool is missing." }));
-  }
+  host.appendChild(el("span", { text: "typical run 1 to 3 min" }));
 }
+function openRowKeys(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
 function renderHomeSessions() {
   const host = clear($("homeSessions"));
+  $("homeCount").textContent = S.sessions.length ? S.sessions.length + (S.sessions.length === 1 ? " session" : " sessions") : "";
   if (!S.sessions.length) {
     host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "No sessions yet" }),
-      el("div", { text: "Describe the module above and OpenChip will open the first session here." }),
+      el("div", { class: "t", text: "no sessions yet" }),
+      el("div", { text: "describe the module above and the first session opens here." }),
       el("div", { class: "acts" }, [
-        el("button", { class: "btn", text: "Show commands", onclick: () => openHelp() }),
-        el("button", { class: "btn", text: "Settings", onclick: () => openSettings() }),
+        el("button", { class: "btn small", text: "commands", onclick: () => openHelp() }),
+        el("button", { class: "btn small", text: "settings", onclick: () => openSettings() }),
       ]),
     ]));
     return;
   }
-  const list = S.sessions.slice(0, 8);
-  const box = el("div", { class: "card flat" });
-  list.forEach((s, idx) => {
-    const row = el("div", { class: "spread", style: "padding:8px 0" + (idx ? ";border-top:1px solid var(--line)" : "") });
-    row.appendChild(el("div", { style: "min-width:0" }, [
-      el("div", { style: "font-weight:640", text: s.name || s.workspace }),
-      el("div", { class: "hint", text: (s.request || "").slice(0, 140) }),
+  const tbody = el("tbody");
+  const counts = dupModules();
+  S.sessions.forEach((s) => {
+    const st = statusOf(s);
+    const open = () => openSession(s.workspace);
+    tbody.appendChild(el("tr", { class: "click", tabindex: "0", role: "link", title: [s.workspace, s.reason].filter(Boolean).join(" · "),
+      "aria-label": moduleOf(s) + ", " + st.word, onclick: open, onkeydown: openRowKeys(open) }, [
+      el("td", { class: "g" }, [glyph(st.cls, st.pulse)]),
+      moduleNode(s, counts, "td", "nm"),
+      el("td", { class: "prose hide-narrow", text: s.intent || (s.request || "").split("\n")[0] }),
+      el("td", { class: "r " + ST_TEXT[st.cls], text: st.word }),
+      el("td", { class: "r i", style: "width:48px", text: ago(s.updated || s.created) }),
     ]));
-    const right = el("div", { class: "row" });
-    right.appendChild(resultPill(s));
-    right.appendChild(el("button", { class: "btn small", text: "Open", onclick: () => openSession(s.workspace) }));
-    row.appendChild(right);
-    box.appendChild(row);
   });
-  host.appendChild(box);
-  if (S.sessions.length > list.length) {
-    host.appendChild(el("p", { class: "hint", style: "margin-top:8px" }, [
-      el("button", { class: "btn small quiet", text: "All " + S.sessions.length + " sessions", onclick: () => openResume() }),
-    ]));
-  }
+  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [tbody])]));
 }
 
 /* ---------------- command palette ---------------- */
 const COMMANDS = [
-  { cmd: "/resume", desc: "Session history: open or restart a run", run: () => openResume() },
-  { cmd: "/settings", desc: "Provider, model, API key, toolchain", run: () => openSettings() },
-  { cmd: "/help", desc: "What the commands do", run: () => openHelp() },
+  { cmd: "/resume", desc: "session history: open or restart a run", run: () => openResume() },
+  { cmd: "/settings", desc: "provider, model, api key, toolchain", run: () => openSettings() },
+  { cmd: "/help", desc: "what the commands do", run: () => openHelp() },
 ];
 let palItems = [], palIndex = 0;
 function paletteQuery() {
   const v = $("request").value;
-  if (!/^\//.test(v)) return null;
-  if (/\n/.test(v)) return null;
+  if (!/^\//.test(v) || /\n/.test(v)) return null;
   return v.trim();
 }
 function renderPalette() {
@@ -912,7 +991,7 @@ function renderPalette() {
   if (palIndex >= palItems.length) palIndex = 0;
   clear(box);
   if (!palItems.length) {
-    box.appendChild(el("div", { class: "pal-item", style: "cursor:default" }, [el("span", { class: "ds", text: "No command matches. Known commands: /resume, /settings, /help." })]));
+    box.appendChild(el("div", { class: "pal-item", style: "cursor:default" }, [el("span", { class: "cmd", text: q }), el("span", { class: "ds", text: "no command matches. known: /resume, /settings, /help." })]));
     box.hidden = false;
     ta.setAttribute("aria-expanded", "true");
     return;
@@ -939,8 +1018,9 @@ function runPalette(i) {
 }
 function paletteKey(e) {
   if ($("palette").hidden) return false;
-  if (e.key === "ArrowDown") { palIndex = (palIndex + 1) % Math.max(1, palItems.length); renderPalette(); return true; }
-  if (e.key === "ArrowUp") { palIndex = (palIndex - 1 + Math.max(1, palItems.length)) % Math.max(1, palItems.length); renderPalette(); return true; }
+  const n = Math.max(1, palItems.length);
+  if (e.key === "ArrowDown") { palIndex = (palIndex + 1) % n; renderPalette(); return true; }
+  if (e.key === "ArrowUp") { palIndex = (palIndex - 1 + n) % n; renderPalette(); return true; }
   if (e.key === "Enter" || e.key === "Tab") { if (palItems.length) { runPalette(palIndex); return true; } return false; }
   if (e.key === "Escape") { $("request").value = ""; renderPalette(); return true; }
   return false;
@@ -981,7 +1061,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-/* ---------------- resume modal ---------------- */
+/* ---------------- resume palette (/resume) ---------------- */
 function openResume() {
   renderResume();
   openModal("resumeScrim");
@@ -990,28 +1070,42 @@ function renderResume() {
   const host = clear($("resumeList"));
   if (!S.sessions.length) {
     host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "No sessions to resume" }),
-      el("div", { text: "Nothing has been built yet. Close this and describe a module." }),
+      el("div", { class: "t", text: "no sessions to resume" }),
+      el("div", { text: "nothing has been built yet. close this and describe a module." }),
     ]));
     return;
   }
+  const tbody = el("tbody");
+  const counts = dupModules();
   S.sessions.forEach((s) => {
-    const row = el("div", { class: "res-row", tabindex: "0", role: "button", title: s.reason || "",
-      onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); closeModal("resumeScrim"); openSession(s.workspace); } } });
-    row.appendChild(el("div", { style: "min-width:0" }, [
-      el("div", { class: "nm", text: s.name || s.workspace }),
-      el("div", { class: "hint", text: [absTime(s.created || s.updated), s.state ? "state " + s.state : ""].filter(Boolean).join(" · ") }),
-      el("div", { class: "hint", text: (s.request || "").slice(0, 160) }),
-    ]));
-    const right = el("div", { class: "row" });
-    right.appendChild(resultPill(s));
-    right.appendChild(el("button", { class: "btn small", text: "Open", onclick: () => { closeModal("resumeScrim"); openSession(s.workspace); } }));
+    const st = statusOf(s);
+    const open = () => { closeModal("resumeScrim"); openSession(s.workspace); };
+    const raw = RESULT_LABEL[resultOf(s)] || String(resultOf(s)).replace(/_/g, " ");
+    const SYN = { pass: ["accepted"], fail: ["failed"], stopped: ["interrupted"], running: ["running"], revising: ["running"], created: ["created"] };
+    const second = (SYN[st.word] || []).indexOf(raw) >= 0 ? "" : raw;
+    const acts = el("td", { class: "r", style: "white-space:nowrap" });
+    acts.appendChild(el("button", { class: "btn small", text: "open", onclick: (e) => { e.stopPropagation(); open(); } }));
     if (isResumable(s)) {
-      right.appendChild(el("button", { class: "btn small primary", text: resumeLabel(s), onclick: (e) => resumeRun(s, e.currentTarget) }));
+      acts.appendChild(document.createTextNode(" "));
+      acts.appendChild(el("button", { class: "btn small", style: "border-color:var(--accent);color:var(--accent)", text: resumeLabel(s),
+        onclick: (e) => { e.stopPropagation(); resumeRun(s, e.currentTarget); } }));
     }
-    row.appendChild(right);
-    host.appendChild(row);
+    tbody.appendChild(el("tr", { class: "click", tabindex: "0", role: "button", title: s.reason || s.workspace,
+      onkeydown: (e) => { if (e.target === e.currentTarget) openRowKeys(open)(e); }, onclick: open }, [
+      el("td", { class: "g" }, [glyph(st.cls, st.pulse)]),
+      el("td", {}, [
+        moduleNode(s, counts, "div", "nm"),
+        el("div", { style: "font-family:var(--sans);color:var(--muted);font-size:12.5px", text: s.intent || (s.request || "").slice(0, 120) }),
+      ]),
+      el("td", { class: "hide-narrow", style: "white-space:nowrap" }, [
+        el("div", { class: ST_TEXT[st.cls], text: st.word }),
+        second ? el("div", { class: "i", style: "font-size:11.5px", text: second }) : null,
+      ]),
+      el("td", { class: "i hide-narrow", style: "white-space:nowrap;font-size:12px", text: absTime(s.updated || s.created) }),
+      acts,
+    ]));
   });
+  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [tbody])]));
 }
 async function resumeRun(s, btn) {
   if (btn) btn.disabled = true;
@@ -1021,10 +1115,10 @@ async function resumeRun(s, btn) {
     await loadSessions();
     openSession(s.workspace);
   } catch (e) {
-    if (e.status === 404) toast("Resume is not available yet", "This OpenChip server does not expose the resume endpoint. Open the session and request a change instead.");
-    else if (e.status === 409) toast("Already running", "A thread for this session is alive, so there is nothing to resume.");
-    else if (e.status === 400) toast("Nothing to resume", e.message);
-    else toast("Could not resume", e.message);
+    if (e.status === 404) toast("resume is not available", "the session folder is gone, or this server does not expose the resume endpoint.");
+    else if (e.status === 409) toast("already running", "a thread for this session is alive, so there is nothing to resume.");
+    else if (e.status === 400) toast("nothing to resume", e.message);
+    else toast("could not resume", e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1047,7 +1141,7 @@ function renderProviderCards() {
   PROVIDERS.forEach((p, i) => {
     const checked = d.provider === p.id;
     host.appendChild(el("button", {
-      type: "button", class: "prov-card", role: "radio", "aria-checked": checked ? "true" : "false",
+      type: "button", class: "prov-row", role: "radio", "aria-checked": checked ? "true" : "false",
       "data-prov": p.id, tabindex: (checked || (i === 0 && !PROVIDERS.some((x) => x.id === d.provider))) ? "0" : "-1",
       onclick: () => { pickProvider(p.id); },
       onkeydown: (e) => {
@@ -1060,7 +1154,7 @@ function renderProviderCards() {
         const b = $("provCards").querySelector('[data-prov="' + PROVIDERS[n].id + '"]');
         if (b) b.focus();
       },
-    }, [el("div", { class: "nm", text: p.name }), el("div", { class: "ds", text: p.desc })]));
+    }, [el("span", { class: "rd", "aria-hidden": "true" }), el("span", { class: "nm", text: p.name }), el("span", { class: "ds", text: p.desc })]));
   });
 }
 function pickProvider(id) {
@@ -1086,18 +1180,10 @@ function renderSettingsFields() {
     ? S.status.settings.presets : meta.presets;
   clear($("modelPresets"));
   presets.forEach((m) => $("modelPresets").appendChild(el("option", { value: m })));
-  const known = PROVIDERS.some((p) => p.id === d.provider);
-  let note = $("provNote");
-  if (!note) {
-    note = el("p", { class: "hint", id: "provNote", style: "margin-top:8px" });
-    $("provCards").parentNode.insertBefore(note, $("provCards").nextSibling);
-  }
-  note.hidden = known;
-  note.textContent = known ? "" : "This server is configured for the provider " + d.provider + ", which is not one of the cards above. Pick a card to switch, or leave it as it is.";
   $("baseUrlWrap").hidden = !meta.baseEditable;
   $("baseurl").value = d.base_url || "";
   $("baseurl").placeholder = meta.base || "https://";
-  $("keyHint").textContent = meta.env ? "(the environment variable " + meta.env + " works too)" : "";
+  $("keyHint").textContent = meta.env ? "(or the environment variable " + meta.env + ")" : "";
 }
 function renderToolchain() {
   const host = clear($("toolchain"));
@@ -1105,31 +1191,28 @@ function renderToolchain() {
   const names = Object.keys(tools);
   if (!names.length) {
     host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "Toolchain not reported" }),
-      el("div", { text: "The server did not return a toolchain check, so verification readiness is unknown." }),
+      el("div", { class: "t", text: "toolchain not reported" }),
+      el("div", { text: "the server did not return a toolchain check, so verification readiness is unknown." }),
     ]));
     return;
   }
   const body = names.map((n) => {
     const t = tools[n] || {};
-    const td1 = el("td", {}, [el("span", { class: "mono", text: n })]);
-    const td2 = el("td", {}, [t.ok
-      ? el("span", { class: "pill ok" }, [el("span", { class: "dot" }), document.createTextNode("found")])
-      : el("span", { class: "pill warn" }, [el("span", { class: "dot" }), document.createTextNode("missing")])]);
-    const td3 = el("td", { class: "hint", text: t.ok ? (t.version || "") : "not on PATH" });
-    return el("tr", {}, [td1, td2, td3]);
+    const cls = t.ok ? "pass" : (n === "sby" ? "stop" : "fail");
+    return el("tr", {}, [
+      el("td", { text: n }),
+      el("td", { class: "hide-narrow", style: "color:var(--muted);font-size:12px", text: t.ok ? (t.version || "") : "not on PATH" + (n === "sby" ? " (optional)" : "") }),
+      el("td", { class: "r" }, [statusNode({ cls: cls, word: t.ok ? "found" : "missing" })]),
+    ]);
   });
-  const table = el("table", { class: "t" }, [
-    el("thead", {}, [el("tr", {}, [el("th", { text: "Tool" }), el("th", { text: "State" }), el("th", { text: "Version" })])]),
-    el("tbody", {}, body),
-  ]);
-  host.appendChild(el("div", { class: "tbl-scroll" }, [table]));
+  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [el("tbody", {}, body)])]));
   const missing = names.filter((n) => !tools[n].ok && n !== "sby");
-  if (missing.length) host.appendChild(el("p", { class: "hint", style: "margin-top:8px", text: "A run that needs " + missing.join(", ") + " is refused until the tool is on PATH." }));
+  if (missing.length) host.appendChild(el("p", { class: "hint", style: "margin-top:8px", text: "a run that needs " + missing.join(", ") + " is refused until the tool is on PATH." }));
 }
 function openSettings() {
   S.settingsDraft = null;
-  $("tokenrate").value = S.status?.settings?.usd_per_million_tokens ?? "";
+  const rate = S.status && S.status.settings ? S.status.settings.usd_per_million_tokens : null;
+  $("tokenrate").value = rate === null || rate === undefined ? "" : rate;
   settingsDraft();
   renderSettingsFields();
   renderToolchain();
@@ -1147,7 +1230,7 @@ async function saveSettings(silent) {
   await api("/api/settings", body);
   $("apikey").value = "";
   await loadStatus();
-  if (!silent) toast("Settings saved", providerMeta(d.provider).name + (d.model ? " · " + d.model : ""));
+  if (!silent) toast("settings saved", providerMeta(d.provider).name + (d.model ? " · " + d.model : ""));
 }
 /* normalise both the ProviderStatus contract and the older /api/test shape */
 function normaliseTest(res) {
@@ -1165,7 +1248,7 @@ function normaliseTest(res) {
     out.message = res.error || "";
     return out;
   }
-  if (res.configured_is_served === false) { out.kind = "model_not_served"; out.message = "The configured model is not in the served list."; return out; }
+  if (res.configured_is_served === false) { out.kind = "model_not_served"; out.message = "the configured model is not in the served list."; return out; }
   out.kind = ping.ok ? "ok" : "server_error";
   out.message = ping.error || (ping.ok ? "" : "the model did not answer");
   out.latency_s = ping.latency_s;
@@ -1174,39 +1257,34 @@ function normaliseTest(res) {
 function renderTestResult(ps, ping) {
   const host = clear($("testResult"));
   if (ps.kind === "model_not_served") {
-    host.appendChild(el("div", { class: "row" }, [
-      el("span", { class: "pill warn" }, [el("span", { class: "dot" }), document.createTextNode("model not served")]),
-      el("span", { class: "hint", text: ps.message || "The provider does not serve this model id." }),
-    ]));
+    host.appendChild(glyph("hold"));
+    host.appendChild(el("span", { class: "h", text: "model not served" }));
+    host.appendChild(el("span", { text: ps.message || "the provider does not serve this model id." }));
     return;
   }
   const v = providerView(ps, null);
   const lat = (ping && typeof ping.latency_s === "number") ? ping.latency_s : ps.latency_s;
-  const bits = [];
-  if (ps.kind === "ok") bits.push("connected" + (typeof lat === "number" ? " in " + lat + " s" : ""));
-  else bits.push(v.short);
-  if (v.second) bits.push(v.second);              // the countdown, once
+  const bits = [v.meta.name];
   if (ps.model) bits.push(ps.model);
+  if (v.second) bits.push(v.second);              // the countdown, once
   if (ps.kind !== "ok") bits.push(v.body);        // the provider's message, once
-  if (ping && ping.reply) bits.push("reply: " + ping.reply);
-  const row = el("div", { class: "row" }, [
-    el("span", { class: "pill " + v.tone }, [el("span", { class: "dot" }), document.createTextNode(v.meta.name)]),
-    el("span", { class: "hint", text: bits.filter(Boolean).join(" · ") }),
-  ]);
-  if (v.link) row.appendChild(el("a", { class: "btn small", href: v.link, target: "_blank", rel: "noreferrer noopener", text: "Open the gateway page" }));
-  host.appendChild(row);
+  if (ping && ping.reply) bits.push("reply " + ping.reply);
+  host.appendChild(glyph(TONE_GLYPH[v.tone] || "stop"));
+  host.appendChild(el("span", { class: v.tone, text: ps.kind === "ok" ? "connected" + (typeof lat === "number" ? " in " + lat + " s" : "") : v.short }));
+  host.appendChild(el("span", { class: "muted", text: bits.filter(Boolean).join(" · ") }));
+  if (v.link) host.appendChild(el("a", { href: v.link, target: "_blank", rel: "noreferrer noopener", text: "open the gateway page" }));
 }
 async function testConnection() {
   const btn = $("testBtn");
   btn.disabled = true;
-  clear($("testResult")).appendChild(el("span", { class: "hint", text: "Testing the connection." }));
+  clear($("testResult")).appendChild(el("span", { class: "muted", text: "testing the connection" }));
   try {
     await saveSettings(true);
     const res = await api("/api/test", {});
     const ps = normaliseTest(res);
     if (ps.kind !== "model_not_served") S.provider = ps;
     renderTestResult(ps, res.ping);
-    renderProviderPill($("railProvider"));
+    renderRailFoot();
     renderReadiness();
     renderBlocker();
   } catch (e) {
@@ -1218,41 +1296,354 @@ async function testConnection() {
   }
 }
 
-/* ---------------- session view: stages ---------------- */
-function renderStages() {
-  const host = clear($("stageStrip"));
-  const d = S.detail;
-  if (d && d.missing) return;                 // the folder is gone: there is no progress to show
-  const stages = d && Array.isArray(d.stages) ? d.stages : null;
-  if (!stages || !stages.length) return;      // no stages on the wire: hide the strip
+/* ---------------- session view helpers ---------------- */
+function isLiveDetail(d) { return !!(d && (d.alive || ((d.state === "running" || d.state === "planned") && d.alive !== false))); }
+function stageList(d) {
+  const stages = d && Array.isArray(d.stages) ? d.stages : [];
   const byName = {};
   stages.forEach((s) => { if (s && s.name) byName[String(s.name).toLowerCase()] = s; });
-  const ordered = STAGE_NAMES.map((n) => byName[n.toLowerCase()] || { name: n, status: "pending", detail: "" });
-  const extra = stages.filter((s) => STAGE_NAMES.map((n) => n.toLowerCase()).indexOf(String(s.name || "").toLowerCase()) < 0);
-  const strip = el("div", { class: "stages" });
-  ordered.concat(extra).forEach((s) => {
+  return STAGE_NAMES.map((n) => {
+    const s = byName[n.toLowerCase()] || { name: n, status: "pending", detail: "" };
     const status = ["pending", "running", "done", "withheld", "failed"].indexOf(s.status) >= 0 ? s.status : "pending";
-    const box = el("div", { class: "stage " + status });
-    const top = el("div", { class: "top" });
-    top.appendChild(el("span", { class: "dot" + (status === "running" ? " pulse" : ""), "aria-hidden": "true" }));
-    top.appendChild(document.createTextNode(s.name));
-    const names = {intake:['intake'],review:['review'],reference:['reference'],rtl:['properties','rtl'],verify:['verify'],'sign-off':['report']};
-    const times = (d.stage_durations || []).filter(t => (names[String(s.name).toLowerCase()] || [String(s.name).toLowerCase()]).includes(t.stage));
-    top.appendChild(document.createTextNode(" · " + (times.length ? dur(times.reduce((sum,t) => sum+t.seconds,0)) : "time not recorded")));
-    box.appendChild(top);
-    box.appendChild(el("div", { class: "dt", text: optionalFormalText(s.detail || status) }));
-    strip.appendChild(box);
+    return { name: n, key: n.toLowerCase(), status: status, detail: s.detail || "" };
   });
-  host.appendChild(strip);
+}
+function label(num, text, id) { return el("span", { class: "label", id: id || null }, [el("b", { text: num }), text]); }
+
+/* ---------------- 01 interface: pin-out symbol from the contract ports ---------------- */
+function renderInterface(d) {
+  const host = clear($("iface"));
+  const c = d.contract;
+  const ports = c && Array.isArray(c.ports) ? c.ports.filter((p) => p && p.name) : [];
+  const cr = (c && c.clock_reset) || {};
+  const metaBits = [];
+  if (ports.length) metaBits.push(ports.length + (ports.length === 1 ? " port" : " ports"));
+  if (cr.clock) metaBits.push((cr.clock_edge || "posedge") + " " + cr.clock);
+  if (cr.reset) metaBits.push(cr.reset + " " + resetShort(cr));
+  if (ports.length && !cr.clock) metaBits.push("combinational");
+  host.appendChild(el("div", { class: "sub" }, [label("01", "interface"), el("span", { class: "label", text: metaBits.join(" · ") })]));
+  if (!ports.length) {
+    host.appendChild(el("div", { class: "empty" }, [
+      el("div", { class: "t", text: "no contract yet" }),
+      el("div", { text: isLiveDetail(d) ? "the pin-out is drawn from the contract once intake finishes." : "no contract was recorded for this run, so there is no interface to draw." }),
+    ]));
+    return;
+  }
+  host.appendChild(pinout(c, ports, cr));
+}
+function resetShort(cr) {
+  const kind = /^async/i.test(cr.reset_kind || "") ? "async" : (/^sync/i.test(cr.reset_kind || "") ? "sync" : (cr.reset_kind || ""));
+  return [kind, cr.reset_active || ""].filter(Boolean).join(" ");
+}
+function pinout(c, ports, cr) {
+  const CH = 7.25, MAXC = 18, PIN = 60, ROW = 30, TOP = 44, BY = 12;
+  const left = ports.filter((p) => (p.direction || "input") === "input");
+  const right = ports.filter((p) => (p.direction || "input") !== "input");
+  const shown = (n) => clip(n, MAXC);
+  const lw = Math.max(3, ...left.map((p) => shown(p.name).length)) * CH;
+  const rw = Math.max(3, ...right.map((p) => shown(p.name).length)) * CH;
+  const title = clip(c.module_name || S.current || "", 28);
+  const bodyW = Math.max(190, title.length * 8.2 + 36);
+  const rows = Math.max(left.length, right.length, 1);
+  const bodyH = TOP + (rows - 1) * ROW + 26;
+  const x0 = Math.ceil(lw + 10), bx = x0 + PIN, bx2 = bx + bodyW;
+  const W = Math.ceil(bx2 + PIN + 6 + rw + 6), H = BY + bodyH + 12;
+  const svg = sv("svg", { class: "sym", viewBox: "0 0 " + W + " " + H, width: "100%", role: "img",
+    "aria-label": "pin-out of " + (c.module_name || "the module") + ": " + ports.map((p) => (p.direction || "input") + " " + p.name).join(", "),
+    style: "max-width:" + W + "px;display:block" });
+  svg.appendChild(sv("rect", { class: "body", x: bx, y: BY, width: bodyW, height: bodyH }));
+  const tt = sv("text", { class: "title", x: bx + bodyW / 2, y: BY + 22, "text-anchor": "middle" }, title);
+  if (title !== c.module_name) tt.appendChild(sv("title", {}, c.module_name));
+  svg.appendChild(tt);
+  const drawPin = (p, i, side) => {
+    const y = BY + TOP + i * ROW;
+    const xa = side === "l" ? x0 : bx2, xb = side === "l" ? bx : bx2 + PIN;
+    const widthLabel = p.width_expr ? String(p.width_expr) : (Number(p.width) > 1 ? String(p.width) : "");
+    const bus = !!widthLabel;
+    svg.appendChild(sv("line", { class: bus ? "bus" : "pin", x1: xa, y1: y, x2: xb, y2: y }));
+    const name = shown(p.name);
+    const t = sv("text", side === "l" ? { x: x0 - 6, y: y + 4, "text-anchor": "end" } : { x: xb + 6, y: y + 4 }, name);
+    t.appendChild(sv("title", {}, (p.direction || "input") + " " + p.name + (widthLabel ? " [" + widthLabel + "]" : "") + (p.description ? ": " + p.description : "")));
+    svg.appendChild(t);
+    if (bus) {
+      const mx = (xa + xb) / 2;
+      svg.appendChild(sv("line", { class: "thin", x1: mx - 4, y1: y + 5, x2: mx + 4, y2: y - 5 }));
+      svg.appendChild(sv("text", { class: "w", x: mx, y: y - 7, "text-anchor": "middle" }, clip(widthLabel, 12)));
+    }
+    if (p.direction === "inout") {
+      const o = side === "l" ? xa + 8 : xb - 8, n = side === "l" ? xb - 8 : xa + 8;
+      const out = side === "l" ? -1 : 1;
+      svg.appendChild(sv("path", { class: "thin", d: "M" + (o - 4 * out) + " " + (y - 4) + " L" + o + " " + y + " L" + (o - 4 * out) + " " + (y + 4) +
+        " M" + (n + 4 * out) + " " + (y - 4) + " L" + n + " " + y + " L" + (n + 4 * out) + " " + (y + 4) }));
+    }
+    const isClock = p.name === cr.clock || (!cr.clock && p.role === "clock");
+    const isReset = p.name === cr.reset || (!cr.reset && p.role === "reset");
+    if (isClock) {
+      const e = side === "l" ? bx : bx2, dx = side === "l" ? 10 : -10;
+      svg.appendChild(sv("path", { class: "thin", d: "M" + e + " " + (y - 7) + " L" + (e + dx) + " " + y + " L" + e + " " + (y + 7) }));
+    }
+    const notes = [];
+    if (isReset && cr.reset) notes.push(resetShort(cr));
+    if (p.timing === "registered" && (p.direction || "input") !== "input") notes.push("reg");
+    if (notes.length) {
+      svg.appendChild(sv("text", side === "l" ? { class: "w", x: bx + (isClock ? 16 : 7), y: y + 4 } : { class: "w", x: bx2 - 7, y: y + 4, "text-anchor": "end" }, notes.join(" ")));
+    }
+  };
+  left.forEach((p, i) => drawPin(p, i, "l"));
+  right.forEach((p, i) => drawPin(p, i, "r"));
+  return svg;
 }
 
-/* ---------------- session view: feed ---------------- */
+/* ---------------- 02 sign-off: checks from the outcome and evidence ---------------- */
+function signoffRows(d) {
+  const o = d.outcome || {};
+  const ev = d.evidence || {};
+  const so = ev.signoff || {};
+  const vc = o.verification_config || {};
+  const stages = stageList(d);
+  const stage = (k) => stages.find((s) => s.key === k) || { status: "pending", detail: "" };
+  const hist = (Array.isArray(ev.attempts) && ev.attempts.length) ? ev.attempts : (o.history || []);
+  const last = hist.length ? hist[hist.length - 1] : null;
+  const sl = String(o.status_line || so.status_line || "");
+  const summary = String((last && last.summary) || stage("verify").detail || "");
+  const live = isLiveDetail(d);
+  const seeds = Array.isArray(vc.seeds) ? vc.seeds.length : 0;
+  const cycles = vc.sim_cycles;
+  const rows = [];
+  const add = (check, detail, res, cls, gateStage) => {
+    if (!res) {
+      const st = stage(gateStage || "verify").status;
+      if (live && st !== "done") res = "pending";
+      else res = "not run";
+    }
+    const rc = cls || ({ pass: "p", fail: "f", bounded: "i", "not run": "i", "n/a": "i", pending: "a" })[res] || "i";
+    rows.push({ check: check, detail: detail, res: res, cls: rc });
+  };
+  const pick = (re) => re.exec(sl) || re.exec(summary);
+
+  // lint
+  let m = /\blint (passed|ok|FAILED|failed|not run)/.exec(sl) || /\blint (ok|failed|passed)/.exec(summary);
+  let res = m ? ({ passed: "pass", ok: "pass", failed: "fail", not: "not run" })[m[1].toLowerCase().split(" ")[0]] : "";
+  if (m && /not run/.test(m[1])) res = "not run";
+  add("lint", "verilator -Wall", res);
+
+  // simulation
+  const simDetail = (n) => (n !== undefined ? n : (seeds ? seeds + " seeds" : "seeds")) + (cycles ? " x " + cycles + " cycles" : "") + " vs reference";
+  m = /simulation passed for (\d+)\/(\d+) seeds x (\d+) cycles/.exec(sl);
+  if (m) {
+    const ok = +m[1] === +m[2];
+    add("simulation", (ok ? m[2] + " seeds" : m[1] + " of " + m[2] + " seeds") + " x " + m[3] + " cycles vs reference", ok ? "pass" : "fail");
+  } else if ((m = /simulation passed for seeds \[([^\]]*)\] x (\d+) cycles/.exec(summary))) {
+    add("simulation", m[1].split(",").length + " seeds x " + m[2] + " cycles vs reference", "pass");
+  } else if (/compile (FAILED|failed)/.test(sl) || /compile failed/.test(summary)) {
+    add("simulation", "iverilog compile failed, " + simDetail(), "fail");
+  } else if (/simulation (FAILED|failed)|simulation mismatch/.test(sl + " " + summary)) {
+    add("simulation", "mismatch, " + simDetail(), "fail");
+  } else {
+    add("simulation", simDetail(), /simulation not run/.test(sl) ? "not run" : "");
+  }
+
+  // reference agreement
+  const cons = o.reference_consensus;
+  if (cons && Array.isArray(cons.references)) {
+    const n = cons.references.length;
+    let mm = 0, cyc = 0;
+    cons.references.forEach((r) => { if (r && r.vs_initial) { mm += Number(r.vs_initial.mismatches) || 0; cyc = Math.max(cyc, Number(r.vs_initial.cycles) || 0); } });
+    const corroborated = /corroborat/.test(String(cons.outcome || ""));
+    const low = String(cons.confidence || "") === "low";
+    let detail = n === 1 ? "1 reference, no second opinion" : (mm ? n + " independent, " + mm + " mismatches in " + cyc + " cycles" : n + " of " + n + " independent");
+    if (low) detail += ", low confidence";
+    add("reference agreement", detail, n < 2 ? "not run" : (corroborated && !low && !mm ? "pass" : (corroborated ? "partial" : "fail")), corroborated && (low || mm) ? "h" : null, "reference");
+  } else {
+    const rd = stage("reference").detail;
+    const rm = /(\d+) reference\(s\)(?:, arbitration: (\w+))?/.exec(rd);
+    if (rm) add("reference agreement", rm[1] === "1" ? "1 reference, no second opinion" : rm[1] + " independent, " + String(rm[2] || "").replace(/_/g, " "),
+      rm[1] === "1" ? "not run" : (/corroborat/.test(rm[2] || "") ? "pass" : ""), null, "reference");
+    else add("reference agreement", "independent references", "", null, "reference");
+  }
+
+  // synthesis
+  m = /synthesis (passed|FAILED|failed|not run)/.exec(sl) || /synthesis (ok|failed)/.exec(summary);
+  res = m ? (/passed|ok/.test(m[1]) ? "pass" : (/not run/.test(m[1]) ? "not run" : "fail")) : "";
+  add("synthesis", "yosys generic", res);
+
+  // formal
+  const f = o.formal || {};
+  const pf = (d.presentation && d.presentation.formal) || {};
+  const info = !!pf.informational;
+  let fstatus = f.status || "";
+  if (!fstatus) { m = /formal BMC(?: depth \d+)?: (\w+)/.exec(sl) || /formal BMC(?: depth \d+)?: (\w+)/.exec(summary); if (m) fstatus = m[1]; else if (/formal not run/.test(sl)) fstatus = "not_run"; }
+  const depth = f.depth || vc.formal_depth;
+  let fres = "";
+  if (/bounded/.test(fstatus)) fres = "bounded";
+  else if (/^(pass|proven|proof|proved)$/.test(fstatus)) fres = "pass";
+  else if (/counterexample|fail|error/.test(fstatus)) fres = "fail";
+  else if (/not_run|skipped/.test(fstatus)) fres = "not run";
+  if (vc.run_formal === false && !fres) fres = "n/a";
+  let fdetail = "bmc" + (depth ? " depth " + depth : "") + (info ? ", optional" : (pf.required ? ", required" : ""));
+  if (f.failed_assert) fdetail += ", assert at " + String(f.failed_assert).replace(/\.\d+-[\d.]+$/, "");
+  add("formal", fdetail, fres, info && fres ? "i" : null);
+
+  // interface: contract ports declared in the rtl
+  const c = d.contract;
+  const rtlText = Object.values(d.rtl || {}).join("\n");
+  if (c && Array.isArray(c.ports) && c.ports.length && rtlText) {
+    const names = c.ports.map((p) => p && p.name).filter(Boolean);
+    const found = names.filter((n) => new RegExp("\\b(input|output|inout)\\b[^;()]*?\\b" + n.replace(/[^\w$]/g, "\\$&") + "\\b").test(rtlText));
+    add("interface", found.length + " of " + names.length + " ports match contract", found.length === names.length ? "pass" : "fail");
+  } else {
+    add("interface", c ? "ports vs contract" : "no contract", "", null, "rtl");
+  }
+
+  add("timing closure", "not in scope", "n/a");
+
+  const withheld = so.withheld_reasons || [];
+  if (withheld.length) rows.push({ check: "sign-off", detail: "withheld: " + withheld.join("; "), res: "needs input", cls: "h", row: "hold" });
+  else if (o.accepted === true && o.provisional) rows.push({ check: "sign-off", detail: "provisional: needs your answer before it is final", res: "needs input", cls: "h", row: "hold" });
+  else if (o.accepted === false) {
+    const reason = String(o.reason || (/Reason: ([^\n]+)/.exec(sl) || [])[1] || "").split("\n")[0];
+    rows.push({ check: "sign-off", detail: "not accepted" + (reason ? ": " + clip(reason, 110) : ""), res: "fail", cls: "f" });
+  }
+  return { rows: rows, attempt: last ? ("attempt " + Math.max(hist.length, (Number(last.attempt) || 0) + 1) + " of " + Math.max(hist.length, (Number(last.attempt) || 0) + 1)) : "" };
+}
+function renderSignoff(d) {
+  const host = clear($("signoff"));
+  const data = signoffRows(d);
+  host.appendChild(el("div", { class: "sub" }, [label("02", "sign-off"), el("span", { class: "label", text: data.attempt })]));
+  const tbody = el("tbody");
+  data.rows.forEach((r) => {
+    tbody.appendChild(el("tr", { class: r.row || null }, [
+      el("td", { text: r.check }),
+      el("td", { class: "d", text: optionalFormalText(r.detail) }),
+      el("td", { class: "r " + r.cls, text: r.res }),
+    ]));
+  });
+  host.appendChild(el("table", { class: "dt so" }, [tbody]));
+}
+
+/* ---------------- 03 pipeline: timing diagram, one lane per stage ---------------- */
+const LANE_STEPS = { intake: ["intake"], review: ["review"], reference: ["reference"], rtl: ["properties", "rtl"], verify: ["verify"], "sign-off": ["report"] };
+function niceStep(total) {
+  const steps = [0.5, 1, 2, 5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
+  return steps.find((s) => total / s <= 5.5) || 14400;
+}
+function tickLabel(t) {
+  if (t >= 120) return (Math.round(t / 6) / 10) + " min";
+  return (Math.round(t * 10) / 10) + " s";
+}
+/* the lane text is a terse form of the stage detail; the full line stays in the tooltip and the evidence */
+function laneDetail(s) {
+  const raw = String(optionalFormalText(s.detail || (s.status === "running" ? "running" : "")) || "").split("\n")[0];
+  let m;
+  if (s.key === "intake" && (m = /^contract v(\d+)(?:, (\d+) requirement)?/.exec(raw))) return "contract v" + m[1] + (m[2] ? " \u00b7 " + m[2] + " req" : "");
+  if (s.key === "review" && (m = /(\d+) correction\(s\) applied/.exec(raw))) return m[1] + (m[1] === "1" ? " correction" : " corrections");
+  if (s.key === "reference" && (m = /^(\d+) reference\(s\)(?:, arbitration: (\w+))?/.exec(raw))) {
+    return m[1] + (m[1] === "1" ? " ref" : " refs") + (m[2] ? " \u00b7 " + m[2].replace(/_/g, " ") : "");
+  }
+  if (s.key === "rtl" && /^module /.test(raw)) return /properties/.test(raw) ? "properties + rtl" : "rtl";
+  if (s.key === "verify" && (m = /^attempt (\d+) of (\d+): (.*)$/.exec(raw))) {
+    const parts = m[3].split(/;\s*/).map((p) => {
+      if (/^lint ok/.test(p)) return "lint";
+      if (/^simulation passed/.test(p)) return "sim";
+      if (/synthesis ok/.test(p)) return "synth";
+      if (/formal|optional formal/.test(p)) return /bounded|pass/.test(p) ? "bmc" : "bmc " + p.replace(/^.*:\s*/, "").replace(/_/g, " ");
+      return p;
+    });
+    return (m[2] !== "1" ? "attempt " + m[1] + " of " + m[2] + " \u00b7 " : "") + parts.join(" \u00b7 ");
+  }
+  return raw;
+}
+function renderPipeline(d) {
+  const host = clear($("pipe"));
+  const stages = stageList(d);
+  const durs = Array.isArray(d.stage_durations) ? d.stage_durations : [];
+  const live = isLiveDetail(d);
+  stages.forEach((s) => {
+    s.secs = durs.filter((t) => (LANE_STEPS[s.key] || []).indexOf(t.stage) >= 0).reduce((a, t) => a + (Number(t.seconds) || 0), 0);
+  });
+  const total = stages.reduce((a, s) => a + s.secs, 0);
+  const hasTime = total > 0.05;
+  const right = hasTime ? (live ? dur(total) + " so far" : total.toFixed(1) + " s total") : "time not recorded";
+  host.appendChild(el("div", { class: "sub" }, [label("03", "pipeline"), el("span", { class: "label", text: right })]));
+
+  /* narrow screens draw at 1:1 in a 660-unit box that scrolls sideways, so labels stay legible */
+  const narrow = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+  const VW = narrow ? 660 : 1000, LX = narrow ? 76 : 110, PX1 = VW - 28, TOP = 6, LANE = 28;
+  const H = TOP + stages.length * LANE + 22;
+  const baseOf = (i) => TOP + (i + 1) * LANE - 4;
+  const svg = sv("svg", { class: "lanes", viewBox: "0 0 " + VW + " " + H, width: narrow ? VW : "100%", role: "img",
+    "aria-label": "pipeline timing diagram: " + stages.map((s) => s.name + " " + s.status).join(", ") });
+  const plot = PX1 - LX;
+  const x = (t) => LX + (hasTime ? (t / total) * plot : t);
+  const lastBase = baseOf(stages.length - 1);
+  if (hasTime) {
+    const step = niceStep(total);
+    for (let t = 0; t <= total + 1e-6; t += step) {
+      const xx = x(t);
+      svg.appendChild(sv("line", { class: "grid", x1: xx, y1: TOP, x2: xx, y2: lastBase + 2 }));
+      svg.appendChild(sv("text", { class: "axis", x: xx, y: H - 4, "text-anchor": t === 0 ? "start" : (xx > PX1 - 30 ? "end" : "middle") }, tickLabel(t)));
+    }
+  }
+  let cursor = 0;
+  const slot = plot / stages.length;
+  stages.forEach((s, i) => {
+    const base = baseOf(i), high = base - 14;
+    svg.appendChild(sv("text", { x: 0, y: base - 3 }, s.name.toLowerCase()));
+    if (s.status === "pending" && !(hasTime && s.secs > 0)) {
+      svg.appendChild(sv("line", { class: "sig pend", x1: LX, y1: base, x2: PX1, y2: base }));
+      return;
+    }
+    let xs, xe;
+    if (hasTime) {
+      xs = x(cursor); cursor += s.secs; xe = x(cursor);
+      if (s.status === "running") xe = x(total);
+    } else {
+      xs = LX + i * slot + 6; xe = LX + (i + 1) * slot - 10;
+      if (s.status === "running") xe = PX1;
+    }
+    xe = Math.max(xe, xs + 6);
+    const tone = ({ done: "pass", running: "run", failed: "fail", withheld: "hold" })[s.status] || "pass";
+    const g = sv("g", { class: tone + (s.status === "running" ? " pulse" : "") });
+    const rise = Math.min(4, (xe - xs) / 3);
+    const running = s.status === "running";
+    g.appendChild(sv("path", { class: "fillp", d: "M" + xs + " " + base + " L" + (xs + rise) + " " + high + " H" + xe + (running ? " V" + base : " L" + (xe + rise) + " " + base) + " Z" }));
+    g.appendChild(sv("path", { class: "sig", d: "M" + LX + " " + base + " H" + xs + " L" + (xs + rise) + " " + high + " H" + xe + (running ? "" : " L" + (xe + rise) + " " + base + " H" + PX1) }));
+    svg.appendChild(g);
+    if (s.status === "failed") {
+      const cx = xe + rise + 6, cy = base - 7;
+      svg.appendChild(sv("path", { class: "x", d: "M" + (cx - 4) + " " + (cy - 4) + " L" + (cx + 4) + " " + (cy + 4) + " M" + (cx + 4) + " " + (cy - 4) + " L" + (cx - 4) + " " + (cy + 4) }));
+    }
+    const detail = laneDetail(s);
+    if (detail) {
+      const after = xe + rise + (s.status === "failed" ? 18 : 8);
+      const roomR = PX1 - after, roomL = xs - 8 - LX;
+      const inside = (xe - xs) > 140 && (Math.max(roomR, roomL) < 140 || (running && roomL < 140));
+      const useRight = !inside && !running && (roomR >= Math.min(roomL, 160) || roomR > 220);
+      const room = inside ? xe - xs - 16 : (useRight ? roomR : roomL);
+      const chars = Math.max(8, Math.floor(room / 6.4));
+      const txt = clip(detail, chars);
+      const pos = inside ? { class: "t", x: xs + rise + 8, y: base - 4 }
+        : (useRight ? { class: "t", x: after, y: base - 4 } : { class: "t", x: xs - 8, y: base - 4, "text-anchor": "end" });
+      const t = sv("text", pos, txt);
+      t.appendChild(sv("title", {}, s.name + ": " + (s.detail || detail)));
+      svg.appendChild(t);
+    }
+  });
+  host.appendChild(el("div", { class: "pipe-scroll", tabindex: narrow ? "0" : null, "aria-label": narrow ? "pipeline diagram, scroll sideways" : null }, [svg]));
+  if (narrow) host.appendChild(el("div", { class: "label", style: "margin-top:6px;text-align:right", text: "scroll sideways for the full timeline" }));
+  const list = el("ul", { class: "vh" });
+  stages.forEach((s) => list.appendChild(el("li", { text: s.name + ": " + s.status + (s.secs ? ", " + dur(s.secs) : "") + (s.detail ? ", " + s.detail : "") })));
+  host.appendChild(list);
+}
+
+/* ---------------- log ---------------- */
 function feedLineNode(line) {
   const n = el("div", { class: "l" + (line.kind ? " l-" + line.kind : "") });
   if (line.t) n.appendChild(el("span", { class: "ts", text: clock(line.t) + " " }));
   const m = /^\[([^\]]{1,40})\]\s*([\s\S]*)$/.exec(line.text || "");
   if (m) {
     n.appendChild(el("span", { class: "role", text: "[" + m[1] + "] " }));
+    if (line.repeats > 1) n.appendChild(el("span", { class: "rep", text: "x " + line.repeats + " " }));
     appendLinkedText(n, optionalFormalText(m[2]));
   } else {
     appendLinkedText(n, optionalFormalText(line.text || ""));
@@ -1272,23 +1663,25 @@ function renderFeed() {
   const shown = S.feedExpanded ? S.feed : S.feed.slice(-FEED_CAP);
   const hidden = total - shown.length;
   $("showEarlier").hidden = hidden <= 0;
-  $("showEarlier").textContent = "Show earlier (" + hidden + ")";
+  $("showEarlier").textContent = "show earlier (" + hidden + ")";
   $("feedNote").textContent = total ? total + (total === 1 ? " line" : " lines") + (hidden > 0 ? ", showing the last " + FEED_CAP : "") : "";
-  $("feedCount").textContent = total ? "(" + total + ")" : "";
+  const count = $("tabCount-log");
+  if (count) count.textContent = total ? String(total) : "";
   if (!total) {
-    box.appendChild(el("div", { class: "hint", text: "Nothing logged yet. Every wait shows its cause here." }));
+    box.appendChild(el("div", { class: "muted", text: "nothing logged yet. every wait shows its cause here." }));
     return;
   }
   const frag = document.createDocumentFragment();
   const grouped = [];
-  shown.forEach(l => { const prev = grouped[grouped.length-1]; if (/^\[checkpoint\]/.test(l.text) && prev && prev.text === l.text) prev.repeats = (prev.repeats || 1)+1; else grouped.push({...l}); });
-  grouped.forEach(l => {
-    if (/sha|tokens|\btok\b|\[model|\[checkpoint/.test(l.text)) {
-      const summary = l.text.startsWith('[checkpoint]') ? 'Checkpoint' + (l.repeats ? ' ('+l.repeats+' repeated)' : '') : 'Build activity';
-      frag.appendChild(el('details', {}, [el('summary', {text:summary}), feedLineNode(l)]));
-    } else frag.appendChild(feedLineNode(l));
+  shown.forEach((l) => {
+    const prev = grouped[grouped.length - 1];
+    if (/^\[checkpoint\]/.test(l.text || "") && prev && /^\[checkpoint\]/.test(prev.text || "")) {
+      prev.repeats = (prev.repeats || 1) + 1; prev.text = l.text; prev.t = l.t;
+    } else grouped.push(Object.assign({}, l));
   });
-  (S.detail?.files || []).filter(p => p.endsWith('evidence.json')).forEach(p => frag.appendChild(el('div', {}, [el('a', {href:artifactURL(p), text:p, target:'_blank', rel:'noopener'})])));
+  grouped.forEach((l) => frag.appendChild(feedLineNode(l)));
+  ((S.detail && S.detail.files) || []).filter((p) => p.endsWith("evidence.json"))
+    .forEach((p) => frag.appendChild(el("div", {}, [el("a", { href: artifactURL(p), text: p, target: "_blank", rel: "noopener" })])));
   box.appendChild(frag);
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
@@ -1314,80 +1707,117 @@ function renderSessionHeader() {
   const d = S.detail || {};
   const sess = currentSession();
   const o = d.outcome || {};
-  $("sessTitle").textContent = (sess && (sess.name || sess.workspace)) || S.current || "session";
-  const chips = clear($("sessChips"));
   const missing = !!d.missing;
+  const module = (!missing && (d.module || (d.contract && d.contract.module_name))) || (sess && sess.module) || S.current || "session";
+  $("sessModule").textContent = module;
+  document.title = "openchip · " + module;
+  $("crumbWs").textContent = S.current || "";
+  $("crumbRun").textContent = d.run_id ? " / run " + String(d.run_id).split("-").slice(0, 2).join("-") : "";
+  $("crumbRun").title = d.run_id || "";
+
   const merged = {
-    state: d.state || (sess && sess.state), alive: d.alive, accepted: o.accepted,
-    withheld_reason: o.withheld_reason || (sess && sess.withheld_reason), result: (sess && !d.state) ? sess.result : null,
+    state: d.state || (sess && sess.state), alive: d.alive, accepted: o.accepted, provisional: !!o.provisional,
+    withheld_reason: ((d.evidence && d.evidence.signoff && d.evidence.signoff.withheld_reasons) || []).join("; ") || (sess && sess.withheld_reason),
+    needs_input: d.presentation ? !!((d.presentation.questions || []).length) && !d.alive : !!(sess && sess.needs_input),
+    result: d.result || ((sess && !d.state) ? sess.result : null),
     previous_result: d.previous_result || null, reason: d.reason || (sess && sess.reason) || "",
   };
-  if (missing) {
-    chips.appendChild(el("span", { class: "pill bad" }, [el("span", { class: "dot" }), document.createTextNode("folder deleted")]));
-  } else {
-    chips.appendChild(resultPill(merged));
-  }
-  if (!missing && d.step && d.step !== "-") chips.appendChild(el("span", { class: "pill", text: "step " + d.step }));
-  if (d.contract_version) chips.appendChild(el("span", { class: "pill", text: "contract v" + d.contract_version }));
-  if (o.provisional) chips.appendChild(el("span", { class: "pill warn" }, [el("span", { class: "dot" }), document.createTextNode("provisional")]));
-
+  if (d.alive) merged.result = null;
   const b = d.budget || o.budget || {};
   const mc = d.model_calls || {};
-  const meta = [];
-  /* While the run is live the only honest elapsed time is wall-clock since it started; the recorded
+  /* while the run is live the only honest elapsed time is wall-clock since it started; the recorded
      budget.elapsed_s is the final figure and only settles when the run ends. */
   let elapsed = b.elapsed_s !== undefined ? b.elapsed_s : d.elapsed_s;
   if (d.alive && typeof d.started === "number") elapsed = Math.max(0, Date.now() / 1000 - d.started);
-  if (typeof elapsed === "number") meta.push("elapsed " + dur(elapsed));
   const calls = mc.count !== undefined ? mc.count : b.model_calls;
-  if (typeof calls === "number") meta.push(calls + " model calls");
-  const tokens = mc.tokens !== undefined ? mc.tokens : b.tokens;
-  if (typeof tokens === "number") meta.push(tokens + " tokens");
-  if (typeof mc.last_latency_s === "number") meta.push("last call " + mc.last_latency_s + " s");
-  if (o.status_line) meta.unshift(o.status_line);
-  if (!meta.length && d.alive) meta.push("working");
-  if (missing) meta.length = 0;
-  if (d.reason) meta.push(d.reason);
-  $("engineeringMeta").textContent = meta.join(" · ");
-  $("sessMeta").textContent = missing ? "This session's folder was deleted" : (d.presentation?.sentence || "Building and checking your design") + " · " + (typeof elapsed === "number" ? dur(elapsed) + " · " : "") + (d.cost_estimate_usd != null ? "Estimated model cost: $" + d.cost_estimate_usd.toFixed(4) : "Cost estimate unavailable; set a token rate in Settings");
+
+  const v = clear($("sessVerdict"));
+  const sep = () => el("span", { class: "sep", text: "|" });
+  if (missing) {
+    v.appendChild(statusNode({ cls: "fail", word: "fail" }));
+    v.appendChild(el("span", { text: "this session's folder was deleted" }));
+  } else {
+    const st = statusOf(merged);
+    v.appendChild(statusNode(st, merged.reason || null));
+    let sentence = (d.presentation && d.presentation.sentence) || (isLiveDetail(d) ? "Building and checking your design" : "");
+    /* the server calls a planned run "building" even when no thread is left working on it */
+    if (!isLiveDetail(d) && resultOf(merged) === "interrupted" && /^building/i.test(sentence)) sentence = "stopped before it finished; resume continues from the last checkpoint";
+    sentence = lower1(sentence);
+    /* the verdict word is already on the line: do not say it twice */
+    const nq = /^needs your answer on (\d+) questions?$/.exec(sentence);
+    if (nq) sentence = nq[1] === "1" ? "1 question for you below" : nq[1] + " questions for you below";
+    if (sentence) v.appendChild(el("span", { text: sentence }));
+    const parts = [];
+    const cv = d.contract_version || (d.contract && d.contract.version);
+    if (cv) parts.push("contract v" + cv);
+    if (typeof elapsed === "number") parts.push(dur(elapsed));
+    if (typeof calls === "number" && calls) parts.push(calls + (calls === 1 ? " call" : " calls"));
+    parts.forEach((p) => { v.appendChild(sep()); v.appendChild(el("span", { text: p })); });
+  }
+  const meta = [];
+  if (!missing) {
+    const tokens = mc.tokens !== undefined ? mc.tokens : b.tokens;
+    if (typeof tokens === "number" && tokens) meta.push(tokens + " tokens");
+    if (typeof mc.last_latency_s === "number") meta.push("last call " + mc.last_latency_s + " s");
+    meta.push(d.cost_estimate_usd !== null && d.cost_estimate_usd !== undefined ? "est. model cost $" + Number(d.cost_estimate_usd).toFixed(4) : "cost estimate needs a token rate in settings");
+    if (d.step && d.step !== "-" && d.step !== "done") meta.push("step " + d.step);
+    if (d.reason) meta.push(clip(d.reason.split("\n")[0], 200));
+  } else {
+    meta.push("the workspace directory " + (S.current || "") + " no longer exists on the server");
+  }
+  $("sessMeta").textContent = meta.join(" · ");
   renderAnswerCard(d);
 
   const acts = clear($("sessActions"));
-  const live = !!d.alive || d.state === "running" || d.state === "planned";
-  const revise = el("button", { class: "btn", text: "Request a change", onclick: () => openModal("reviseScrim", "#change") });
-  revise.disabled = live || missing;
-  if (missing) revise.title = "The workspace folder for this session no longer exists on the server.";
-  else if (live) revise.title = "A change can only be requested when the run is not live.";
-  acts.appendChild(revise);
-  const copy = el("button", {class:"btn", text:"Copy RTL", onclick:async () => {
-    try { await navigator.clipboard.writeText(Object.entries(d.rtl || {}).map(([n,c]) => "// " + n + "\n" + c).join("\n")); toast("RTL copied"); }
-    catch(e) { toast("Clipboard unavailable", "Select and copy the RTL in the RTL tab."); }
-  }});
-  copy.disabled = !Object.keys(d.rtl || {}).length;
+  const live = isLiveDetail(d) || d.state === "running" && d.alive !== false;
+  const copy = el("button", { class: "btn", text: "copy rtl", onclick: async () => {
+    try { await navigator.clipboard.writeText(Object.entries(d.rtl || {}).map(([n, c]) => "// " + n + "\n" + c).join("\n")); toast("rtl copied"); }
+    catch (e) { toast("clipboard unavailable", "select and copy the rtl in the rtl tab."); }
+  } });
+  copy.disabled = missing || !Object.keys(d.rtl || {}).length;
   acts.appendChild(copy);
-  if (!missing) acts.appendChild(el("a", {class:"btn", text:"Download RTL + report + evidence", href:"/api/runs/"+encodeURIComponent(S.current)+"/bundle.zip", download:"openchip-delivery.zip"}));
-  const resumeTarget = sess || { workspace: S.current, state: d.state, alive: d.alive, accepted: o.accepted };
-  if (!missing && isResumable(resumeTarget) && !live) {
-    acts.appendChild(el("button", { class: "btn primary", text: resumeLabel(resumeTarget), onclick: (e) => resumeRun(resumeTarget, e.currentTarget) }));
+  if (!missing) acts.appendChild(el("a", { class: "btn", text: "download", title: "rtl, report and evidence as a zip", href: "/api/runs/" + encodeURIComponent(S.current) + "/bundle.zip", download: "openchip-delivery.zip" }));
+  const revise = el("button", { class: "btn", text: "request a change", onclick: () => openModal("reviseScrim", "#change") });
+  revise.disabled = live || missing;
+  if (missing) revise.title = "the workspace folder for this session no longer exists on the server.";
+  else if (live) revise.title = "a change can only be requested when the run is not live.";
+  acts.appendChild(revise);
+  const resumeTarget = sess ? Object.assign({}, sess, d.state ? { state: d.state, alive: d.alive, result: d.result } : {}) : { workspace: S.current, state: d.state, alive: d.alive, accepted: o.accepted, result: d.result };
+  if (!missing && !live && d.state && isResumable(resumeTarget)) {
+    acts.appendChild(el("button", { class: "btn", style: "border-color:var(--accent);color:var(--accent)", text: resumeLabel(resumeTarget), onclick: (e) => resumeRun(resumeTarget, e.currentTarget) }));
   }
 }
 const TABS = [
-  { id: "contract", label: "Contract" },
-  { id: "rtl", label: "RTL" },
-  { id: "report", label: "Report" },
-  { id: "evidence", label: "Evidence" },
-  { id: "diff", label: "Contract changes" },
-  { id: "request", label: "Request" },
+  { id: "rtl", n: "04", label: "rtl" },
+  { id: "contract", n: "05", label: "contract" },
+  { id: "evidence", n: "06", label: "evidence" },
+  { id: "diff", n: "07", label: "changes" },
+  { id: "request", n: "08", label: "request" },
+  { id: "log", n: "09", label: "log" },
 ];
+function activeTab() {
+  if (S.tab) return S.tab;
+  const d = S.detail || {};
+  if (isLiveDetail(d)) return "log";
+  if (Object.keys(d.rtl || {}).length) return "rtl";
+  if (d.contract_md) return "contract";
+  return (S.feed.length || (d.events || []).length) ? "log" : "request";
+}
+function pickTab(id, focus) {
+  S.tab = id;
+  renderTabs();
+  renderPane();
+  if (focus) { const b = $("tab-" + id); if (b) b.focus(); }
+}
 function renderTabs() {
   const host = clear($("tabs"));
-  TABS.forEach((t) => {
+  const cur = activeTab();
+  TABS.forEach((t, i) => {
     host.appendChild(el("button", {
-      role: "tab", id: "tab-" + t.id, "aria-selected": S.tab === t.id ? "true" : "false",
-      tabindex: S.tab === t.id ? "0" : "-1", text: t.label,
-      onclick: () => { S.tab = t.id; renderTabs(); renderPane(); },
+      role: "tab", id: "tab-" + t.id, "aria-selected": cur === t.id ? "true" : "false",
+      "aria-controls": t.id === "log" ? "logPane" : "pane", tabindex: cur === t.id ? "0" : "-1",
+      onclick: () => pickTab(t.id),
       onkeydown: (e) => {
-        const i = TABS.findIndex((x) => x.id === S.tab);
         let n = -1;
         if (e.key === "ArrowRight") n = (i + 1) % TABS.length;
         if (e.key === "ArrowLeft") n = (i - 1 + TABS.length) % TABS.length;
@@ -1395,125 +1825,123 @@ function renderTabs() {
         if (e.key === "End") n = TABS.length - 1;
         if (n < 0) return;
         e.preventDefault();
-        S.tab = TABS[n].id;
-        renderTabs();
-        renderPane();
-        const b = $("tab-" + S.tab);
-        if (b) b.focus();
+        pickTab(TABS[n].id, true);
       },
-    }));
+    }, [el("b", { text: t.n }), t.label, t.id === "log" ? el("small", { id: "tabCount-log", text: S.feed.length ? String(S.feed.length) : "" }) : null]));
   });
-  $("pane").setAttribute("aria-labelledby", "tab-" + S.tab);
+  $("pane").setAttribute("aria-labelledby", "tab-" + cur);
+  $("logPane").setAttribute("aria-labelledby", "tab-log");
 }
 function emptyPane(title, body) {
   return el("div", { class: "empty" }, [el("div", { class: "t", text: title }), el("div", { text: body })]);
 }
-function listBlock(title, items, renderItem) {
+function listBlock(title, items) {
   const arr = Array.isArray(items) ? items : [];
-  const box = el("section", { style: "margin-top:16px" }, [el("h3", { text: title + " (" + arr.length + ")" })]);
-  if (!arr.length) { box.appendChild(el("p", { class: "hint", text: "None recorded." })); return box; }
+  const box = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: title }), el("span", { class: "label", text: String(arr.length) })])]);
+  if (!arr.length) { box.appendChild(el("p", { class: "hint", text: "none recorded." })); return box; }
   const ul = el("ul");
-  arr.forEach((it) => ul.appendChild(el("li", {}, [renderItem ? renderItem(it) : document.createTextNode(typeof it === "string" ? it : JSON.stringify(it))])));
+  arr.forEach((it) => ul.appendChild(el("li", { text: typeof it === "string" ? it : (it.text || it.detail || JSON.stringify(it)) })));
   box.appendChild(ul);
   return box;
 }
 function renderEvidence(d) {
   const pane = el("div");
-  const f = d.presentation?.formal;
-  if (f) pane.appendChild(el("p", {class:"hint", text:(f.informational ? "Optional formal check (information): " : "Formal check: ") + f.status + ". Bounded checks do not establish a full proof."}));
-  (d.files || []).filter(p => p.endsWith('evidence.json')).forEach(p => pane.appendChild(el("p", {}, [el("a", {href:artifactURL(p), target:"_blank", rel:"noopener", text:p})])));
+  const f = d.presentation && d.presentation.formal;
+  if (f) pane.appendChild(el("p", { class: "hint mono", text: (f.informational ? "optional formal check (information): " : "formal check: ") + String(f.status).replace(/_/g, " ") + ". bounded checks do not establish a full proof." }));
   const ev = d.evidence;
   if (!ev) {
-    pane.appendChild(emptyPane("No evidence yet", "Verification artefacts and the sign-off decision appear here once the run reaches verification. This server did not report an evidence block."));
+    pane.appendChild(emptyPane("no evidence yet", "verification artefacts and the sign-off decision appear here once the run reaches verification."));
     return pane;
   }
   const attempts = Array.isArray(ev.attempts) ? ev.attempts : [];
-  pane.appendChild(el("h3", { text: "Verification attempts (" + attempts.length + ")" }));
-  if (!attempts.length) {
-    pane.appendChild(el("p", { class: "hint", text: "No attempt recorded yet." }));
-  } else {
+  const sect = el("section", { class: "ev-sect", style: "margin-top:8px" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "verification attempts" }), el("span", { class: "label", text: String(attempts.length) })])]);
+  if (!attempts.length) sect.appendChild(el("p", { class: "hint", text: "no attempt recorded yet." }));
+  else {
     const rows = attempts.map((a, i) => {
-      const checks = a.checks || a.results || {};
-      const summary = typeof checks === "object"
-        ? Object.keys(checks).map((k) => k + ": " + (typeof checks[k] === "object" ? (checks[k].ok === undefined ? JSON.stringify(checks[k]) : (checks[k].ok ? "pass" : "fail")) : checks[k])).join(", ")
-        : String(checks);
-      /* The runner records {attempt: 0-based, accepted, summary, stage, signature}. */
       const n = (typeof a.attempt === "number") ? a.attempt + 1 : (Number(a.attempt) >= 0 ? Number(a.attempt) + 1 : i + 1);
-      const verdict = (a.accepted === true) ? "accepted"
-        : (a.accepted === false ? "rejected" : (a.status || a.result || a.stage || ""));
-      const detail = optionalFormalText(a.summary || a.detail || a.reason || summary || a.stage || "");
+      const verdict = a.accepted === true ? "pass" : (a.accepted === false ? "fail" : (a.status || a.result || a.stage || ""));
+      const detail = optionalFormalText(a.summary || a.detail || a.reason || a.stage || "");
+      const evPath = (d.files || []).find((p) => p === "verification/attempts/attempt_" + (n - 1) + "/evidence.json");
       return el("tr", {}, [
-        el("td", { text: String(n) }),
-        el("td", { text: verdict }),
-        el("td", { text: String(detail) }),
+        el("td", { style: "width:32px", text: String(n) }),
+        el("td", { class: "d" }, [String(detail), evPath ? el("span", {}, ["  ", el("a", { href: artifactURL(evPath), target: "_blank", rel: "noopener", text: "evidence.json" })]) : null]),
+        el("td", { class: "r " + (verdict === "pass" ? "p" : verdict === "fail" ? "f" : "i"), text: verdict }),
       ]);
     });
-    pane.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "t" }, [
-      el("thead", {}, [el("tr", {}, [el("th", { text: "Attempt" }), el("th", { text: "Result" }), el("th", { text: "Detail" })])]),
-      el("tbody", {}, rows),
-    ])]));
+    sect.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt so" }, [el("tbody", {}, rows)])]));
   }
+  pane.appendChild(sect);
   const so = ev.signoff || {};
-  const sect = el("section", { style: "margin-top:16px" }, [el("h3", { text: "Sign-off" })]);
-  const tone = so.accepted === true ? "ok" : (so.accepted === false ? "warn" : "");
-  sect.appendChild(el("div", { class: "row" }, [
-    el("span", { class: "pill " + tone }, [el("span", { class: "dot" }),
-      document.createTextNode(so.accepted === true ? "accepted" : (so.accepted === false ? "not accepted" : "no decision yet"))]),
-  ]));
+  const signs = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "sign-off decision" })])]);
+  const st = so.accepted === true ? (so.provisional ? { cls: "hold", word: "provisional" } : { cls: "pass", word: "accepted" })
+    : (so.accepted === false ? { cls: "hold", word: "not accepted" } : { cls: "stop", word: "no decision yet" });
+  signs.appendChild(el("div", {}, [statusNode(st)]));
+  if (so.status_line) signs.appendChild(el("p", { class: "hint mono", style: "margin-top:8px;overflow-wrap:anywhere", text: optionalFormalText(so.status_line) }));
   const reasons = so.withheld_reasons || so.reasons || [];
   if (reasons.length) {
     const ul = el("ul");
-    reasons.forEach((r) => ul.appendChild(el("li", { text: typeof r === "string" ? r : JSON.stringify(r) })));
-    sect.appendChild(ul);
+    reasons.forEach((r) => ul.appendChild(el("li", { class: "h", text: typeof r === "string" ? r : JSON.stringify(r) })));
+    signs.appendChild(ul);
   } else if (so.accepted === false) {
-    sect.appendChild(el("p", { class: "hint", text: "No reason was recorded, which itself is a gap worth reporting." }));
+    signs.appendChild(el("p", { class: "hint", text: "no withheld reason was recorded; the status line above is the whole record." }));
   }
-  pane.appendChild(sect);
-  pane.appendChild(listBlock("Unresolved", ev.unresolved, (it) => document.createTextNode(typeof it === "string" ? it : (it.text || it.detail || JSON.stringify(it)))));
-  pane.appendChild(listBlock("Assumptions", ev.assumptions, (it) => document.createTextNode(typeof it === "string" ? it : (it.text || it.detail || JSON.stringify(it)))));
-  pane.appendChild(listBlock("Escalations", ev.escalations, (it) => document.createTextNode(typeof it === "string" ? it : (it.text || it.detail || JSON.stringify(it)))));
+  pane.appendChild(signs);
+  pane.appendChild(listBlock("unresolved", ev.unresolved));
+  pane.appendChild(listBlock("assumptions", ev.assumptions));
+  pane.appendChild(listBlock("escalations", ev.escalations));
+  const files = (d.files || []).filter((p) => /^reports\/|evidence\.json$/.test(p));
+  if (files.length) {
+    const fs = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "files" })])]);
+    files.forEach((p) => fs.appendChild(el("div", { class: "mono", style: "font-size:12.5px" }, [el("a", { href: artifactURL(p), target: "_blank", rel: "noopener", text: p })])));
+    pane.appendChild(fs);
+  }
+  const rep = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "report" })])]);
+  if (d.report_md) { const m = el("div", { class: "md" }); m.innerHTML = md(d.report_md); rep.appendChild(m); }
+  else rep.appendChild(el("p", { class: "hint", text: "the report is written when the run ends, and every claim in it is tied to a tool result." }));
+  pane.appendChild(rep);
   return pane;
 }
 function renderPane() {
   const host = clear($("pane"));
   const d = S.detail;
-  if (!d) { host.appendChild(el("p", { class: "hint", text: "Loading the session." })); return; }
-  if (d.missing) {
-    host.appendChild(emptyPane("This session's folder was deleted",
-      "The workspace directory " + d.workspace + " no longer exists on the server, so there is nothing left to open or resume."));
+  const tab = activeTab();
+  const gone = !!(d && d.missing);
+  $("logPane").hidden = gone || tab !== "log";
+  host.hidden = !gone && tab === "log";
+  if (!d) { host.appendChild(el("p", { class: "hint", text: "loading the session." })); return; }
+  if (gone) {
+    host.appendChild(emptyPane("this session's folder was deleted",
+      "the workspace directory " + d.workspace + " no longer exists on the server, so there is nothing left to open or resume."));
     return;
   }
-  if (S.tab === "contract") {
-    if (d.contract_md) host.innerHTML = md(d.contract_md);
-    else host.appendChild(emptyPane("No contract yet", "The contract appears as soon as intake and review finish. It is the reviewable statement of what will be built."));
+  if (tab === "log") { renderFeed(); return; }
+  if (tab === "contract") {
+    if (d.contract_md) { const m = el("div", { class: "md" }); m.innerHTML = md(d.contract_md); host.appendChild(m); }
+    else host.appendChild(emptyPane("no contract yet", "the contract appears as soon as intake and review finish. it is the reviewable statement of what will be built."));
     return;
   }
-  if (S.tab === "rtl") {
+  if (tab === "rtl") {
     const files = d.rtl || {};
     const names = Object.keys(files);
-    if (!names.length) { host.appendChild(emptyPane("No RTL yet", "RTL is written after the independent reference model exists.")); return; }
+    if (!names.length) { host.appendChild(emptyPane("no rtl yet", "rtl is written after the independent reference model exists.")); return; }
     names.forEach((n) => {
-      host.appendChild(el("h3", { class: "mono", text: n }));
-      host.appendChild(el("pre", {}, [el("code", { text: files[n] })]));
+      if (names.length > 1) host.appendChild(el("div", { class: "file-h", text: n }));
+      host.appendChild(codeBlock(files[n], true));
     });
     return;
   }
-  if (S.tab === "report") {
-    if (d.report_md) host.innerHTML = md(d.report_md);
-    else host.appendChild(emptyPane("No report yet", "The report is written when the run ends, and every claim in it is tied to a tool result."));
-    return;
-  }
-  if (S.tab === "diff") { host.appendChild(el("pre", {text:d.contract_diff || "No previous contract version to compare."})); return; }
-  if (S.tab === "evidence") { host.appendChild(renderEvidence(d)); return; }
-  if (S.tab === "request") {
-    host.appendChild(el("pre", {}, [el("code", { text: d.request || (currentSession() || {}).request || "" })]));
-    return;
+  if (tab === "diff") { const diff = d.contract_diff || "no previous contract version to compare.";
+    host.appendChild(diffBlock(/^---/.test(diff) ? diff : lower1(diff))); return; }
+  if (tab === "evidence") { host.appendChild(renderEvidence(d)); return; }
+  if (tab === "request") {
+    host.appendChild(el("pre", { class: "code", style: "white-space:pre-wrap", text: d.request || (currentSession() || {}).request || "" }));
   }
 }
 
 /* ---------------- views and routing ---------------- */
 function showHome() {
   S.current = null;
+  document.title = "openchip";
   $("sessionView").hidden = true;
   $("homeView").hidden = false;
   renderRail();
@@ -1524,26 +1952,29 @@ function showHome() {
 function showSession() {
   $("homeView").hidden = true;
   $("sessionView").hidden = false;
-  renderTabs();
+  const d = S.detail;
+  const gone = !!(d && d.missing);
   renderSessionHeader();
-  const gone = !!(S.detail && S.detail.missing);
-  // A deleted session says one thing and nothing else: no blocker, no activity, no progress.
+  // a deleted session says one thing and nothing else: no blocker, no symbol, no progress, no log.
   $("blocker").hidden = gone;
-  $("feedBox").hidden = gone;
-  if (!gone) renderBlocker();
-  renderProviderPill($("railProvider"));
-  renderStages();
+  $("pair").hidden = gone || !d;
+  $("pipe").hidden = gone || !d;
+  $("tabs").hidden = gone;
+  renderBlocker();
+  if (d && !gone) { renderInterface(d); renderSignoff(d); renderPipeline(d); }
+  renderRailFoot();
+  renderTabs();
   if (!gone) renderFeed();
   renderPane();
+}
+function resetSessionState(ws) {
+  S.current = ws;
+  S.detail = null; S.logSeen = 0; S.feed = []; S.feedExpanded = false; S.tab = null;
 }
 function openSession(ws) {
   if (!ws) return;
   if (location.hash !== "#/s/" + ws) { location.hash = "#/s/" + ws; return; }   // onhashchange continues
-  S.current = ws;
-  S.detail = null;
-  S.logSeen = 0;
-  S.feed = [];
-  S.feedExpanded = false;
+  resetSessionState(ws);
   $("rail").classList.add("collapsed");
   $("railToggle").setAttribute("aria-expanded", "false");
   showSession();
@@ -1554,10 +1985,9 @@ function applyHash() {
   const m = /^#\/s\/(.+)$/.exec(location.hash || "");
   if (m) {
     const ws = decodeURIComponent(m[1]);
-    if (S.current !== ws) {
-      S.current = ws;
-      S.detail = null; S.logSeen = 0; S.feed = []; S.feedExpanded = false;
-    }
+    if (S.current !== ws) resetSessionState(ws);
+    $("rail").classList.add("collapsed");
+    $("railToggle").setAttribute("aria-expanded", "false");
     showSession();
     renderRail();
     schedule(0);
@@ -1566,12 +1996,18 @@ function applyHash() {
   }
 }
 window.addEventListener("hashchange", applyHash);
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (S.current && S.detail && !S.detail.missing) renderPipeline(S.detail); }, 150);
+});
 
 /* ---------------- loaders ---------------- */
 function sessionsFromStatus(st) {
   const runs = (st && st.runs) || [];
   return runs.map((r) => ({
-    workspace: r.workspace, name: r.workspace, request: r.request || "", created: r.created || r.updated,
+    workspace: r.workspace, name: r.workspace, module: r.module || r.workspace, intent: r.intent || (r.request || "").split("\n")[0],
+    request: r.request || "", created: r.created || r.updated,
     updated: r.updated, state: r.state, step: r.step, accepted: r.accepted, alive: r.alive,
     withheld_reason: r.withheld_reason, resumable: r.resumable, result: r.result,
   }));
@@ -1598,21 +2034,24 @@ async function loadSessions() {
 }
 async function loadDetail() {
   if (!S.current) return;
+  const ws = S.current;
   let d;
   try {
-    d = await api("/api/runs/" + encodeURIComponent(S.current) + "?since=" + S.logSeen);
+    d = await api("/api/runs/" + encodeURIComponent(ws) + "?since=" + S.logSeen);
   } catch (e) {
+    if (S.current !== ws) return;
     if (e.status === 404) {
-      // The workspace directory was deleted: say so once, disable the actions, and stop polling it.
-      S.detail = { workspace: S.current, missing: true };
+      // the workspace directory was deleted: say so once, disable the actions, and stop polling it.
+      S.detail = { workspace: ws, missing: true };
       S.feed = [];
       showSession();
       if (S.timer) { clearTimeout(S.timer); S.timer = null; }
       return;
     }
-    if (!S.detail) toast("Could not load the session", e.message);
+    if (!S.detail) toast("could not load the session", e.message);
     return;
   }
+  if (S.current !== ws) return;                           // the user moved on while this was in flight
   S.detail = d;
   if (d.provider && d.provider.kind) S.provider = d.provider;
   const logs = Array.isArray(d.logs) ? d.logs : [];
@@ -1645,8 +2084,8 @@ async function cycle() {
     else { renderReadiness(); renderHomeSessions(); }
   } catch (e) {
     if (e.offline) {
-      S.provider = { kind: "unreachable", message: "The OpenChip server is not answering on this port.", provider: (S.status && S.status.settings && S.status.settings.provider) || null };
-      renderProviderPill($("railProvider"));
+      S.provider = { kind: "unreachable", message: "the openchip server is not answering on this port.", provider: (S.status && S.status.settings && S.status.settings.provider) || null };
+      renderRailFoot();
       renderBlocker();
     }
   } finally {
@@ -1658,12 +2097,18 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) { if (S.timer) { clearTimeout(S.timer); S.timer = null; } }
   else schedule(0);
 });
+/* the rate-limit and usage-limit countdowns tick every second, between polls */
+setInterval(() => {
+  if (document.hidden || !S.provider || !S.provider.until) return;
+  renderRailFoot();
+  if (S.current) renderBlocker(); else renderReadiness();
+}, 1000);
 
 /* ---------------- actions ---------------- */
 async function startRun() {
   const req = $("request").value.trim();
   if (/^\//.test(req)) { renderPalette(); return; }
-  if (req.length < 20) { toast("The request is too short", "Describe ports, reset and per-clock behaviour in at least a sentence (20 characters minimum)."); $("request").focus(); return; }
+  if (req.length < 20) { toast("the request is too short", "describe ports, reset and per-clock behaviour in at least a sentence (20 characters minimum)."); $("request").focus(); return; }
   const btn = $("startBtn");
   btn.disabled = true;
   try {
@@ -1673,71 +2118,81 @@ async function startRun() {
     if (r && r.workspace) openSession(r.workspace);
     else showHome();
   } catch (e) {
-    toast("The run was refused", e.message);
+    toast("the run was refused", e.message);
   } finally {
     btn.disabled = false;
   }
 }
 async function submitRevise() {
   const c = $("change").value.trim();
-  if (c.length < 10) { toast("Describe the change", "At least a sentence, so the new contract version is unambiguous."); return; }
+  if (c.length < 10) { toast("describe the change", "at least a sentence, so the new contract version is unambiguous."); return; }
   const btn = $("reviseBtn");
   btn.disabled = true;
   try {
     await api("/api/runs/" + encodeURIComponent(S.current) + "/revise", { change: c, budget_s: 1200 });
     closeModal("reviseScrim");
     $("change").value = "";
-    S.feed = []; S.logSeen = 0;
+    S.feed = []; S.logSeen = 0; S.tab = null;
     await loadDetail();
     schedule(0);
   } catch (e) {
-    toast("The change was refused", e.message);
+    toast("the change was refused", e.message);
   } finally {
     btn.disabled = false;
   }
 }
 
 function optionalFormalText(text) {
-  return S.detail?.presentation?.formal?.informational ? String(text).replace(/formal BMC(?: depth \d+)?\s*:/gi, 'optional formal check (information):') : text;
+  return S.detail && S.detail.presentation && S.detail.presentation.formal && S.detail.presentation.formal.informational
+    ? String(text).replace(/formal BMC(?: depth \d+)?\s*:/gi, "optional formal check (information):") : text;
 }
 function appendLinkedText(node, text) {
-  String(text).split(/(\s+)/).forEach(word => {
-    const path = (S.detail?.files || []).find(p => word === p || word.endsWith('/'+p));
-    node.appendChild(path ? el('a', {href:artifactURL(path),text:path,target:'_blank',rel:'noopener'}) : document.createTextNode(word));
+  const files = (S.detail && S.detail.files) || [];
+  String(text).split(/(\s+)/).forEach((word) => {
+    const path = files.find((p) => word === p || word.endsWith("/" + p));
+    node.appendChild(path ? el("a", { href: artifactURL(path), text: path, target: "_blank", rel: "noopener" }) : document.createTextNode(word));
   });
 }
-const artifactURL = p => "/api/runs/"+encodeURIComponent(S.current)+"/artifact?path="+encodeURIComponent(p);
-let answerKey = '';
+const artifactURL = (p) => "/api/runs/" + encodeURIComponent(S.current) + "/artifact?path=" + encodeURIComponent(p);
+let answerKey = "";
 function renderAnswerCard(d) {
-  const qs = d.presentation?.questions || [];
-  const host = $('answerCard'); host.hidden = !qs.length || d.alive;
-  const key = JSON.stringify([S.current,d.run_id,qs]);
+  const qs = (d.presentation && d.presentation.questions) || [];
+  const host = $("answerCard");
+  host.hidden = !qs.length || !!d.alive || !!d.missing;
+  const key = JSON.stringify([S.current, d.run_id, qs]);
   if (answerKey === key) return;
   answerKey = key; clear(host);
-  host.appendChild(el('h3', {text:'What I need from you'}));
-  qs.forEach((q,i) => {host.appendChild(el('label', {for:'answer-'+i,text:q})); host.appendChild(el('textarea',{id:'answer-'+i,rows:'2'}));});
-  host.appendChild(el('button',{class:'btn primary',text:'Apply answers and re-verify',onclick:async e => {
-    const answers=qs.map((q,i)=>$('answer-'+i).value.trim());
-    if(answers.some(a=>!a)) {toast('Please answer each question'); return;}
-    $('change').value=qs.map((q,i)=>'Question: '+q+'\nAnswer: '+answers[i]).join('\n\n');
-    e.currentTarget.disabled=true;
-    try {await submitRevise();} finally {$("answerCard").querySelector("button").disabled=false;}
-  }}));
+  if (!qs.length) return;
+  host.appendChild(el("div", { class: "sub", style: "margin-bottom:4px" }, [
+    el("span", { class: "st hold" }, [glyph("hold"), el("span", { class: "label h", style: "color:var(--hold)", text: "what i need from you" })]),
+    el("span", { class: "label", text: qs.length + (qs.length === 1 ? " question" : " questions") }),
+  ]));
+  qs.forEach((q, i) => {
+    host.appendChild(el("label", { class: "q", for: "answer-" + i, style: "display:block", text: q }));
+    host.appendChild(el("textarea", { class: "box", id: "answer-" + i, rows: "2" }));
+  });
+  host.appendChild(el("div", { class: "btns", style: "margin-top:12px" }, [el("button", { class: "btn", style: "border-color:var(--ink)", text: "apply answers and re-verify", onclick: async (e) => {
+    const answers = qs.map((q, i) => $("answer-" + i).value.trim());
+    if (answers.some((a) => !a)) { toast("please answer each question"); return; }
+    $("change").value = qs.map((q, i) => "Question: " + q + "\nAnswer: " + answers[i]).join("\n\n");
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try { await submitRevise(); } finally { btn.disabled = false; }
+  } })]));
 }
 
 /* ---------------- wiring ---------------- */
-$("newBtn").addEventListener("click", () => { location.hash = ""; showHome(); $("request").focus(); });
-$("backBtn").addEventListener("click", () => { location.hash = ""; showHome(); });
-$("settingsBtn").addEventListener("click", () => openSettings());
+$("brandHome").addEventListener("click", (e) => { e.preventDefault(); location.hash = "#/"; showHome(); });
+$("backBtn").addEventListener("click", (e) => { e.preventDefault(); location.hash = "#/"; showHome(); });
+$("newBtn").addEventListener("click", () => { location.hash = "#/"; showHome(); $("rail").classList.add("collapsed"); $("request").focus(); });
 $("startBtn").addEventListener("click", startRun);
 $("reviseBtn").addEventListener("click", submitRevise);
-$("saveBtn").addEventListener("click", async () => { try { await saveSettings(false); renderSettingsFields(); renderToolchain(); } catch (e) { toast("Could not save the settings", e.message); } });
+$("saveBtn").addEventListener("click", async () => { try { await saveSettings(false); renderSettingsFields(); renderToolchain(); } catch (e) { toast("could not save the settings", e.message); } });
 $("testBtn").addEventListener("click", testConnection);
 $("showEarlier").addEventListener("click", () => { S.feedExpanded = true; renderFeed(); });
 $("search").addEventListener("input", (e) => { S.filter = e.target.value; renderRail(); });
 $("railToggle").addEventListener("click", () => {
-  const rail = $("rail");
-  const open = rail.classList.toggle("collapsed") === false;
+  const open = $("rail").classList.toggle("collapsed") === false;
   $("railToggle").setAttribute("aria-expanded", open ? "true" : "false");
 });
 $("request").addEventListener("input", () => { palIndex = 0; renderPalette(); });
@@ -1755,7 +2210,7 @@ document.addEventListener("keydown", (e) => {
 /* ---------------- boot ---------------- */
 (async function boot() {
   renderRail();
-  try { await loadStatus(); } catch (e) { toast("Cannot reach the OpenChip server", e.message); }
+  try { await loadStatus(); } catch (e) { toast("cannot reach the openchip server", e.message); }
   await loadSessions();
   renderRail();
   applyHash();          // restores the open session from #/s/<workspace> after a refresh

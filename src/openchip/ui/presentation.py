@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import re
 from pathlib import Path
 
 
@@ -50,3 +51,92 @@ def contract_diff(spec: list[Path]) -> str:
     return "".join(difflib.unified_diff(before.read_text().splitlines(True),
                                        after.read_text().splitlines(True),
                                        fromfile=before.name, tofile=after.name)) or "No text changes."
+
+
+def latest_contract(spec_dir: Path) -> dict | None:
+    """The newest `contract.v<N>.json` in the spec folder, parsed, or None when there is none or it is unreadable."""
+    import json
+    import re
+
+    def version(p: Path) -> int:
+        m = re.search(r"\.v(\d+)$", p.stem)
+        return int(m.group(1)) if m else -1
+
+    files = sorted((p for p in spec_dir.glob("contract.v*.json") if version(p) >= 0), key=version) if spec_dir.is_dir() else []
+    for path in reversed(files):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+_INTENT_MAX = 90
+_BOILERPLATE = (
+    # VerilogEval-style preamble
+    r"I\s+would\s+like\s+you\s+to\s+implement\s+a\s+module\s+(?:named|called)\s+`?\w+`?\s+with\s+the\s+following\s+interface\s*\.",
+    r"All\s+input\s+and\s+output\s+ports\s+are\s+one\s+bit\s+unless\s+otherwise\s+specified\s*\.",
+)
+_NAMED_PREFIX = re.compile(
+    r"^\s*(?:please\s+)?(?:create|implement|design|write|build|make)\s+(?P<what>.*?)\s*(?:named|called)\s+`?(?P<name>\w+)`?\s*[.:,;]?\s*",
+    re.IGNORECASE | re.DOTALL)
+_PORT_LINE = re.compile(r"^\s*(?:[-*]\s*)?(?:input|output|inout)\b", re.IGNORECASE)
+_MODULE_NAMED = re.compile(r"\b(?:module|system)\s+(?:named|called)\s+`?(\w+)`?", re.IGNORECASE)
+
+
+def _clip(text: str, limit: int = _INTENT_MAX) -> str:
+    text = " ".join(text.split()).strip(" .:;,")
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return cut + "…"
+
+
+def _first_sentence(text: str) -> str:
+    # a colon at the end of a line or a blank line ends the lead sentence (a list or diagram follows)
+    text = re.split(r":[ \t]*\n|\n[ \t]*\n", text.strip(), maxsplit=1)[0]
+    text = " ".join(text.split())
+    for m in re.finditer(r"[.!?]\s+", text):
+        if not re.search(r"\b(?:e\.g|i\.e|etc|vs)\.$", text[: m.start() + 1], re.IGNORECASE):
+            return text[: m.start()]
+    return text
+
+
+def request_intent(request: str) -> str:
+    """One line of what the request asks for, with the prompt boilerplate stripped."""
+    text = (request or "").replace("\r\n", "\n")
+    for pattern in _BOILERPLATE:
+        text = re.sub(pattern, " ", text, flags=re.IGNORECASE)
+    lead = ""
+    m = _NAMED_PREFIX.match(text)
+    if m:
+        what = re.sub(r"^(?:an?|the)\s+", "", m.group("what").strip(), flags=re.IGNORECASE)
+        what = re.sub(r"\s*\bmodule$", "", what, flags=re.IGNORECASE).strip()
+        if what and what.lower() not in {"module", "verilog module", "a module"}:
+            lead = what
+        text = text[m.end():]
+    lines = [ln for ln in text.split("\n") if ln.strip() and not _PORT_LINE.match(ln)
+             and not re.match(r"^\s*#", ln)]
+    body = _first_sentence("\n".join(lines))
+    body = re.sub(r"^the\s+module\s+(?:(?:should|shall|must|will)\s+)?(?:implements?|is|be)\s+", "", body, flags=re.IGNORECASE)
+    body = re.sub(r"^(?:an?|the)\s+", "", body, flags=re.IGNORECASE)
+    if lead:
+        return _clip(lead)
+    if body.strip(" .:;,"):
+        return _clip(body)
+    first = next((ln for ln in (request or "").splitlines() if ln.strip()), "")
+    return _clip(first)
+
+
+def session_identity(contract: dict | None, request: str, workspace: str) -> dict:
+    """`module` and `intent` for a session row: the contract first, then the request, then the folder."""
+    contract = contract or {}
+    module = str(contract.get("module_name") or "").strip()
+    if not module:
+        m = _MODULE_NAMED.search(request or "")
+        module = m.group(1) if m else workspace
+    purpose = str(contract.get("purpose") or "").strip()
+    intent = _clip(_first_sentence(purpose)) if purpose else request_intent(request)
+    return {"module": module, "intent": intent}
