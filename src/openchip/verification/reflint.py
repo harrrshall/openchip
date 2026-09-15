@@ -47,7 +47,8 @@ def main() -> int:
 
         def rand_vec():
             v = {p["name"]: rng.getrandbits(p["width"]) for p in data_in}
-            v[cr["reset"]] = rst_inactive
+            if cr.get("reset"):  # a null reset means the design has no reset port to pass
+                v[cr["reset"]] = rst_inactive
             v[cr["clock"]] = 0
             return v
 

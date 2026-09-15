@@ -57,6 +57,7 @@ class WaveformTrace:
     columns: tuple[str, ...]  # non-time columns, clock included, request order
     samples: tuple[tuple[int | None, ...], ...]  # None = don't-care / undefined
     source: str
+    times: tuple[str, ...] = ()  # the printed timestamp of each sample, verbatim ("45ns")
 
 
 def _names_each_bit_once(table: RequestTable) -> bool:
@@ -143,30 +144,242 @@ def _slice_name(port: str, members: tuple[tuple[int, TableVar], ...]) -> str:
     return f"{port}[{max(v.bit or 0 for _, v in members)}:0]"
 
 
-def render_trace(trace: WaveformTrace) -> str:
-    """Posedge observations from `trace`, for pasting into a prompt.
+@dataclass(frozen=True)
+class OutputTiming:
+    """How one output column of a clocked dump behaves, read off the dump."""
 
-    `Reference.step` returns outputs as seen just before the edge, then updates state. A dump
-    sample at clock 0→1 is that observation. Mid-cycle and falling-edge samples are omitted so
-    the model is not asked to invent a dual-edge contract the checker will not enforce.
-    """
+    name: str
+    kind: str  # posedge | negedge | latch_high | latch_low | level | constant
+    follows: str | None = None  # the input a transparent latch tracks, when the dump shows one
+
+
+def negedge_indices(trace: WaveformTrace) -> tuple[int, ...]:
+    """Sample indices at which `trace.clock` goes 1 -> 0."""
     clk_i = trace.columns.index(trace.clock)
-    others = [j for j, name in enumerate(trace.columns) if j != clk_i]
-    edges = posedge_indices(trace)
-    out = [
-        f"Clocked waveform read mechanically from the request. Clock `{trace.clock}`.",
-        "Each line is one rising edge (clock 0→1). A reference `step()` must RETURN these values "
-        "(the observation before the edge updates state). `x` means the dump does not define that "
-        "signal on that edge. Falling edges and samples with a steady clock are omitted on purpose.",
-        f"Rising edges of `{trace.clock}` ({len(edges)}):",
-    ]
+    out: list[int] = []
+    prev = trace.samples[0][clk_i]
+    for i, sample in enumerate(trace.samples[1:], 1):
+        if prev == 1 and sample[clk_i] == 0:
+            out.append(i)
+        prev = sample[clk_i]
+    return tuple(out)
+
+
+def _col(trace: WaveformTrace, name: str) -> list[int | None]:
+    j = trace.columns.index(name)
+    return [s[j] for s in trace.samples]
+
+
+def _writes(values: list[int | None]) -> list[int]:
+    """Sample indices where the value changed, including the first definition after an `x`."""
+    out = []
+    for i in range(1, len(values)):
+        if values[i] is None:
+            continue
+        if values[i - 1] is None or values[i] != values[i - 1]:
+            out.append(i)
+    return out
+
+
+def _holds_while(clk: list[int | None], values: list[int | None], level: int) -> bool:
+    """True when `values` never changes across any stretch of samples with the clock at `level`."""
+    run: int | None = None
+    for i, c in enumerate(clk):
+        if c != level:
+            run = None
+            continue
+        if values[i] is None:
+            continue
+        if run is not None and values[i] != run:
+            return False
+        run = values[i]
+    return True
+
+
+def _tracks_while(clk: list[int | None], values: list[int | None], src: list[int | None], level: int) -> bool:
+    """True when `values` equals `src` at every sample where the clock sits at `level`."""
+    seen = False
+    for i, c in enumerate(clk):
+        if c != level or values[i] is None or src[i] is None:
+            continue
+        if values[i] != src[i]:
+            return False
+        seen = True
+    return seen
+
+
+def classify_trace_outputs(trace: WaveformTrace, outputs: tuple[str, ...]) -> dict[str, OutputTiming]:
+    """Read each output's timing off the dump: rising edge, falling edge, or level-sensitive.
+
+    A dump that only samples rising edges says nothing about the phase of a latch; this reads every
+    printed sample, which is the whole point. Measured: `Prob145_circuit8` was modelled as two
+    rising-edge flip-flops in every recorded run, and the dump shows a transparent-high latch and a
+    falling-edge register.
+    """
+    clk = _col(trace, trace.clock)
+    ins = [n for n in trace.columns if n != trace.clock and n not in outputs]
+    timings: dict[str, OutputTiming] = {}
+    for name in outputs:
+        values = _col(trace, name)
+        writes = _writes(values)
+        if not writes:
+            timings[name] = OutputTiming(name, "constant")
+            continue
+        kinds = {(clk[i - 1], clk[i]) for i in writes}
+        if kinds <= {(0, 1)}:
+            timings[name] = OutputTiming(name, "posedge")
+            continue
+        if kinds <= {(1, 0)}:
+            timings[name] = OutputTiming(name, "negedge")
+            continue
+        steady_high = any(a == 1 and b == 1 for a, b in kinds)
+        steady_low = any(a == 0 and b == 0 for a, b in kinds)
+        kind = "level"
+        follows = None
+        for level, active in ((1, steady_high), (0, steady_low)):
+            if not active or steady_high == steady_low:
+                continue
+            if not _holds_while(clk, values, 1 - level):
+                continue
+            kind = "latch_high" if level == 1 else "latch_low"
+            for src in ins:
+                if _tracks_while(clk, values, _col(trace, src), level):
+                    follows = src
+                    break
+        timings[name] = OutputTiming(name, kind, follows)
+    return timings
+
+
+def _timing_sentences(trace: WaveformTrace, timings: dict[str, OutputTiming]) -> list[str]:
+    clk = trace.clock
+    out = []
+    for t in timings.values():
+        if t.kind == "posedge":
+            out.append(f"  - `{t.name}` changes only at RISING edges of `{clk}`: it is a register clocked on the "
+                       f"rising edge (`always @(posedge {clk})`).")
+        elif t.kind == "negedge":
+            out.append(f"  - `{t.name}` changes only at FALLING edges of `{clk}` (1 -> 0), never at a rising edge: "
+                       f"it is a register clocked on the FALLING edge (`always @(negedge {clk}) ...`). Do not "
+                       f"implement it with `posedge {clk}`.")
+        elif t.kind in ("latch_high", "latch_low"):
+            level = "HIGH" if t.kind == "latch_high" else "LOW"
+            src = t.follows
+            track = (f"at every sample where {clk} is {level.lower()} the dump has `{t.name}` equal to `{src}`, and "
+                     f"`{t.name}` never changes while {clk} is {'low' if level == 'HIGH' else 'high'}"
+                     if src else
+                     f"`{t.name}` changes while {clk} sits at {level.lower()} and holds while it sits at the other level")
+            out.append(f"  - `{t.name}` is a TRANSPARENT LATCH, open while `{clk}` is {level}: {track}. Implement it "
+                       f"level-sensitively" + (f" (`always @(*) if ({'' if level == 'HIGH' else '!'}{clk}) {t.name} = {src};`)" if src else "") +
+                       f", NOT as a flip-flop: it follows its input during the {level.lower()} phase.")
+        elif t.kind == "level":
+            out.append(f"  - `{t.name}` changes while `{clk}` is steady, so it is level-sensitive rather than "
+                       f"edge-triggered; reproduce the samples exactly.")
+        else:
+            out.append(f"  - `{t.name}` never changes in the dump.")
+    return out
+
+
+def _edge_table(trace: WaveformTrace, edges: tuple[int, ...], ins: list[str], outs: list[str],
+                label: str, widths: dict[str, int] | None) -> list[str]:
+    """One line per edge: the sample printed before the edge, then the outputs printed at the edge."""
+    def val(i: int, name: str) -> str:
+        v = _col(trace, name)[i]
+        return "x" if v is None else str(v)
+
+    def at(i: int) -> str:
+        return trace.times[i] if i < len(trace.times) else f"sample {i}"
+
+    lines = [f"Observed next-state table at the {label} edges of `{trace.clock}` ({len(edges)}). `before` is the "
+             f"sample printed immediately before the edge (the values the edge acts on); `after` is the sample "
+             f"printed at the edge (the values the edge produced). Reproduce every line exactly."]
     for n, i in enumerate(edges, 1):
-        sample = trace.samples[i]
-        bits = []
-        for j in others:
-            v = sample[j]
-            bits.append(f"{trace.columns[j]}={'x' if v is None else v}")
-        out.append(f"  {n}. {', '.join(bits)}")
+        before = ", ".join(f"{name}={val(i - 1, name)}" for name in ins + outs)
+        after = ", ".join(f"{name}={val(i, name)}" for name in outs)
+        lines.append(f"  {n}. {at(i)}  before: {before}  ->  after: {after}")
+    notes = _surprises(trace, edges, ins, outs, widths)
+    if notes:
+        lines.append("Transitions in the table above that are neither a hold nor a plain +1. These are the loads, "
+                     "wraps and clears that define the circuit: reproduce each one exactly, and never replace one "
+                     "with a modulo of the port width or with a bare increment.")
+        lines.extend(notes)
+    return lines
+
+
+def _surprises(trace: WaveformTrace, edges: tuple[int, ...], ins: list[str], outs: list[str],
+               widths: dict[str, int] | None) -> list[str]:
+    out: list[str] = []
+    for name in outs:
+        values = _col(trace, name)
+        width = (widths or {}).get(name)
+        for n, i in enumerate(edges, 1):
+            before, after = values[i - 1], values[i]
+            if after is None:
+                continue
+            when = ", ".join(f"{s}={'x' if _col(trace, s)[i - 1] is None else _col(trace, s)[i - 1]}" for s in ins)
+            at = trace.times[i] if i < len(trace.times) else f"sample {i}"
+            if before is None:
+                out.append(f"  - edge {n} ({at}): `{name}` becomes {after} from an undefined value while {when}. "
+                           f"The edge WRITES {after}; it cannot be holding `{name}`.")
+                continue
+            if after == before:
+                continue
+            step = (before + 1) & ((1 << width) - 1) if width else before + 1
+            if after == step:
+                continue
+            note = ""
+            if after == 0 and width and before != (1 << width) - 1:
+                note = (f" `{name}` is {width} bits (its largest value is {(1 << width) - 1}), so this is NOT a "
+                        f"natural overflow: the circuit wraps at {before}. A modulo of the port width is wrong here.")
+            out.append(f"  - edge {n} ({at}): `{name}` goes {before} -> {after} while {when}, which is neither a "
+                       f"hold nor +1.{note}")
+    return out
+
+
+def render_trace(trace: WaveformTrace, outputs: tuple[str, ...] = (), widths: dict[str, int] | None = None) -> str:
+    """The dump expanded for a prompt: output timing, and the next-state table at every clock edge.
+
+    `Reference.step` returns outputs as seen just before the edge, then updates state, so the
+    rising-edge next-state table is exactly what the reference must reproduce. ADR 0015 listed only
+    the posedge samples; that is enough for a posedge counter and says nothing at all about a
+    transparent latch or a falling-edge register, which is why `Prob145_circuit8` never passed.
+    """
+    known = tuple(n for n in outputs if n in trace.columns and n != trace.clock)
+    others = [n for n in trace.columns if n != trace.clock]
+    ins = [n for n in others if n not in known]
+    out = [f"Clocked waveform read mechanically from the request. Clock `{trace.clock}`."]
+    if not known:
+        # Without the request's interface list we cannot say which columns are outputs; fall back to
+        # the plain posedge listing rather than guess a direction and mislabel the whole dump.
+        out += ["Each line is one rising edge (clock 0->1). A reference `step()` must RETURN these values "
+                "(the observation before the edge updates state). `x` means the dump does not define that "
+                "signal on that edge.",
+                f"Rising edges of `{trace.clock}` ({len(posedge_indices(trace))}):"]
+        for n, i in enumerate(posedge_indices(trace), 1):
+            out.append(f"  {n}. " + ", ".join(f"{c}={'x' if trace.samples[i][j] is None else trace.samples[i][j]}"
+                                              for j, c in enumerate(trace.columns) if c != trace.clock))
+        return "\n".join(out)
+
+    timings = classify_trace_outputs(trace, known)
+    out.append(f"Inputs in the dump: {', '.join(ins) or 'none'}. Outputs in the dump: {', '.join(known)}.")
+    out.append("Every printed sample was read, not only the clock edges. How each output behaves:")
+    out += _timing_sentences(trace, timings)
+
+    posedge_outs = [n for n in known if timings[n].kind in ("posedge", "constant", "level")]
+    negedge_outs = [n for n in known if timings[n].kind == "negedge"]
+    if posedge_outs:
+        out += _edge_table(trace, posedge_indices(trace), ins, posedge_outs, "RISING", widths)
+    else:
+        out.append(f"No output changes at a rising edge of `{trace.clock}`; a plain "
+                   f"`always @(posedge {trace.clock})` design cannot reproduce this dump.")
+    if negedge_outs:
+        out += _edge_table(trace, negedge_indices(trace), ins, negedge_outs, "FALLING", widths)
+    latched = [n for n in known if timings[n].kind.startswith("latch")]
+    if latched:
+        out.append("The latch output(s) " + ", ".join(f"`{n}`" for n in latched) +
+                   " are deliberately left out of the edge tables above: they are not sampled at an edge at all, "
+                   "they follow their input during the transparent phase.")
+    out.append("This expansion is the request's own waveform. The delivered RTL is replayed against every sample "
+               "of it before the design can be accepted.")
     return "\n".join(out)
 
 
@@ -178,10 +391,22 @@ def expand_printed_tables(request: str) -> str:
     except Exception:  # noqa: BLE001 — a parser fault must never block a build
         pass
     try:
-        parts.extend(render_trace(t) for t in parse_clocked_waveforms(request))
+        outputs, widths = _interface_outputs(request)
+        parts.extend(render_trace(t, outputs, widths) for t in parse_clocked_waveforms(request))
     except Exception:  # noqa: BLE001
         pass
     return "\n\n".join(parts)
+
+
+def _interface_outputs(request: str) -> tuple[tuple[str, ...], dict[str, int]]:
+    """Output names and stated widths from the request's own interface list; empty when it has none."""
+    from .interface import parse_interface
+
+    ports = parse_interface(request)
+    if not ports:
+        return (), {}
+    return (tuple(p.name for p in ports if p.direction == "output"),
+            {p.name: p.width for p in ports if p.width is not None})
 
 
 def render_table(table: RequestTable) -> str:
@@ -473,11 +698,13 @@ def _parse_clocked_waveform(lines: list[str], i: int) -> tuple[WaveformTrace | N
         return None, i
     end = i + 1
     rows: list[list[str]] = []
+    times: list[str] = []
     while end < len(lines):
         fields = lines[end].split()
         if len(fields) != len(header) or not TIME_RE.match(fields[0]):
             break
         rows.append(fields[1:])
+        times.append(fields[0])
         end += 1
     if len(rows) < 2:
         return None, i
@@ -492,7 +719,7 @@ def _parse_clocked_waveform(lines: list[str], i: int) -> tuple[WaveformTrace | N
     except ValueError:
         return None, end
     return WaveformTrace(clock=clocks[0], columns=tuple(names), samples=tuple(samples),
-                         source="\n".join(lines[i:end])), end
+                         source="\n".join(lines[i:end]), times=tuple(times)), end
 
 
 def posedge_indices(trace: WaveformTrace) -> tuple[int, ...]:

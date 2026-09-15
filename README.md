@@ -1,77 +1,112 @@
-# OpenChip
+<p align="center">
+  <img src="assets/logo.svg" width="96" height="96" alt="openchip logo">
+</p>
 
-**Natural-language request → RTL project with reproducible verification evidence.**
+<h1 align="center">openchip</h1>
 
-OpenChip is an autonomous hardware-development agent. You describe a module; it derives a reviewable design contract, an independent executable reference, Verilog RTL, and a formal property checker; runs real tools (Verilator lint, Icarus simulation against the reference, Yosys synthesis, SymbiYosys bounded model checking); repairs from tool evidence within a budget; and delivers a package whose every claim is tied to a tool result and an artifact hash.
+<p align="center">describe a hardware module in plain language. get verilog rtl with tool-backed evidence that it does what you asked.</p>
 
-Status: **Milestone 2 path works end to end; Milestone 3 partially; runtime model chosen by measurement (ADR 0006).** Ten open-weight models were run through the identical protocol on JarvisLabs. Default is now `openai/gpt-oss-120b` (VerilogEval v2 direct 114/156 = 73.1%, OpenChip agent mode 28/39, project suites 9/10 and 8/10); runner-up `Qwen/Qwen3.8-27B` (project suites 10/10 and 8/10 with zero false acceptances, VerilogEval 76/156). Full table: `evals/results/model-comparison.md`; evidence per run in `evals/results/`. This is an RTL generator with verification evidence, not a chip.
+<p align="center">
+  <a href="#start-in-two-minutes">start</a> ·
+  <a href="#how-it-works">how it works</a> ·
+  <a href="#what-the-numbers-say">numbers</a> ·
+  <a href="#contributing">contribute</a>
+</p>
 
-## How it works
-```
-request → contract (JSON, versioned, requirement provenance)
-        → reference model (Python, derived without seeing the RTL)
-        → property checker (Verilog immediate assertions, optional)
-        → RTL (Verilog-2001)
-        → lint · sim vs reference (3 seeds × 400 cycles) · generic synth · BMC
-        → repair loop (bounded, every attempt kept) with reference cross-check (2-of-3)
-        → report.md + outcome.json (requirement-to-evidence index, hashes, tool/model manifest)
-```
-Design: `docs/architecture/overview.md`. Decisions: `docs/decisions/`.
+---
 
-## Quick start (bring your own key)
+## what it does
+
+you write a request like "a synchronous fifo with depth 16, 8-bit words, full and empty flags". openchip turns it into a reviewable contract, an independent reference model, verilog rtl and a report. every claim in the report points at a tool result: verilator lint, icarus simulation against the reference, yosys synthesis and, when available, symbiyosys bounded model checking. when the tools disagree with the design, openchip repairs within a budget. when the request does not determine the answer, it asks instead of guessing.
+
+the web ui shows the whole process as it happens: which stage is running, what each stage found, and anything that blocks it such as a missing key, a rate limit or an exhausted quota.
+
+## start in two minutes
+
+hosted version: coming soon. until then run it on your machine.
+
+requirements: python 3.10 or newer, and the open-source verilog tools (icarus verilog, verilator, yosys). on macos: `brew install icarus-verilog verilator yosys`. on linux the oss cad suite bundle gives you all of them: https://github.com/YosysHQ/oss-cad-suite-build/releases
+
 ```bash
-pip install -e .            # Python 3.10+; install Icarus Verilog, Verilator and Yosys (OSS CAD Suite) for verification
-openchip ui --open          # http://127.0.0.1:8765
+git clone https://github.com/harrrshall/openchip.git
+cd openchip
+pip install -e .
+openchip doctor        # checks the tools
+openchip ui --open     # opens http://127.0.0.1:8765
 ```
-In **Settings** choose OpenRouter, OpenAI, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
 
-## Command line
+in the ui press settings, pick a provider (opencode go, openrouter, openai or anthropic), paste your key and press test connection. then describe your module and press build and verify. type `/` in the request box for commands: `/resume` lists every past session and lets you open or continue one.
+
+keys are stored only in `~/.config/openchip/keys.env` with mode 600. nothing is sent anywhere except to the model provider you chose.
+
+command line, if you prefer it:
+
 ```bash
-openchip doctor                                   # tools, model connectivity, features
-openchip build --project ws/fifo --request "Create a synchronous FIFO ..." --budget 20m
-openchip report --project ws/fifo                 # human report; --json for outcome.json
-openchip verify --project ws/fifo                 # re-run the checks on the delivered artifacts
-openchip revise --project ws/fifo --change "make dout registered"   # contract v2, re-verify
-openchip resume --project ws/fifo                 # after an interruption
-openchip eval --suite core-v1 --budget 15m        # locked golden suite
-openchip assemble --system system.json --out top.v  # validate connections and generate a new top
-openchip compose --project ws/registered-sum --request examples/registered_sum_request.md --budget 20m
+openchip build --project ws/fifo --request "create a synchronous fifo ..." --budget 20m
+openchip report --project ws/fifo
+openchip revise --project ws/fifo --change "make dout registered"
+openchip resume --project ws/fifo
 ```
-Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
 
-`assemble` is an initial multi-module capability: supply a top contract, two to
-four named instances with pinned leaf contracts and parameter bindings, and explicit
-connections. It rejects floating inputs, conflicting drivers, incompatible widths
-or signedness, stale contract pins, and combinational cycles. It generates named-port
-wiring and refuses to overwrite an existing output file. It does not generate or
-accept leaf RTL, or verify system behavior. Top widths are fixed at the top contract's
-default parameter values; leaf parameter overrides are emitted explicitly.
-`examples/composition_demo.py` builds a complete system JSON and demonstrates real
-integration simulation and synthesis of two arithmetic leaves on the cloud toolchain.
+## how it works
 
-`compose` starts from a natural-language request, builds two to four leaves through
-the ordinary contract/reference/RTL workflow, and assembles their checked RTL.
-Integration references receive the top contract without leaf RTL or references.
-Failed or provisional leaves prevent system acceptance; an integration failure
-preserves the assembly for diagnosis. This initial workflow supports fixed top
-widths, shared clock/reset, and fresh workspaces; whole-system resume and automatic
-wiring repair are not implemented. Each leaf and the integration retain reports
-and evidence, with an aggregate `outcome.json` at the project root.
+```
+request
+  -> contract        json, versioned, one entry per requirement, plus explicit state machines,
+                     update priorities and timing conventions when the request describes them
+  -> reference       an executable python model written from the contract, never from the rtl
+  -> rtl             verilog-2001
+  -> checks          lint, simulation against the reference (3 seeds x 400 cycles), synthesis,
+                     bounded model checking, replay of any table or waveform printed in the request
+  -> sign-off        accepted only when independent references agree and no gate objects;
+                     otherwise withheld with the reason, or provisional with the open questions
+  -> report          report.md and outcome.json with hashes of every artifact
+```
 
-The registered saturating-sum development example passed a separate oracle over
-all 65,536 operand pairs plus reset, hold, and enable checks on JarvisLabs using
-`openai/gpt-oss-120b`. Run `examples/check_registered_sum.py PROJECT
-examples/check_registered_sum.v` with the EDA toolchain to check that example's
-delivered RTL independently. This is one development design, not the three-design
-held-out composition gate or a guarantee for other requests.
+the parts that matter most for correctness:
 
-## Repository
-`src/openchip/` product · `tests/` (30 tests; real-tool tests need the EDA toolchain) · `evals/suite/core-v1/` locked tasks + goldens · `evals/results/` recorded runs · `outputs/demo/` delivered example packages (two successes, one useful failure) · `scripts/cloud/` provisioning/serving/eval scripts · `docs/` architecture, decisions, research, operations, product, project (STATUS, ROADMAP, BACKLOG, HANDOFF).
+- the request's printed interface is authoritative. rtl with an extra or missing port is rejected before simulation.
+- tables, karnaugh maps and waveforms in the request are parsed mechanically and replayed against the reference and the rtl, so a misread axis or a missed wrap point is caught rather than silently agreed on.
+- state machines are written as explicit transition tables, and the reference is checked against the table before sign-off.
+- a design is never signed off on a split reference vote or on an unanswered question about the request.
 
-## Limitations (measured, not hypothetical)
-- Single-clock synchronous designs only; no CDC, bus protocols, timing, power, or physical implementation.
-- Two model-derived artifacts agreeing is evidence, not proof: the timer task shows all three derivations sharing one misreading. Human review of the contract remains part of delivery.
-- Formal layer is bounded (depth 20) and uses immediate assertions only; the model's checkers still contain timing errors, so counterexamples are reported as non-blocking evidence.
-- Public benchmarks (VerilogEval) not yet run; contamination of any public benchmark is unknowable.
+architecture notes live in `docs/architecture/`, every decision in `docs/decisions/` as an adr with the measurement that justified it.
 
-License: Apache-2.0 (see `pyproject.toml`); third-party model and tool licenses apply to their artifacts.
+## what the numbers say
+
+all runs use the identical protocol and the recorded evidence is in `evals/results/`.
+
+- verilogeval v2 spec-to-rtl, all 156 problems twice, self-hosted `openai/gpt-oss-120b`: 76% pass; of the designs openchip signs off, 89% are correct. two problems in that benchmark contradict their own hidden reference and are counted as misses.
+- the project's own realistic suites (core-v1 and heldout-v1): 15 of 20 tasks correct, and 0 wrong designs among those signed off.
+- hosted frontier models score higher on the same harness (deepseek v4 flash reached 32 of 39 with 1 false sign-off on the standard subset). the harness matrix in `configs/matrix/` runs any set of models and pipeline variants side by side and ranks them by false sign-offs first.
+
+this is an rtl generator with verification evidence. it is single-clock synchronous designs only, no clock domain crossing, bus protocols, timing or physical implementation. two model-derived artifacts agreeing is evidence, not proof; read the contract before you trust the rtl.
+
+## repository
+
+```
+src/openchip/       product: contracts, models, runtime, verification, reporting, ui, evals
+tests/              real-behaviour tests; the ones marked cloud need the verilog tools
+evals/suite/        locked tasks and goldens (never edited to make a run pass)
+evals/results/      every recorded run
+configs/            default config, model configs, harness matrix specs
+scripts/cloud/      provisioning and benchmarking on gpu instances
+docs/               architecture, decisions, research, operations, product, project
+```
+
+## contributing
+
+contributions are welcome. the rules keep the evidence honest.
+
+1. open an issue first for anything that changes behaviour. say what failure you measured and what you expect to change.
+2. never edit `evals/suite/` goldens or locked tasks to make a run pass.
+3. a change to the pipeline needs a pre-registered success threshold in `docs/project/THRESHOLDS.md` before the run, a measurement on the recorded data or a live run, and an adr in `docs/decisions/` whether it is kept or reverted.
+4. write tests that exercise real behaviour. a test that only proves the code was called is not wanted.
+5. no third-party runtime dependencies in the product without an adr. the ui stays a single page with no build step.
+6. no credentials in the repository, ever. keys come from the environment or `~/.config/openchip/`.
+7. keep prose direct, keep functions small, and run `pytest` before you push.
+8. one topic per pull request, with the measurement in the description.
+
+## license
+
+apache 2.0. model and tool licenses apply to their own artifacts.

@@ -1,0 +1,32 @@
+# Smoke check of the merged fixes on the problems they target (plus two controls), both gateway models, review off.
+out_root = "/home/ubuntu/openchip-runs/smoke-fixed"
+repeats = 1
+budget = "6m"
+concurrency = 8
+harnesses = ["no-review"]
+
+[dataset]
+path = "/home/ubuntu/verilog-eval/dataset_spec-to-rtl"
+problems = ["Prob053_m2014_q4d", "Prob089_ece241_2014_q5a", "Prob105_rotate100", "Prob117_circuit9", "Prob133_2014_q3fsm", "Prob137_fsm_serial", "Prob145_circuit8", "Prob153_gshare", "Prob041_dff8r", "Prob121_2014_q3bfsm"]
+
+[[models]]
+name = "deepseek-v4-flash"
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "deepseek-v4-flash"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+max_concurrency = 4
+[models.extra_body]
+reasoning_effort = "low"
+
+[[models]]
+name = "glm-5.3"
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "glm-5.3"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+max_concurrency = 4
+[models.extra_body]
+reasoning_effort = "low"

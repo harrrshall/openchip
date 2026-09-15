@@ -92,7 +92,9 @@ def run_agent(cfg: Config, prob: dict, work: Path, budget_s: float, log) -> dict
     rv = outcome.get("review") or {}
     rec = {"id": prob["id"], "mode": "agent", "state": outcome.get("state"), "accepted": bool(outcome.get("accepted")), "attempts": outcome.get("attempts", 0),
            "provisional": bool(outcome.get("provisional")), "review_verdict": rv.get("verdict"), "review_applied": len(rv.get("applied", [])),
-           "calls": runner.adapter.usage.calls, "tokens": runner.adapter.usage.total_tokens, "wall_s": round(time.time() - t0, 1)}
+           "calls": runner.adapter.usage.calls, "tokens": runner.adapter.usage.total_tokens, "wall_s": round(time.time() - t0, 1),
+           "intake_escalations": sum(1 for e in runner.escalations if e.get("role") == "intake"),
+           "escalations": runner.escalations}
     rtl = work / "rtl" / "TopModule.v"
     if rtl.is_file():
         rec.update(score(rtl, prob, work / "verification" / "veval_score", cfg))

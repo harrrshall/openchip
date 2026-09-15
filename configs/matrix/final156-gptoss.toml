@@ -1,0 +1,22 @@
+# Final benchmark, self-hosted default model: gpt-oss-120b served by vLLM on the H200, all 156 VerilogEval v2 spec-to-rtl
+# problems, two repeats, review off (matrix v1 verdict). Base URL and key come from the environment on the CPU VM.
+#   cd ~/openchip-matrix && .venv/bin/openchip matrix run --spec configs/matrix/final156-gptoss.toml
+out_root = "/home/ubuntu/openchip-runs/final156"
+repeats = 2
+budget = "6m"
+concurrency = 8
+harnesses = ["no-review"]
+
+[dataset]
+path = "/home/ubuntu/verilog-eval/dataset_spec-to-rtl"
+every_nth = 1
+
+[[models]]
+name = "gpt-oss-120b"
+provider = "openai-compatible"
+base_url_env = "OPENCHIP_MODEL_BASE_URL"
+model = "openai/gpt-oss-120b"
+api_key_env = "OPENCHIP_MODEL_API_KEY"
+max_concurrency = 8
+[models.extra_body]
+reasoning_effort = "low"

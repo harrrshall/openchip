@@ -237,6 +237,30 @@ def cmd_veval(args) -> int:
     return run_benchmark(cfg, args.dataset, args.mode, args.out, problems=args.problems, limit=args.limit, budget=args.budget, log=_logger())
 
 
+def cmd_matrix_run(args) -> int:
+    from ..evals.matrix import MatrixSpec, run_matrix
+
+    spec = MatrixSpec.load(args.spec)
+    res = run_matrix(spec, resume=args.resume, concurrency=args.concurrency, dry_run=args.dry_run, log=_logger())
+    if res.get("error"):
+        return 2
+    if res.get("root"):
+        print(f"matrix root: {res['root']}  (openchip matrix report {res['root']})")
+    return 0
+
+
+def cmd_matrix_report(args) -> int:
+    from ..evals.scoreboard import build_scoreboard, render_markdown
+
+    board = build_scoreboard(args.root)
+    if not board.get("records"):
+        print(f"no record.json files under {args.root}", file=sys.stderr)
+        return 2
+    print(render_markdown(board))
+    print(f"wrote {Path(args.root) / 'scoreboard.md'} and {Path(args.root) / 'scoreboard.json'}")
+    return 0
+
+
 def cmd_ui(args) -> int:
     from ..ui.server import serve
 
@@ -314,6 +338,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open a browser tab")
     s.set_defaults(fn=cmd_ui)
+    s = sub.add_parser("matrix", help="run/report a harness x model evaluation matrix")
+    msub = s.add_subparsers(dest="matrix_cmd", required=True)
+    m = msub.add_parser("run", help="run every (harness, model, problem, repeat) cell")
+    m.add_argument("--spec", required=True, help="matrix spec TOML (see configs/matrix/example.toml)")
+    m.add_argument("--resume", help="existing matrix root; cells with a record.json are skipped")
+    m.add_argument("--concurrency", type=int, help="override the spec's global concurrency")
+    m.add_argument("--dry-run", action="store_true", help="print the cell count and plan, run nothing")
+    m.set_defaults(fn=cmd_matrix_run)
+    m = msub.add_parser("report", help="build scoreboard.md and scoreboard.json from a matrix root")
+    m.add_argument("root")
+    m.set_defaults(fn=cmd_matrix_report)
     s = sub.add_parser("veval", help="run VerilogEval v2 spec-to-rtl (direct single-shot or full agent)")
     s.add_argument("--dataset", required=True, help="path to verilog-eval/dataset_spec-to-rtl")
     s.add_argument("--mode", choices=["direct", "agent"], default="direct")

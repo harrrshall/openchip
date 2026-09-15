@@ -1,0 +1,70 @@
+# Harness matrix: pipeline variants x models on the fixed 39-problem VerilogEval v2 subset.
+# No credentials here: every key is read from the environment variable named below.
+#   openchip matrix run --spec configs/matrix/example.toml --dry-run
+#   openchip matrix run --spec configs/matrix/example.toml
+#   openchip matrix report <out_root>/<stamp>
+
+out_root = "evals/matrix"
+repeats = 2
+budget = "6m"          # wall-time budget per cell
+concurrency = 6        # global thread cap; each model is additionally capped below
+harnesses = ["baseline", "direct", "no-review", "alt-ref"]
+# vote3 is a documented stub (openchip.evals.harnesses.run_vote); adding it here makes its cells error.
+
+[dataset]
+# VerilogEval v2 spec-to-rtl. every_nth = 4 reproduces the existing 39-problem subset rule
+# (`ls *_prompt.txt | sort | awk 'NR%4==1'`, scripts/cloud/run_veval_agent.sh:6).
+path = "/home/openchip-env/verilog-eval/dataset_spec-to-rtl"
+every_nth = 4
+
+# Local vLLM / JarvisLabs endpoint: the base URL comes from $OPENCHIP_MODEL_BASE_URL.
+[[models]]
+name = "gpt-oss-120b"
+provider = "openai-compatible"
+base_url_env = "OPENCHIP_MODEL_BASE_URL"
+model = "openai/gpt-oss-120b"
+api_key_env = "OPENCHIP_MODEL_API_KEY"
+max_concurrency = 2
+[models.extra_body]
+reasoning_effort = "low"
+
+# AgentRouter gateway. It allow-lists clients by User-Agent, so user_agent must look like a CLI.
+[[models]]
+name = "deepseek-v4-flash"
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "deepseek-v4-flash"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+max_concurrency = 2
+
+[[models]]
+name = "glm-5.3"
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "glm-5.3"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+max_concurrency = 2
+[models.extra_body.reasoning]
+effort = "low"
+
+[[models]]
+name = "gpt-5.6-sol"
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "gpt-5.6-sol"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+max_concurrency = 2
+[models.extra_body.reasoning]
+effort = "low"
+
+# Cross-family second reference used by the `alt-ref` harness.
+[alt_model]
+provider = "openrouter"
+base_url = "https://agentrouter.org/v1"
+model = "deepseek-v4-flash"
+api_key_env = "AGENTROUTER_API_KEY"
+user_agent = "claude-cli/2.1.0 (external, cli)"
+thinking_roles = ["intake"]

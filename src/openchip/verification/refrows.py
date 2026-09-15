@@ -6,8 +6,11 @@ contracts, and an independent instance per row is what makes that assumption che
 
 Invoked as: python -I refrows.py <reference.py> <contract.json> <rows.json> <out.json>
   rows.json: {"rows": [{"<port>": <int>, ...}, ...], "outputs": ["<port>", ...],
-              "mode": "rows" | "sequence"}  # sequence: one Reference, reset once, then step in order
+              "mode": "rows" | "sequence" | "sequences"}
+              # sequence:  one Reference, reset once, then step through `rows` in order
+              # sequences: `rows` is a list of sequences; each gets its own freshly reset Reference
   out.json:  {"results": [{"<port>": <int>, ...}, ...], "error": "..."}
+             # "sequences" mode: results is a list of lists, one per sequence
 """
 from __future__ import annotations
 
@@ -39,7 +42,16 @@ def main() -> int:
         spec = importlib.util.spec_from_file_location("reference", ref_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
-        if spec_.get("mode") == "sequence":
+        if spec_.get("mode") == "sequences":
+            for seq in rows:
+                ref = mod.Reference(dict(params))
+                ref.reset()
+                steps = []
+                for row in seq:
+                    out = ref.step(dict(row))
+                    steps.append({k: out.get(k) for k in outputs})
+                result["results"].append(steps)
+        elif spec_.get("mode") == "sequence":
             ref = mod.Reference(dict(params))
             ref.reset()
             for row in rows:

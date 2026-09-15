@@ -20,7 +20,9 @@ from ..contracts.schema import Contract
 from ..tools import iverilog, verilator, yosys
 from ..tools.base import ToolResult
 from .formal import run_formal
+from .guards import interface_findings, moore_output_findings
 from .testbench import dump_contract_json, generate_testbench, write_vectors
+from .wavecheck import replay_request_waveform
 
 REFGEN = Path(__file__).with_name("refgen.py")
 REFLINT = Path(__file__).with_name("reflint.py")
@@ -46,6 +48,7 @@ class VerificationResult:
     sims: list[dict] = field(default_factory=list)
     synth: Optional[dict] = None
     formal: Optional[dict] = None
+    waveform: Optional[dict] = None
     guard_findings: list[dict] = field(default_factory=list)
     reference_error: str = ""
     summary: str = ""
@@ -58,7 +61,10 @@ class VerificationResult:
         """Compact evidence text for the repair prompt."""
         parts = []
         for g in self.guard_findings:
-            parts.append("ACCEPTANCE GUARD (deterministic contract-vs-RTL check): " + g["message"])
+            label = ("INTERFACE CHECK (the module's port list was compared with the contract's): "
+                     if g.get("code") == "interface_mismatch"
+                     else "ACCEPTANCE GUARD (deterministic contract-vs-RTL check): ")
+            parts.append(label + g["message"])
         if self.reference_error:
             parts.append("REFERENCE MODEL ERROR (the reference, not the RTL, failed to run):\n" + self.reference_error)
         if self.lint and not self.lint.get("ok"):
@@ -72,6 +78,15 @@ class VerificationResult:
                 parts.append("\n".join(lines))
             elif s["status"] not in ("pass",):
                 parts.append(f"SIMULATION seed={s['seed']}: {s['status']}: {s['detail'][:800]}")
+        if self.waveform and self.waveform.get("status") == "fail":
+            lines = ["REQUEST WAVEFORM REPLAY (the RTL was simulated against the timing diagram printed in the "
+                     "request; the diagram is the user's own specification and is authoritative):"]
+            lines += [f"  at {m['time']} with {m['inputs']}: the waveform shows {m['port']}={m['request_says']}, "
+                      f"this RTL produces {m['rtl_says']}" for m in self.waveform.get("mismatches", [])[:12]]
+            lines.append("  Re-read the waveform expansion in the request: which clock edge each output changes on, "
+                         "and whether an output follows its input while the clock is at a level (a transparent latch) "
+                         "rather than at an edge.")
+            parts.append("\n".join(lines))
         if self.synth and not self.synth.get("ok"):
             parts.append("YOSYS SYNTHESIS:\n" + _fmt_diags(self.synth))
         if self.formal and self.formal.get("status") == "counterexample":
@@ -168,7 +183,7 @@ def compare_references(contract: Contract, ref_a: Path, ref_b: Path, work: Path,
 
 def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, cfg: Config,
            cycles: Optional[int] = None, seeds: Optional[list[int]] = None, run_synth: Optional[bool] = None,
-           props_path: Optional[Path] = None) -> VerificationResult:
+           props_path: Optional[Path] = None, request: str = "") -> VerificationResult:
     work.mkdir(parents=True, exist_ok=True)
     cycles = cycles or cfg.verification.sim_cycles
     seeds = seeds or cfg.verification.seeds
@@ -179,6 +194,36 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
     res = VerificationResult(stage="reference", accepted=False)
     res.artifacts = {"rtl": str(rtl_path), "rtl_sha256": sha256_file(rtl_path), "reference": str(reference_py),
                      "reference_sha256": sha256_file(reference_py), "contract_digest": contract.digest()}
+
+    # 0. interface lock: the delivered module must declare exactly the contract's ports. Cheap and
+    # deterministic, so it runs before anything else and repair gets the missing/extra port by name.
+    if not contract.outputs():
+        # Nothing to compare: no vectors, no testbench. The contract's interface is the defect, and
+        # saying so is more useful than an iverilog syntax error on a generated `got = {};`.
+        res.stage = "interface"
+        res.summary = "the contract declares no output port, so the RTL cannot be compared with the reference"
+        res.guard_findings = [{"kind": "contract", "code": "no_output_port",
+                               "message": f"The contract for `{contract.module_name}` declares no output port. A module "
+                                          "with no output cannot be verified; re-read the request's interface list and "
+                                          "give the module the output(s) it is asked to produce."}]
+        return res
+
+    rtl_text = rtl_path.read_text()
+    iface = interface_findings(contract, rtl_text)
+    if iface:
+        res.stage = "interface"
+        res.guard_findings = [f.__dict__ for f in iface]
+        res.summary = "the RTL's port list does not match the contract's interface"
+        return res
+
+    # 0b. Moore outputs: a decode of the state register, never a second flop of it. Deterministic and
+    # cheap, and the message names the output, so it also runs before simulation.
+    moore = moore_output_findings(contract, rtl_text)
+    if moore:
+        res.stage = "interface"
+        res.guard_findings = [f.__dict__ for f in moore]
+        res.summary = "a Moore output is registered a second time: " + ", ".join(f.code for f in moore)
+        return res
 
     # 1. reference vectors for every seed (a broken reference is reported, not blamed on RTL)
     vectors = {}
@@ -231,7 +276,18 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         res.summary = "simulation mismatches against reference model"
         return res
 
-    # 5. synthesis check
+    # 5. replay the request's own timing diagram through the RTL. The dump never passed through a
+    # model, and unlike the reference replay (ADR 0013) it sees every sample, so a latch or a
+    # falling-edge register is checked as printed rather than being unrepresentable.
+    if request:
+        res.waveform = replay_request_waveform(contract, request, rtl_path, work / "waveform",
+                                               tcfg.iverilog, tcfg.vvp, tcfg.timeout_s)
+        if res.waveform.get("status") == "fail":
+            res.stage = "waveform"
+            res.summary = "the RTL contradicts the waveform printed in the request"
+            return res
+
+    # 6. synthesis check
     if run_synth:
         res.stage = "synth"
         syn = yosys.synth_generic([str(rtl_path.resolve())], contract.module_name, work, tcfg.yosys, tcfg.timeout_s)
@@ -240,9 +296,11 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
             res.summary = "yosys generic synthesis failed"
             return res
 
-    # 6. formal (bounded model checking against the independent property checker)
+    # 7. formal (bounded model checking against the independent property checker)
     formal_note = "; formal not run"
-    if props_path is not None and props_path.is_file() and cfg.verification.run_formal and not contract.combinational:
+    # The formal wrapper drives reset to establish a known initial state; without a reset the BMC
+    # initial state is unconstrained and every reset-value assertion is a spurious counterexample.
+    if props_path is not None and props_path.is_file() and cfg.verification.run_formal and contract.has_reset:
         res.stage = "formal"
         fr = run_formal(contract, rtl_path, props_path, work / "formal", tcfg.sby, cfg.verification.formal_depth, cfg.verification.formal_timeout_s)
         res.formal = _tr(fr)
@@ -256,7 +314,11 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
 
     res.stage = "done"
     res.accepted = True
-    res.summary = f"lint ok; simulation passed for seeds {seeds} x {cycles} cycles" + ("; generic synthesis ok" if run_synth else "; synthesis not run") + formal_note
+    wave = ""
+    if res.waveform and res.waveform.get("status") == "pass":
+        wave = f"; the request's printed waveform replays through the RTL on all {res.waveform['checks']} defined samples"
+    warm = "" if contract.combinational or contract.has_reset else " (no reset: cycle 0 compares the RTL's power-up state against the reference's initial values)"
+    res.summary = f"lint ok; simulation passed for seeds {seeds} x {cycles} cycles{warm}" + ("; generic synthesis ok" if run_synth else "; synthesis not run") + formal_note + wave
     return res
 
 

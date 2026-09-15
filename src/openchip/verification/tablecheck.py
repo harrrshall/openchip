@@ -21,8 +21,8 @@ from pathlib import Path
 
 from ..contracts.schema import Contract
 from ..contracts.tables import (
-    RequestTable, TableVar, WaveformTrace, parse_clocked_waveforms, parse_request_tables,
-    posedge_indices,
+    RequestTable, TableVar, WaveformTrace, classify_trace_outputs, parse_clocked_waveforms,
+    parse_request_tables, posedge_indices,
 )
 
 REFROWS = Path(__file__).with_name("refrows.py")
@@ -91,7 +91,7 @@ def bind_trace(trace: WaveformTrace, contract: Contract) -> BoundTrace | None:
     if cr is None or cr.clock != trace.clock:
         return None
     ports = {p.name: p for p in contract.ports}
-    clk_reset = {cr.clock, cr.reset}
+    clk_reset = {cr.clock} | ({cr.reset} if cr.reset else set())
     cols = set(trace.columns)
     data_in = [p.name for p in contract.ports if p.direction == "input" and p.name not in clk_reset]
     data_out = [p.name for p in contract.ports if p.direction == "output"]
@@ -102,12 +102,28 @@ def bind_trace(trace: WaveformTrace, contract: Contract) -> BoundTrace | None:
         return None
     if any(n != trace.clock and n not in ports for n in trace.columns):
         return None
+    # `Reference.step` is one rising edge, so the replay can only speak about outputs the dump shows
+    # changing at a rising edge. A transparent latch and a falling-edge register are invisible to it:
+    # replaying them produced an unsatisfiable check that rejected three correct references in a row
+    # and left `Prob145_circuit8` with no RTL at all (ADR 0016 L2). They are checked against the dump
+    # directly instead, by replaying the delivered RTL (`verification/wavecheck.py`).
+    timings = classify_trace_outputs(trace, outputs)
+    outputs = tuple(n for n in outputs if timings[n].kind in ("posedge", "constant"))
+    if not outputs:
+        return None
     rst_inactive = 0 if cr.reset_active == "high" else 1
     edges = posedge_indices(trace)
     started = False
     steps: list[tuple[dict[str, int], dict[str, int]]] = []
     for i in edges:
-        sample = dict(zip(trace.columns, trace.samples[i]))
+        # A dump sample printed at the time of an edge is the value the edge PRODUCED: in
+        # `Prob117_circuit9` the sample at 45ns already carries the new `a` and the `q` that edge
+        # wrote, and 50ns (clock low) repeats it. So the edge acted on the sample printed before it,
+        # which is exactly what `step()` takes and returns: outputs as seen just before the edge,
+        # then the update. Reading the edge's own sample as the pre-edge observation demanded a
+        # fictitious power-up value (q=4 while the dump prints `x` at 0ns) and rejected correct
+        # references.
+        sample = dict(zip(trace.columns, trace.samples[i - 1]))
         if any(sample[n] is None for n in data_in):
             if started:
                 return None
@@ -115,7 +131,7 @@ def bind_trace(trace: WaveformTrace, contract: Contract) -> BoundTrace | None:
         started = True
         expected = {n: int(sample[n]) for n in outputs if sample[n] is not None}
         vec = {n: int(sample[n]) for n in data_in}
-        vec[cr.clock] = 1
+        vec[cr.clock] = int(sample[trace.clock]) if sample[trace.clock] is not None else 0
         if cr.reset:
             vec[cr.reset] = rst_inactive
         steps.append((vec, expected))
