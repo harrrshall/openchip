@@ -48,11 +48,11 @@ NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority
 def sign_off_withheld(ck: dict) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
-    Two conditions, both about the contract rather than the RTL, so neither is settled by
-    repairing the RTL and both hand the design back to the user:
+    Independent acceptance gates beyond agreement between generated RTL and references:
       - the model's own independent reference derivations never agreed unanimously;
       - the reference contradicts a table printed in the request, which is ground truth that
         never passed through the model (docs/decisions/0010-request-tables.md).
+      - a recognized standard-clock request lacks a passing independent RTL check.
     """
     reasons: list[str] = []
     c = ck.get("consensus") or {}
@@ -65,6 +65,10 @@ def sign_off_withheld(ck: dict) -> str:
     t = ck.get("request_table_check") or {}
     if t.get("status") == "mismatch":
         reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
+    from ..verification.clockcheck import requires_clock_check
+    clock = ck.get("clock_check") or {}
+    if requires_clock_check(ck.get("request", "")) and clock.get("status") != "ok":
+        reasons.append("the independent standard-clock check did not pass: " + (clock.get("detail") or "check not completed"))
     return "; ".join(reasons)
 
 
@@ -151,6 +155,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
         "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
         "request_table_repair": ck.get("table_repair"),
+        "clock_check": ck.get("clock_check"),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
@@ -167,7 +172,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     if ck.get("table_repair"):
         retained = Path(ck["table_repair"]["retained"])
         retained_label = str(retained.relative_to(ws.root)) if retained.is_relative_to(ws.root) else str(retained)
-        md += ["The original generated reference contradicted a table in your request. "
+        md += ["The original generated design contradicted a check derived from your request. "
                "One automatic contract correction was attempted; the outcome above reflects the subsequent verification.",
                f"Earlier contract, code and evidence are retained in `{retained_label}`.", ""]
     if contract:
@@ -181,6 +186,10 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             md.append(f"| {k} | `{Path(p).relative_to(ws.root) if str(p).startswith(str(ws.root)) else p}` | `{outcome['artifacts'][k + '_sha256'][:16]}…` |")
     md.append("")
     md += ["## Verification evidence", ""]
+    clock = ck.get("clock_check") or {}
+    if clock.get("status") and clock["status"] != "not_applicable":
+        md += [f"Independent standard-clock check: **{clock['status']}**, {clock.get('checked_cycles', 0)} cycles checked. "
+               + clock.get("detail", ""), ""]
     if evidence:
         md.append(f"Final verification attempt reached stage **{evidence.get('stage')}**: {evidence.get('summary')}.")
         md.append("")

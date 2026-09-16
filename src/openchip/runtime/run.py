@@ -26,6 +26,7 @@ from ..models import prompts as P
 from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
+from ..verification.clockcheck import check_clock
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
@@ -808,8 +809,20 @@ class Runner:
                 if (ck.get("request_table_check", {}).get("status") == "mismatch"
                         and not ck.get("table_repair") and attempt < max_iter):
                     return self._queue_table_repair(ck, attempt + 1)
+                t0 = time.time()
+                clock = check_clock(contract, ck.get("request", ""), rp, vdir / "clock_check", self.cfg,
+                                    min(60, self.budget.wall_time_s - (time.time() - self.budget.started) - 2))
+                self.tool_time_s += time.time() - t0
+                ck["clock_check"] = clock
+                if clock["status"] != "not_applicable":
+                    self.store.event(self.run_id, "clock_check", clock)
+                    self.log(f"[clock] {clock['status']}: {clock['detail']}")
+                if clock["status"] == "mismatch" and not ck.get("table_repair") and attempt < max_iter:
+                    return self._queue_table_repair(ck, attempt + 1, check_key="clock_check")
                 if (not self.cfg.verification.require_formal and self.cfg.verification.run_formal
-                        and props is not None and props.is_file() and not contract.combinational):
+                        and props is not None and props.is_file() and not contract.combinational
+                        and clock["status"] in {"ok", "not_applicable"}
+                        and ck.get("request_table_check", {}).get("status") != "mismatch"):
                     remaining = self.budget.wall_time_s - (time.time() - self.budget.started) - 2
                     if remaining > 0:
                         t0 = time.time()
@@ -922,8 +935,8 @@ class Runner:
             self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
         return ck
 
-    def _queue_table_repair(self, ck: dict, repairs_used: int) -> dict:
-        """One bounded restart from a mechanically checked row in the user's request.
+    def _queue_table_repair(self, ck: dict, repairs_used: int, check_key: str = "request_table_check") -> dict:
+        """One bounded restart from independent evidence tied to the user's request.
 
         No RTL, reference code or hidden benchmark evidence enters the revision
         prompt. Preserve all prior deliverables before regeneration overwrites them.
@@ -933,20 +946,26 @@ class Runner:
         for name in ("spec", "reference", "rtl", "verification", "reports"):
             shutil.copytree(self.ws.dir(name), saved / name)
         (saved / "checkpoint.json").write_text(json.dumps(ck, indent=2))
-        evidence = ck["request_table_check"]
+        evidence = ck[check_key]
+        clock = check_key == "clock_check"
+        correction = ("The RTL contradicts the independently checked conventional 12-hour clock semantics specified by the request. "
+                      "Correct the contract's behavior and requirements to agree with the observed counterexample. " if clock else
+                      "The generated reference contradicts rows printed in the original request. "
+                      "Correct the contract's erroneous behavior/requirements to match every printed row. ")
+        feedback = ({k: evidence[k] for k in ("kind", "status", "binding", "detail", "checked_cycles") if k in evidence}
+                    if clock else evidence)
         change = ("Automatic correction from tool evidence, not a new user requirement. "
-                  "The generated reference contradicts rows printed in the original request. "
-                  "Correct the contract's erroneous behavior/requirements to match every printed row. "
+                  + correction +
                   "Remove contradictory simplifications. Preserve exactly the module, ports, parameters "
                   "and clock/reset. Do not invent requirements or change the original request.\n"
-                  + json.dumps(evidence) + self._request_tables_text(ck["request"]))
-        repair = {"retained": str(saved), "evidence": evidence, "repairs_used": repairs_used}
+                  + json.dumps(feedback) + self._request_tables_text(ck["request"]))
+        repair = {"retained": str(saved), "evidence": evidence, "repairs_used": repairs_used, "kind": check_key}
         next_ck = {"request": ck["request"], "base_contract_path": ck["contract_path"],
                    "contract_path": ck["contract_path"], "contract_version": ck["contract_version"],
-                   "change": change, "table_repair": repair, "request_table_check": evidence}
+                   "change": change, "table_repair": repair, check_key: evidence}
         self.store.checkpoint(self.run_id, "revise", next_ck)
         self.store.event(self.run_id, "table_repair", repair)
-        self.log("[tables] retained failed artifacts; correcting the contract once from the request's own rows")
+        self.log(f"[spec] retained failed artifacts; correcting the contract once from {check_key} evidence")
         return next_ck
 
     def _step_report(self, ck: dict, final_state: str, reason: str = "") -> tuple[dict, dict]:
