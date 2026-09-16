@@ -275,7 +275,15 @@ def cmd_verify(args) -> int:
         contract, ck["request"], ref, work / "request_tables")
     ck["clock_check"] = check_clock(contract, ck["request"], rtl, work / "clock_check", cfg)
     ck["lfsr_check"] = check_lfsr(contract, ck["request"], ref, work / "lfsr_check")
+    from ..verification.consensus import recheck_consensus
+    consensus_recheck = recheck_consensus(
+        ck.get("consensus"), contract, rtl, ref, res, work / "consensus", cfg,
+        cfg.verification.sim_cycles if args.cycles is None else args.cycles,
+        cfg.verification.seeds if seeds is None else seeds)
     withheld = sign_off_withheld(ck, evidence, contract)
+    if consensus_recheck["status"] not in {"pass", "not_applicable"}:
+        reason = "retained reference consensus was not re-established: " + consensus_recheck["detail"]
+        withheld = "; ".join(filter(None, (withheld, reason)))
     prior_failures = prior_simulation_failures(ws.root, res.artifacts)
     if prior_failures:
         reason = ("recorded simulation mismatches remain unresolved for this unchanged RTL, "
@@ -289,6 +297,8 @@ def cmd_verify(args) -> int:
         withheld = "; ".join(filter(None, (withheld, reason)))
     accepted = res.accepted and not withheld
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
+                    consensus_recheck=consensus_recheck,
+                    historical_consensus=ck.get("consensus"),
                     prior_simulation_failures=prior_failures,
                     prior_formal_failures=formal_failures,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
