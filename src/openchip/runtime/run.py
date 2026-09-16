@@ -887,7 +887,7 @@ class Runner:
             user = P.PROPERTIES_USER.format(request=ctx["request"], contract_json=ctx["contract_json"], skeleton=checker_skeleton(contract))
             if last_err:
                 user += "\n\nYour previous checker was rejected:\n" + last_err[:1500] + "\nFix it."
-            system = P.PROPERTIES_SYSTEM.replace("posedge", contract.clock_reset.clock_edge)
+            system = P.PROPERTIES_SYSTEM.replace("posedge", contract.clock_reset.clock_edge) + P.reset_semantics_note(contract)
             r = self._call("properties", system, user, seed=(self.cfg.model.seed or 0) + attempt)
             code = extract_code(r.text, ("verilog", "systemverilog", "v", "sv")) if r.ok else None
             if not code:
@@ -948,7 +948,7 @@ class Runner:
                 + "\nSupporting user documents:\n" + self._documents_text()
                 + "\nChecker:\n```verilog\n" + before.read_text() + "\n```")
         # The context deliberately contains no RTL, other reference or solver verdict.
-        response = self._call("property_review", P.PROPERTIES_REVIEW_SYSTEM, user,
+        response = self._call("property_review", P.PROPERTIES_REVIEW_SYSTEM + P.reset_semantics_note(contract), user,
                               seed=(reviewer.cfg.seed or 0) + 89, adapter=reviewer)
         (review_dir / "response.txt").write_text(response.text)
         code = extract_code(response.text, ("verilog", "systemverilog", "v", "sv")) if response.ok else None

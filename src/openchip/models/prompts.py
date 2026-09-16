@@ -198,19 +198,19 @@ Constraints of the open toolchain — follow them exactly:
 - The checker module must use exactly the port list given (all DUT ports are inputs to the checker). Same parameters as the DUT.
 - For resetless contracts, the DUT initial state is unconstrained. Do not invent a reset port or assume initialized DUT state. Guard history-dependent assertions with a checker-local past_valid flag and derive expectations from observed prior inputs/state.
 - Distinguish past_valid (a previous observation exists) from state_valid (a hidden state has a known value). One elapsed edge does not make an unknown resetless counter/register equal zero. A reconstructed shadow state becomes valid only after an observed operation that establishes it, such as a complete load or enough shifts to replace every unknown bit. If that operation never occurs, keep shadow-equivalence assertions disabled, while retaining direct properties that follow from observed outputs/inputs. Do not set state_valid unconditionally on the first edge.
-- When a reset port exists, reset is asserted by the harness for the first cycles. Set an initially-zero `past_valid` register to 1 on every edge, including reset edges. After the first edge, check reset using the saved PREVIOUS reset: `if (past_valid && prev_rst) assert(q == 0);`. Do not use `past_valid <= !rst` to guard reset checks: it makes the previous-reset branch unreachable.
+- When a reset port exists, reset is asserted by the harness for the first cycles. Normalize the raw port level into an explicit reset-active boolean using clock_reset.reset_active: `reset_active = rst` for active-high, `reset_active = !resetn` for active-low. Save `prev_reset_active <= reset_active` on each edge. Never treat a raw active-low reset level of 1 as asserted. Set an initially-zero past_valid to 1 on every edge, including reset edges. After valid history, `if (prev_reset_active)` checks the PREVIOUS edge's reset effect, using the reset values actually specified by the contract (not automatically zero). Do not gate past_valid with reset deassertion: that makes previous-reset checks unreachable. For synchronous reset, asserting reset between clock edges must not itself change registered outputs; the next active edge applies reset. Do not assume DUT initialization before reset.
 - TIMING RULE: a registered output observed at this clock edge was computed from the inputs and state of the PREVIOUS cycle. For a DIRECT transition assertion, compare it with saved last-cycle inputs/outputs (`prev_*`), not current controls. A separately reconstructed shadow state is different: update that shadow with CURRENT edge inputs using nonblocking assignments, exactly when the specified hardware updates. Assert equality against its pre-edge value before those updates take effect. Feeding prev_* controls into a shadow-state transition adds an erroneous extra cycle of delay. Combinational outputs depend on current inputs and current state, not on a state's not-yet-applied nonblocking update.
 
-Worked example for a counter with registered `count` and enable `en`:
+Worked example ONLY for an ACTIVE-HIGH synchronous reset-to-zero counter with registered `count` and enable `en`:
 ```verilog
 module counter_props (input clk, input rst, input en, input [7:0] count);
   reg past_valid = 1'b0;
-  reg prev_en, prev_rst; reg [7:0] prev_count;
+  reg prev_en, prev_reset_active; reg [7:0] prev_count;
   always @(posedge clk) begin
-    prev_en <= en; prev_count <= count; prev_rst <= rst;
+    prev_en <= en; prev_count <= count; prev_reset_active <= rst;
     past_valid <= 1'b1;
     if (past_valid) begin
-      if (prev_rst) assert(count == 0);
+      if (prev_reset_active) assert(count == 0);
       else if (prev_en) assert(count == prev_count + 8'd1);   // uses PREVIOUS en, not current en
       else assert(count == prev_count);
       cover(count == 8'd255);
@@ -354,3 +354,16 @@ Review it now."""
 
 def contract_context(c: Contract, request: str = "") -> dict:
     return {"contract_json": c.model_dump_json(indent=1), "contract_md": c.summary_md(), "request": request.strip()}
+
+
+def reset_semantics_note(contract: Contract) -> str:
+    cr = contract.clock_reset
+    if cr is None or cr.reset is None:
+        return "\nThis contract has no reset port. Do not invent reset assumptions."
+    active = cr.reset if cr.reset_active == "high" else "!" + cr.reset
+    return (f"\nConcrete reset semantics for this contract: {cr.reset} is active-{cr.reset_active}, "
+            f"{cr.reset_kind}; active clock edge is {cr.clock_edge} {cr.clock}. "
+            f"The reset-active expression is ({active}), not an unspecified raw reset flag. "
+            f"For a prior-edge reset check, save prev_reset_active <= ({active}); "
+            "then test prev_reset_active after valid history. Use the same polarity in shadow transitions. "
+            "Check only specified reset values, and distinguish synchronous edge effects from asynchronous effects.")
