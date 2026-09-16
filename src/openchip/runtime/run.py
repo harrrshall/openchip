@@ -295,6 +295,11 @@ class Runner:
                                                          "model": adapter.cfg.model, "thinking_requested": False, "thinking_control_sent": True, "effective_thinking": "unknown"})
             self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok) [no-thinking fallback]")
             self.budget.check_time()
+            if r.error and re.search(r"thinking[- ]only|reasoning_effort|not supported", r.error, re.I):
+                # Thinking-only models (e.g. GLM-5.3 via OpenCode Go) reject the switch;
+                # keep thinking on for later attempts instead of failing every retry.
+                self._no_think_roles.discard(f"{adapter.cfg.model}:{role}")
+                self.log(f"[model:{role}] provider rejects enable_thinking=false; keeping thinking on for later {role} calls")
         return r
 
     def _normalize(self, code: str, step: str) -> str:

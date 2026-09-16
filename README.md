@@ -36,6 +36,51 @@ openchip ui --open
 
 resolve missing tools reported by `openchip doctor` before building. the interface opens at [localhost:8765](http://127.0.0.1:8765). configure your model connection in settings, then follow the same project workflow above. model inference can use a remote provider or a compatible endpoint you run yourself.
 
+`openchip doctor` must report `sandbox ok`. reference models execute inside a bubblewrap sandbox and there is no unsandboxed fallback, so a host where bubblewrap cannot create user namespaces fails every build at reference generation. on ubuntu 24.04 (including fresh cloud images and docker/colima virtual machines) the default apparmor restriction blocks this; allow it with:
+
+```sh
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+echo kernel.apparmor_restrict_unprivileged_userns=0 | sudo tee /etc/sysctl.d/99-openchip-bwrap.conf
+```
+
+plain docker containers also block user namespaces through seccomp; use a virtual machine instead.
+
+## use a hosted model through opencode go
+
+[opencode go](https://opencode.ai/docs/go/) exposes kimi, deepseek, glm, qwen and minimax models behind one openai-style endpoint. openchip supports it out of the box and adds the required `x-opencode-session` header automatically. put the key in your environment and point a config at the gateway with the `openai` provider:
+
+```sh
+export OPENCODE_GO_API_KEY=sk-...
+```
+
+```toml
+# openchip.toml
+[model]
+provider = "openai"                       # not "openai-compatible": the gateway rejects vllm-only request fields
+base_url = "https://opencode.ai/zen/go/v1"
+model = "kimi-k3"                         # fast and schema-clean; deepseek-v4-pro and glm-5.3-flash also work
+api_key_env = "OPENCODE_GO_API_KEY"
+max_tokens = 32000
+temperature = 0.2
+context_window = 128000
+timeout_s = 600.0
+thinking = true
+```
+
+```sh
+openchip --config openchip.toml doctor          # model line must read ok
+openchip --config openchip.toml init work/lfsr8 --request request.md --name lfsr8
+openchip --config openchip.toml build --project work/lfsr8 --budget 25m
+openchip --config openchip.toml report --project work/lfsr8
+```
+
+in the browser interface choose provider `openai`, enter the same base url, model and key in settings, and test the connection.
+
+notes from testing this route:
+
+- avoid `glm-5.3` as the main model: it is thinking-only and regularly reasons past the output cap on the intake prompt.
+- the go plan has a five-hour usage window shared by all models. one full build with reviews enabled uses on the order of 100k tokens; if you hit `GoUsageLimitError`, wait for the reset and run `openchip resume --project <dir> --run <id>` to continue from the last completed stage instead of rebuilding.
+
 ## how it works
 
 1. a request becomes a versioned contract describing the interface and behavior.
