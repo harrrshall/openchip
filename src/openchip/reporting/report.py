@@ -193,6 +193,12 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             parts.append("generic synthesis " + ("passed" if evidence["synth"].get("ok") else "FAILED"))
         else:
             parts.append("synthesis not run")
+        netlist_sims = evidence.get("netlist_sims", [])
+        if netlist_sims:
+            npass = sum(s["status"] == "pass" for s in netlist_sims)
+            parts.append(f"synthesized netlist simulation passed for {npass}/{len(netlist_sims)} seeds x {netlist_sims[0]['cycles']} cycles")
+        elif evidence.get("netlist_compile"):
+            parts.append("synthesized netlist compile " + ("passed; simulation not run" if evidence["netlist_compile"].get("ok") else "FAILED"))
     if evidence and evidence.get("formal"):
         f = evidence["formal"]
         parts.append(f"formal BMC depth {f.get('depth')}: {f.get('status')}" + (" (bounded, not a proof)" if f.get("status") == "bounded_pass" else ""))
@@ -294,6 +300,10 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             syn = evidence["synth"]
             cells = syn.get("num_cells")
             md.append(f"- Yosys generic synthesis (`{syn.get('version','')}`): {'ok' if syn.get('ok') else 'FAILED'}" + (f"; {cells} generic cells after techmap (not a technology-mapped area; no timing analysis)." if cells is not None else "."))
+        if evidence.get("netlist_compile"):
+            md.append(f"- Synthesized netlist compile: {'ok' if evidence['netlist_compile'].get('ok') else 'FAILED'}.")
+        for s in evidence.get("netlist_sims", []):
+            md.append(f"- Synthesized netlist simulation seed {s['seed']}: **{s['status']}** ({s['cycles']} scheduled cycles; {s['mismatches']} mismatching observations). Sampled behavioral check, not exhaustive equivalence or timing analysis.")
         if evidence.get("formal"):
             f = evidence["formal"]
             md.append(f"- SymbiYosys BMC (`{f.get('version','')}`, depth {f.get('depth')}) on the independent property checker: **{f.get('status')}**" + (f"; failed assertion `{f.get('failed_assert')}`" if f.get("failed_assert") else "") + ". Bounded result at the stated depth; immediate assertions only.")

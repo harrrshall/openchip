@@ -9,6 +9,7 @@ import json
 import re
 import hashlib
 import shutil
+import tempfile
 from pathlib import Path
 
 from .base import ToolResult, run_tool, tool_version
@@ -39,10 +40,22 @@ def synth_generic(sources: list[str], top: str, cwd: str | Path, exe: str = "yos
         source_files.append({"source": str(original), "staged": destination.name,
                              "sha256": hashlib.sha256(destination.read_bytes()).hexdigest()})
     reads = "; ".join(f"read_verilog -sv {name}" for name in staged)
-    script = f"{reads}; hierarchy -check -top {top}; proc; flatten; opt; memory; opt; techmap; opt; tee -q -o {json_out} stat -json; check -assert"
+    netlist = Path(cwd) / "openchip_synth_netlist.v"
+    if netlist.is_symlink():
+        raise ValueError("synthesis netlist must not be a symlink")
+    if netlist.exists():
+        previous = Path(tempfile.mkdtemp(prefix=".netlist-previous-", dir=cwd))
+        netlist.replace(previous / netlist.name)
+    script = f"{reads}; hierarchy -check -top {top}; proc; flatten; opt; memory; opt; techmap; opt; tee -q -o {json_out} stat -json; check -assert; write_verilog -noattr {netlist.name}"
     argv = [exe, "-q", "-p", script]
     r = run_tool("yosys", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=staged)
     r.extra["source_files"] = source_files
+    if r.ok:
+        if not netlist.is_file() or netlist.is_symlink():
+            r.error = "synthesis produced no regular functional netlist"
+        else:
+            r.extra["netlist"] = str(netlist.resolve())
+            r.extra["netlist_sha256"] = hashlib.sha256(netlist.read_bytes()).hexdigest()
     stat_path = Path(cwd) / json_out
     if stat_path.is_file():
         try:

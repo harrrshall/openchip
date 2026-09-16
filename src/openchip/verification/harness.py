@@ -48,6 +48,8 @@ class VerificationResult:
     compile: Optional[dict] = None
     sims: list[dict] = field(default_factory=list)
     synth: Optional[dict] = None
+    netlist_compile: Optional[dict] = None
+    netlist_sims: list[dict] = field(default_factory=list)
     formal: Optional[dict] = None
     guard_findings: list[dict] = field(default_factory=list)
     reference_error: str = ""
@@ -68,9 +70,12 @@ class VerificationResult:
             parts.append("VERILATOR LINT:\n" + _fmt_diags(self.lint))
         if self.compile and not self.compile.get("ok"):
             parts.append("IVERILOG COMPILE:\n" + _fmt_diags(self.compile))
-        for s in self.sims:
+        if self.netlist_compile and not self.netlist_compile.get("ok"):
+            parts.append("SYNTHESIZED NETLIST COMPILE:\n" + _fmt_diags(self.netlist_compile))
+        for label, s in ([("SIMULATION", s) for s in self.sims] +
+                         [("SYNTHESIZED NETLIST SIMULATION", s) for s in self.netlist_sims]):
             if s["status"] == "fail":
-                lines = [f"SIMULATION seed={s['seed']}: {s['mismatches']} mismatching cycles out of {s['cycles']}. First mismatches (cycle numbers count from the first recorded comparison after the startup sequence; expected = reference model; got=x/X/z means the RTL output is undefined — an uninitialized register, missing reset assignment, or unassigned wire):"]
+                lines = [f"{label} seed={s['seed']}: {s['mismatches']} mismatching cycles out of {s['cycles']}. First mismatches (cycle numbers count from the first recorded comparison after the startup sequence; expected = reference model; got=x/X/z means the output is undefined — an uninitialized register, missing reset assignment, or unassigned wire):"]
                 if s.get("sampling"):
                     lines.append(s["sampling"])
                 first = next(iter(s["first_mismatches"]), {})
@@ -80,7 +85,7 @@ class VerificationResult:
                 lines += [f"  cycle {m['cycle']}: {m['port']} expected=0x{m['expected']} got=0x{m['got']}" + (f"  inputs: {m['inputs']}" if m.get("inputs") else "") for m in s["first_mismatches"][:12]]
                 parts.append("\n".join(lines))
             elif s["status"] not in ("pass",):
-                parts.append(f"SIMULATION seed={s['seed']}: {s['status']}: {s['detail'][:800]}")
+                parts.append(f"{label} seed={s['seed']}: {s['status']}: {s['detail'][:800]}")
         if self.synth and not self.synth.get("ok"):
             parts.append("YOSYS SYNTHESIS:\n" + _fmt_diags(self.synth))
         if self.formal and self.formal.get("status") == "counterexample":
@@ -242,6 +247,11 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
     tb = work / f"tb_{contract.module_name}.v"
     tb.write_text(generate_testbench(contract, cycles))
     res.artifacts["testbench"] = str(tb)
+    res.artifacts["testbench_sha256"] = sha256_file(tb)
+    res.artifacts["vector_hashes"] = {str(seed): {
+        "inputs": sha256_file(work / f"vectors_in_{seed}.hex"),
+        "expected": sha256_file(work / f"vectors_exp_{seed}.hex")}
+        for seed in seeds}
     comp = iverilog.compile_verilog([str(rtl_path.resolve()), tb.name], f"tb_{contract.module_name}", "sim.vvp", work, tcfg.iverilog, tcfg.timeout_s)
     res.compile = _tr(comp)
     if not comp.ok:
@@ -280,6 +290,28 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         if not syn.ok:
             res.summary = "yosys generic synthesis failed"
             return res
+        # Structural synthesis success does not establish behavioral agreement:
+        # e.g. synthesis metacomments can remove logic that source simulation saw.
+        netlist = Path(syn.extra["netlist"])
+        res.artifacts.update(netlist=str(netlist), netlist_sha256=syn.extra["netlist_sha256"])
+        res.stage = "netlist_compile"
+        nc = iverilog.compile_verilog([str(netlist), tb.name], f"tb_{contract.module_name}",
+                                     "netlist.vvp", work, tcfg.iverilog, tcfg.timeout_s)
+        res.netlist_compile = _tr(nc)
+        if not nc.ok:
+            res.summary = "synthesized netlist compile failed"
+            return res
+        res.stage = "netlist_simulate"
+        for seed in seeds:
+            ns = iverilog.simulate("netlist.vvp", work, tcfg.vvp, tcfg.timeout_s,
+                                  plusargs=[f"+vin=vectors_in_{seed}.hex", f"+vexp=vectors_exp_{seed}.hex"])
+            measured = parse_sim(ns, seed, cycles, vectors[seed])
+            measured.sampling = res.sims[seeds.index(seed)]["sampling"]
+            res.netlist_sims.append(asdict(measured))
+            (work / f"netlist_sim_{seed}.log").write_text(ns.stdout + ns.stderr)
+        if any(s["status"] != "pass" for s in res.netlist_sims):
+            res.summary = "synthesized netlist mismatches against reference model"
+            return res
 
     # 6. formal (bounded model checking against the independent property checker)
     if props_path is not None and props_path.is_file():
@@ -303,7 +335,7 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
 
     res.stage = "done"
     res.accepted = True
-    res.summary = f"lint ok; simulation passed for seeds {seeds} x {cycles} cycles" + ("; generic synthesis ok" if run_synth else "; synthesis not run") + formal_note
+    res.summary = f"lint ok; simulation passed for seeds {seeds} x {cycles} cycles" + ("; generic synthesis and netlist simulation passed" if run_synth else "; synthesis not run") + formal_note
     return res
 
 

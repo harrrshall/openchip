@@ -36,10 +36,13 @@ def prior_simulation_failures(workspace: Path, artifacts: dict) -> list[dict]:
             continue
         if any(previous["artifacts"].get(key) != value for key, value in identity.items()):
             continue
-        sims = previous.get("sims")
-        if not isinstance(sims, list):
+        sims = previous.get("sims") or []
+        netlist_sims = previous.get("netlist_sims") or []
+        if not isinstance(sims, list) or not isinstance(netlist_sims, list):
             continue
-        failed = [sim for sim in sims if isinstance(sim, dict) and sim.get("status") == "fail"
+        # A short replay or skipping synthesis cannot erase a demonstrated
+        # source-to-hardware discrepancy for these unchanged artifacts.
+        failed = [sim for sim in sims + netlist_sims if isinstance(sim, dict) and sim.get("status") == "fail"
                   and isinstance(sim.get("mismatches"), int) and sim["mismatches"] > 0]
         if failed:
             failures.append({"evidence": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
