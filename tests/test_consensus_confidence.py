@@ -6,6 +6,7 @@ import pytest
 
 from openchip.reporting.report import consensus_confidence, sign_off_withheld
 from openchip.runtime import run as run_mod
+from openchip.config import Config
 
 
 def test_no_consensus_block_is_high():
@@ -51,13 +52,16 @@ def _drive_consensus(tmp_path, monkeypatch, generated, comparisons, rtl_accepts)
                         lambda *a, **k: SimpleNamespace(accepted=next(verdicts)))
     runner = SimpleNamespace(
         ws=SimpleNamespace(dir=lambda name: tmp_path / name),
-        cfg=SimpleNamespace(verification=SimpleNamespace(seeds=[1], sim_cycles=10)),
+        cfg=Config(),
         store=SimpleNamespace(event=lambda *a, **k: None),
         log=lambda *a, **k: None,
         run_id="test-run",
         _generate_reference=lambda ck, contract, path, seed_offset, attempts: next(gen),
         _adopt_reference=lambda ck, old, new: ck.__setitem__("reference_path", str(new)),
     )
+    runner.cfg.verification.seeds = [1]
+    runner.cfg.verification.sim_cycles = 10
+    runner._reference_comparison_config = lambda: run_mod.Runner._reference_comparison_config(runner)
     ck: dict = {}
     run_mod.Runner._reference_consensus(
         runner, ck, None, tmp_path / "rtl.v", tmp_path / "reference.py", None)
@@ -96,6 +100,7 @@ def test_every_consensus_branch_records_its_confidence(
     assert consensus["outcome"].startswith(outcome)
     assert consensus["confidence"] == confidence
     assert consensus_confidence({"consensus": consensus}) == confidence
+    assert bool(sign_off_withheld({"consensus": consensus})) is (confidence != "high")
 
 
 def test_no_consensus_block_is_not_withheld():
@@ -123,6 +128,19 @@ def test_missing_outcome_withholds_sign_off():
     "alt1_failed",
     "split_1_1_alt2_failed",
 ])
-def test_agreeing_outcomes_are_not_gated(outcome):
-    # Regression guard: the gate must not widen to outcomes that represent agreement.
-    assert sign_off_withheld({"consensus": {"outcome": outcome}}) == ""
+def test_outcome_without_confidence_withholds_sign_off(outcome):
+    # An outcome label alone cannot establish unanimous corroboration.
+    assert sign_off_withheld({"consensus": {"outcome": outcome}})
+
+
+@pytest.mark.parametrize("outcome,confidence", [
+    ("rtl_corroborated_by_two_references", "high"),
+    ("reference_corroborated", "high"),
+    ("rtl_corroborated_2_of_3", "medium"),
+    ("rtl_corroborated_by_alt1", "low"),
+    ("alt1_failed", "low"),
+    ("split_1_1_alt2_failed", "low"),
+])
+def test_only_high_confidence_agreement_allows_sign_off(outcome, confidence):
+    reason = sign_off_withheld({"consensus": {"outcome": outcome, "confidence": confidence}})
+    assert bool(reason) is (confidence != "high")

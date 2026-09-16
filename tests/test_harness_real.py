@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from support import counter_contract_data
+
 from openchip.config import Config
 from openchip.contracts.schema import Contract
 from openchip.verification.harness import verify
@@ -15,7 +17,7 @@ pytestmark = pytest.mark.cloud
 
 
 def _contract():
-    return Contract.model_validate_json((FIX / "counter_contract.json").read_text())
+    return Contract.model_validate(counter_contract_data())
 
 
 def _run(tmp_path, rtl_name, **kw):
@@ -51,7 +53,7 @@ def test_x_after_reset_detected(tmp_path):
 
 def test_syntax_error_stops_at_compile_or_lint(tmp_path):
     res = _run(tmp_path, "counter_syntax.v")
-    assert not res.accepted and res.stage in ("lint", "compile")
+    assert not res.accepted and res.stage in ("rtl_policy", "lint", "compile")
     assert res.evidence_for_model()
 
 

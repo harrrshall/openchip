@@ -1,16 +1,9 @@
-import json
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
 from openchip.contracts.schema import Contract, eval_width
 
-FIX = Path(__file__).parent / "fixtures"
-
-
-def load():
-    return json.loads((FIX / "counter_contract.json").read_text())
+from support import counter_contract_data as load
 
 
 def test_valid_contract_roundtrip():

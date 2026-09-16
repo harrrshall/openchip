@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from support import counter_contract_data
+
 from openchip.config import Config, ModelConfig
 from openchip.models.adapter import ModelResponse, Usage
 from openchip.runtime.run import Runner
@@ -20,37 +22,46 @@ class ScriptedAdapter:
         self.replies = {k: list(v) for k, v in replies.items()}
         self.usage = Usage()
         self.calls: list[str] = []
+        self.provider = "openai-compatible"
+        self.last_reference = ""
         self.cfg = ModelConfig(model="scripted", thinking=False, thinking_roles=[])
 
     def chat(self, messages, role="generic", **kw):
         self.calls.append(role)
-        q = self.replies.get(role) or ["(no reply)"]
+        q = self.replies.get(role) or ([self.last_reference] if role == "reference_review" else ["(no reply)"])
         text = q.pop(0) if len(q) > 1 else q[0]
+        if role == "reference":
+            self.last_reference = text
         r = ModelResponse(text=text, reasoning="", finish_reason="stop", prompt_tokens=10, completion_tokens=10, latency_s=0.01, model="scripted")
         self.usage.add(role, r)
         return r
 
 
 def contract_reply():
-    return json.dumps(json.loads((FIX / "counter_contract.json").read_text()))
+    return json.dumps(counter_contract_data())
 
 
 def code(lang, path):
     return f"```{lang}\n{(FIX / path).read_text()}\n```"
 
 
+def config(cycles=100):
+    cfg = Config.load()
+    cfg.verification.run_formal = False
+    cfg.verification.sim_cycles = cycles
+    return cfg
+
+
 def test_happy_path_and_resume_state(tmp_path):
     ws = Workspace(tmp_path / "ws")
     ws.init(request="8-bit up/down counter")
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")], "rtl": [code("verilog", "counter_good.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 100
+    cfg = config(100)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     rid = r.start("8-bit up/down counter")
     out = r.execute()
     assert out["accepted"] and out["state"] == "completed" and out["attempts"] == 1
-    assert adapter.calls == ["intake", "review", "reference", "rtl", "reference"]  # review, then a second reference corroborates acceptance
+    assert adapter.calls == ["intake", "review", "reference", "reference_review", "rtl", "reference", "reference_review"]  # review, then a second reference corroborates acceptance
     assert out["reference_consensus"]["outcome"] == "rtl_corroborated_by_two_references"
     assert (ws.root / "reports" / "report.md").is_file() and (ws.root / "rtl" / "updown_counter.v").is_file()
     run = r.store.get_run(rid)
@@ -64,15 +75,16 @@ def test_repair_loop_fixes_bug(tmp_path):
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")],
                                "rtl": [code("verilog", "counter_bug_priority.v")],
                                "repair": ["VERDICT: rtl\n" + code("verilog", "counter_good.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 100
+    cfg = config(100)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     out = r.execute()
     assert out["accepted"] and out["attempts"] == 2
-    assert (ws.root / "verification" / "attempts" / "attempt_0" / "evidence.json").is_file()  # failed attempt preserved
-    assert (ws.root / "verification" / "attempts" / "attempt_0" / "updown_counter.v").read_text() == (FIX / "counter_bug_priority.v").read_text()
+    first = Path(out["history"][0]["evidence"])
+    assert first.is_file()  # retained evidence remains available after repair
+    assert json.loads(first.read_text())["accepted"] is False
+    failed_rtl = next(ws.dir("verification").glob("attempts/run-*/attempt_0/updown_counter.v"))
+    assert failed_rtl.read_text() == (FIX / "counter_bug_priority.v").read_text()
 
 
 def test_stall_detection_on_identical_rtl(tmp_path):
@@ -80,9 +92,7 @@ def test_stall_detection_on_identical_rtl(tmp_path):
     ws.init(request="counter")
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")],
                                "rtl": [code("verilog", "counter_bug_priority.v")], "repair": [code("verilog", "counter_bug_priority.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 50
+    cfg = config(50)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     out = r.execute()
@@ -96,9 +106,7 @@ def test_budget_exhausted_reports(tmp_path):
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")],
                                "rtl": [code("verilog", "counter_bug_priority.v")],
                                "repair": [code("verilog", "counter_bug_x.v"), code("verilog", "counter_bug_priority.v"), code("verilog", "counter_bug_x.v"), code("verilog", "counter_bug_priority.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 50
+    cfg = config(50)
     cfg.budget.max_repair_iterations = 1
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
@@ -111,8 +119,7 @@ def test_invalid_contract_is_retried_then_fails(tmp_path):
     ws = Workspace(tmp_path / "ws")
     ws.init(request="counter")
     adapter = ScriptedAdapter({"intake": ["not json at all"]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
+    cfg = config()
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     with pytest.raises(RuntimeError):
@@ -125,15 +132,14 @@ def test_resume_from_checkpoint(tmp_path):
     ws = Workspace(tmp_path / "ws")
     ws.init(request="counter")
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")], "rtl": ["garbage"]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 50
+    cfg = config(50)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     rid = r.start("counter")
     with pytest.raises(RuntimeError):
         r.execute()  # rtl step fails -> run failed, checkpoint at 'rtl'
     assert r.store.get_run(rid)["step"] == "rtl"
-    adapter2 = ScriptedAdapter({"rtl": [code("verilog", "counter_good.v")]})
+    adapter2 = ScriptedAdapter({"rtl": [code("verilog", "counter_good.v")],
+                                "reference": [code("python", "counter_reference.py")]})
     r2 = Runner(ws, cfg, adapter=adapter2, log=lambda m: None)
     r2.resume(rid)
     out = r2.execute()
@@ -147,9 +153,7 @@ def test_consensus_adopts_second_reference_when_rtl_is_right(tmp_path):
     adapter = ScriptedAdapter({"intake": [contract_reply()],
                                "reference": [code("python", "counter_reference_wrong.py"), code("python", "counter_reference.py")],
                                "rtl": [code("verilog", "counter_good.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 100
+    cfg = config(100)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     out = r.execute()
@@ -170,9 +174,7 @@ def test_consensus_corroborates_reference_then_repairs(tmp_path):
                                "reference": [code("python", "counter_reference.py")],
                                "rtl": [code("verilog", "counter_bug_priority.v")],
                                "repair": ["VERDICT: rtl\n" + code("verilog", "counter_good.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 100
+    cfg = config(100)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     out = r.execute()
@@ -185,9 +187,7 @@ def test_revision_creates_v2_and_reverifies(tmp_path):
     ws = Workspace(tmp_path / "ws")
     ws.init(request="counter")
     adapter = ScriptedAdapter({"intake": [contract_reply()], "reference": [code("python", "counter_reference.py")], "rtl": [code("verilog", "counter_good.v")]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 50
+    cfg = config(50)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     assert r.execute()["accepted"]
@@ -217,15 +217,13 @@ def test_spec_review_applies_timing_correction(tmp_path):
     ref = (FIX / "counter_reference.py").read_text().replace('out = {"count": self.count}', 'out = {"count": self.count, "is_max": int(self.count == 255)}')
     rtl = (FIX / "counter_good.v").read_text().replace("output reg [7:0] count);", "output reg [7:0] count, output is_max);\n  assign is_max = (count == 8'd255);")
     adapter = ScriptedAdapter({"intake": [json.dumps(c)], "review": [review], "reference": ["```python\n" + ref + "\n```"], "rtl": ["```verilog\n" + rtl + "\n```"]})
-    cfg = Config.load()
-    cfg.verification.run_formal = False
-    cfg.verification.sim_cycles = 100
+    cfg = config(100)
     r = Runner(ws, cfg, adapter=adapter, log=lambda m: None)
     r.start("counter")
     out = r.execute()
-    assert out["accepted"], out["status_line"]
+    assert not out["accepted"] and "SIGN-OFF WITHHELD" in out["status_line"]
     v2 = json.loads((ws.root / "spec" / "contract.v2.json").read_text())
     assert v2["parent_version"] == 1 and v2["revision_authority"] == "agent_inference"
     assert next(p for p in v2["ports"] if p["name"] == "is_max")["timing"] == "combinational"
-    assert out["provisional"] is True and "PROVISIONAL" in out["status_line"]
+    assert out["unresolved"] == ["Should is_max also assert during reset?"]
     assert out["review"]["applied"][0]["kind"] == "port_timing"

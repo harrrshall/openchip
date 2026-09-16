@@ -203,7 +203,7 @@ def test_rendered_bit_vector_is_listed_msb_first_and_carries_its_packed_value():
 def test_rendering_states_the_bit_convention_and_disowns_the_listing_order():
     (t,) = parse_request_tables(KMAP_LSB_FIRST)
     text = render_table(t)
-    assert "bit k of the value of `s`, contributing 2**k" in text
+    assert "contributes 2**(k-L) to the packed integer" in text
     assert "not a significance order" in text
     # The claim that got skimmed past before was about the *listing* order of the whole row; the
     # bits within a port really are ordered here, so the text must not deny that.
