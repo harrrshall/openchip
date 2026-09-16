@@ -76,11 +76,6 @@ openchip --config openchip.toml report --project work/lfsr8
 
 in the browser interface choose provider `openai`, enter the same base url, model and key in settings, and test the connection.
 
-notes from testing this route:
-
-- avoid `glm-5.3` as the main model: it is thinking-only and regularly reasons past the output cap on the intake prompt.
-- the go plan has a five-hour usage window shared by all models. one full build with reviews enabled uses on the order of 100k tokens; if you hit `GoUsageLimitError`, wait for the reset and run `openchip resume --project <dir> --run <id>` to continue from the last completed stage instead of rebuilding.
-
 ## how it works
 
 1. a request becomes a versioned contract describing the interface and behavior.
