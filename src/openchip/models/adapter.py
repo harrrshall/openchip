@@ -84,7 +84,10 @@ def resolve_api_key(cfg: ModelConfig) -> str:
     candidates = [cfg.api_key_env, PROVIDER_DEFAULTS[provider]["key_env"], "OPENCHIP_MODEL_API_KEY"]
     keys = read_keys_file()
     for name in candidates:
-        val = os.environ.get(name) or keys.get(name)
+        # A key explicitly saved in Settings must survive a stale inherited
+        # environment, including after the service restarts. Candidate-name
+        # priority still honors a configured custom credential variable.
+        val = keys.get(name) or os.environ.get(name)
         if val:
             return val
     return "EMPTY"

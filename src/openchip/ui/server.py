@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlparse, unquote
 from .presentation import result_summary, stage_durations, contract_diff
 
 from ..config import Config, ModelConfig
-from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, read_keys_file, write_keys_file
+from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, resolve_api_key, write_keys_file
 from ..runtime.run import Runner
 from ..runtime.store import RunStore
 from ..runtime.workspace import Workspace
@@ -81,7 +81,9 @@ class UIState:
     def public_settings(self) -> dict:
         provider = self.settings.get("provider", "openai-compatible")
         env = PROVIDER_DEFAULTS[provider]["key_env"]
-        key = os.environ.get(env) or read_keys_file().get(env) or ""
+        key = resolve_api_key(self.config().model)
+        if key == "EMPTY":
+            key = ""
         return {**self.settings, "key_env": env, "key_present": bool(key), "key_hint": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("set" if key else ""),
                 "presets": PRESETS.get(provider, [])}
 
