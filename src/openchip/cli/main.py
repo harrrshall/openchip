@@ -198,28 +198,57 @@ def cmd_report(args) -> int:
 
 def cmd_verify(args) -> int:
     """Re-run verification of delivered artifacts (no model calls)."""
+    import sqlite3
+    import tempfile
     from ..contracts.schema import Contract
     from ..runtime.workspace import Workspace
     from ..verification.harness import verify
+    from ..verification.tablecheck import check_reference_against_request_tables
+    from ..verification.clockcheck import check_clock
+    from ..reporting.report import sign_off_withheld
 
     cfg = _cfg(args)
     ws = Workspace(args.project)
     spec = ws.dir("spec")
-    contracts = sorted(spec.glob("contract.v*.json"))
+    contracts = sorted(spec.glob("contract.v*.json"), key=lambda p: int(p.stem.split(".v")[1]))
     if not contracts:
         print("no contract found", file=sys.stderr)
         return 1
     contract = Contract.model_validate_json(contracts[-1].read_text())
     rtl = ws.dir("rtl") / f"{contract.module_name}.v"
     ref = ws.dir("reference") / "reference.py"
-    work = ws.dir("verification") / "reverify"
+    work = Path(tempfile.mkdtemp(prefix="reverify-", dir=ws.dir("verification")))
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
     props = ws.dir("verification") / f"{contract.module_name}_props.v"
     res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds,
                  props_path=props if props.is_file() else None)
-    (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=2))
-    print(json.dumps({"accepted": res.accepted, "stage": res.stage, "summary": res.summary, "sims": [(s["seed"], s["status"], s["mismatches"]) for s in res.sims]}, indent=1))
-    return 0 if res.accepted else 3
+    evidence = res.to_dict()
+    ck = {"request": ws.request_text()}
+    # Keep the request's revision history and any unresolved reference disagreement.
+    # Read-only access leaves the original run and its outcome untouched.
+    if ws.db_path.is_file():
+        db = sqlite3.connect(ws.db_path.as_uri() + "?mode=ro", uri=True)
+        try:
+            row = db.execute("SELECT checkpoint_json FROM runs ORDER BY created DESC LIMIT 1").fetchone()
+            prior = json.loads(row[0]) if row else {}
+            if prior.get("contract_version") == contract.version:
+                ck.update({k: prior[k] for k in ("request", "consensus") if k in prior})
+        finally:
+            db.close()
+    ck["request_table_check"] = check_reference_against_request_tables(
+        contract, ck["request"], ref, work / "request_tables")
+    ck["clock_check"] = check_clock(contract, ck["request"], rtl, work / "clock_check", cfg)
+    withheld = sign_off_withheld(ck, evidence, contract)
+    accepted = res.accepted and not withheld
+    evidence.update(accepted=accepted, sign_off_withheld=withheld,
+                    request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
+                    contract_path=str(contracts[-1]), contract_version=contract.version)
+    (work / "evidence.json").write_text(json.dumps(evidence, indent=2))
+    print(json.dumps({"accepted": accepted, "stage": res.stage,
+                      "summary": withheld or res.summary, "sign_off_withheld": withheld,
+                      "contract_version": contract.version, "evidence_path": str(work / "evidence.json"),
+                      "sims": [(s["seed"], s["status"], s["mismatches"]) for s in res.sims]}, indent=1))
+    return 0 if accepted else 3
 
 
 def cmd_compose(args) -> int:
