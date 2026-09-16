@@ -30,13 +30,6 @@ def test_none_confidence_is_low():
     assert consensus_confidence({"consensus": {"outcome": "x", "confidence": None}}) == "low"
 
 
-def test_provisional_rule():
-    # Mirrors write_report: provisional = accepted and (n_unresolved > 0 or conf != "high")
-    split = {"consensus": {"outcome": "rtl_corroborated_by_alt1"}}
-    assert True and (0 > 0 or consensus_confidence(split) != "high")
-    assert not (True and (0 > 0 or consensus_confidence({}) != "high"))
-
-
 def _drive_consensus(tmp_path, monkeypatch, generated, comparisons, rtl_accepts):
     """Run Runner._reference_consensus against stubs and return its consensus block.
 

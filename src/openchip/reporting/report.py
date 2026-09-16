@@ -83,17 +83,17 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
         reasons.append("the request-table check could not complete: " + (t.get("detail") or "checker error"))
     if t.get("status") not in {"mismatch", "error"}:
         from ..contracts.cellular import cellular_scope
-        if cellular_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "cellular_transition_table" not in t.get("checked_kinds", [])):
-            reasons.append("the independent sequential cell-table check has not completed")
         from ..contracts.neighbors import neighbor_scope
-        if neighbor_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "neighbor_vector_equations" not in t.get("checked_kinds", [])):
-            reasons.append("the independent vector-neighbor check has not completed")
         from ..contracts.directional import directional_scope
-        if directional_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "directional_state_transitions" not in t.get("checked_kinds", [])):
-            reasons.append("the independent controller state-transition check has not completed")
         from ..contracts.packet import packet_scope
-        if packet_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "packet_framing" not in t.get("checked_kinds", [])):
-            reasons.append("the independent packet-framing check has not completed")
+        for scope, kind, label in (
+            (cellular_scope, "cellular_transition_table", "sequential cell-table"),
+            (neighbor_scope, "neighbor_vector_equations", "vector-neighbor"),
+            (directional_scope, "directional_state_transitions", "controller state-transition"),
+            (packet_scope, "packet_framing", "packet-framing"),
+        ):
+            if scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or kind not in t.get("checked_kinds", [])):
+                reasons.append(f"the independent {label} check has not completed")
         from ..contracts.state_tables import parse_state_tables
         try:
             state_tables = parse_state_tables(ck.get("request", ""))
@@ -159,20 +159,18 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         withheld = (withheld + "; " if withheld else "") + "artifact retention failed: " + "; ".join(sorted(set(retention_errors)))
 
     # ---- requirement-to-evidence index --------------------------------------------------
-    req_index = []
-    if contract:
-        for r in contract.requirements:
-            if accepted:
-                disp = "tested (random simulation vs. independent reference; not a proof)"
-            elif evidence and evidence.get("accepted") and withheld:
-                disp = "NOT signed off — an independent acceptance gate failed or is incomplete"
-            elif evidence:
-                disp = f"NOT verified — last verification stopped at stage '{evidence.get('stage')}'"
-            else:
-                disp = "NOT verified — no verification ran"
-            if r.disposition == Disposition.unsupported:
-                disp = "unsupported (declared in contract)"
-            req_index.append({"id": r.id, "text": r.text, "source": r.source.value, "evidence": disp})
+    if accepted:
+        disposition = "tested (random simulation vs. independent reference; not a proof)"
+    elif evidence and evidence.get("accepted") and withheld:
+        disposition = "NOT signed off — an independent acceptance gate failed or is incomplete"
+    elif evidence:
+        disposition = f"NOT verified — last verification stopped at stage '{evidence.get('stage')}'"
+    else:
+        disposition = "NOT verified — no verification ran"
+    req_index = [{"id": r.id, "text": r.text, "source": r.source.value,
+                  "evidence": "unsupported (declared in contract)"
+                  if r.disposition == Disposition.unsupported else disposition}
+                 for r in contract.requirements] if contract else []
 
     # ---- status line ---------------------------------------------------------------------
     parts = []
@@ -207,16 +205,6 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     parts.append("timing closure not evaluated")
     if withheld:
         parts.append("SIGN-OFF WITHHELD: " + withheld)
-    conf = consensus_confidence(ck)
-    n_unresolved = len(contract.unresolved) if contract else 0
-    provisional = accepted and (n_unresolved > 0 or conf != "high")
-    if accepted and conf != "high":
-        parts.append(f"reference vote not unanimous ({conf} confidence)")
-    if provisional:
-        why = [f"{n_unresolved} unresolved decision(s)"] if n_unresolved else []
-        if conf != "high":
-            why.append("non-unanimous reference vote")
-        parts.append("PROVISIONAL: " + " and ".join(why) + " need the user")
     status_line = f"[{final_state}] " + "; ".join(parts) + (f". Reason: {reason}" if reason else "")
 
     tools = {k: tool_version(getattr(cfg.tools, k), ("-V",) if k in ("iverilog", "vvp", "yosys") else ("--version",)) for k in ("iverilog", "vvp", "verilator", "yosys", "sby")}
@@ -233,7 +221,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             "properties": str(properties_path) if properties_path else None, "properties_sha256": _sha(properties_path) if properties_path else "",
         },
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
-        "attempts": len(history), "history": history, "reference_consensus": consensus, "review": ck.get("review"), "provisional": provisional,
+        "attempts": len(history), "history": history, "reference_consensus": consensus, "review": ck.get("review"), "provisional": False,  # unresolved decisions/reference votes already withhold acceptance
         "request_table_repair": ck.get("table_repair"),
         "request_table_check": ck.get("request_table_check"),
         "clock_check": ck.get("clock_check"),

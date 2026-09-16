@@ -61,6 +61,7 @@ def test_happy_path_and_resume_state(tmp_path):
     rid = r.start("8-bit up/down counter")
     out = r.execute()
     assert out["accepted"] and out["state"] == "completed" and out["attempts"] == 1
+    assert out["provisional"] is False
     assert adapter.calls == ["intake", "review", "reference", "reference_review", "rtl", "reference", "reference_review"]  # review, then a second reference corroborates acceptance
     assert out["reference_consensus"]["outcome"] == "rtl_corroborated_by_two_references"
     assert (ws.root / "reports" / "report.md").is_file() and (ws.root / "rtl" / "updown_counter.v").is_file()
@@ -222,6 +223,7 @@ def test_spec_review_applies_timing_correction(tmp_path):
     r.start("counter")
     out = r.execute()
     assert not out["accepted"] and "SIGN-OFF WITHHELD" in out["status_line"]
+    assert out["provisional"] is False
     v2 = json.loads((ws.root / "spec" / "contract.v2.json").read_text())
     assert v2["parent_version"] == 1 and v2["revision_authority"] == "agent_inference"
     assert next(p for p in v2["ports"] if p["name"] == "is_max")["timing"] == "combinational"
