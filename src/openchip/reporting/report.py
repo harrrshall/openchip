@@ -91,6 +91,9 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
         from ..contracts.directional import directional_scope
         if directional_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "directional_state_transitions" not in t.get("checked_kinds", [])):
             reasons.append("the independent controller state-transition check has not completed")
+        from ..contracts.packet import packet_scope
+        if packet_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "packet_framing" not in t.get("checked_kinds", [])):
+            reasons.append("the independent packet-framing check has not completed")
         from ..contracts.state_tables import parse_state_tables
         try:
             state_tables = parse_state_tables(ck.get("request", ""))

@@ -547,6 +547,10 @@ class Runner:
                 from ..verification.directionalcheck import check_directional
                 cellular = check_directional(contract, ck.get("request", ""), out_path, work / "directional",
                                              min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.packetcheck import check_packet
+                cellular = check_packet(contract, ck.get("request", ""), out_path, work / "packets",
+                                        min(60, self.budget.remaining_s()), sys.executable)
             self.tool_time_s += time.time() - t0
             if cellular is not None:
                 self.store.event(self.run_id, "reference_request_check", {"path": str(out_path), **cellular})
@@ -841,6 +845,11 @@ class Runner:
             code = directional_properties(contract, ck.get("request", ""))
             if code:
                 origin = "request-derived directional transitions"
+        if code is None:
+            from ..verification.packetformal import packet_properties
+            code = packet_properties(contract, ck.get("request", ""))
+            if code:
+                origin = "request-derived packet framing"
         if code is None:
             return None
         vdir = self.ws.dir("verification")

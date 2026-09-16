@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-directional"
+CHECKER_VERSION = "request-tables-20260916-packets"
 
 
 @dataclass
@@ -107,6 +107,10 @@ def check_reference_against_request_tables(
         directional = check_directional(contract, request, reference_py, work, timeout_s, python)
         if directional is not None:
             return {**out, **directional}
+        from .packetcheck import check_packet
+        packets = check_packet(contract, request, reference_py, work, timeout_s, python)
+        if packets is not None:
+            return {**out, **packets}
         tables = parse_request_tables(request, include_external_mux=True, include_state_graphs=True)
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
