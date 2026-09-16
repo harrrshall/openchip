@@ -12,6 +12,7 @@ import hmac
 import ipaddress
 import io
 import math
+import re
 import zipfile
 import os
 import threading
@@ -199,9 +200,32 @@ class UIState:
     def _recovery_state(self, name: str, run: dict, store: RunStore) -> dict:
         alive = bool(self.threads.get(name) and self.threads[name].is_alive()) or store.lock_is_live(run["run_id"])
         interrupted = not alive and run.get("state") in {"created", "planned", "running", "paused"}
-        can_resume = interrupted and bool(run.get("checkpoint", {}).get("request")) and run.get("step") in {
+        retry_provider = False
+        if not alive and run.get("state") in {"stalled", "failed"}:
+            calls = store.events(run["run_id"], "model_call")
+            last = calls[-1] if calls else {}
+            error = str(last.get("error", ""))
+            retryable = not last.get("ok", True) and bool(re.match(
+                r"(?:Provider HTTP (?:408|429|5\d{2})(?::|$)|"
+                r"(?:TimeoutError|ReadTimeout|ConnectTimeout|WriteTimeout|PoolTimeout|"
+                r"ConnectError|ReadError|WriteError|RemoteProtocolError|ConnectionResetError):)", error))
+            limits = run.get("config", {}).get("budget", {})
+            elapsed = (run.get("outcome", {}).get("budget") or {}).get("elapsed_s")
+            tokens = sum(call.get("prompt_tokens", 0) + call.get("completion_tokens", 0) for call in calls)
+            # Fail closed without recorded accounting. Runner.resume independently
+            # restores active time and all calls; offering retry never grants a new budget.
+            remaining = (isinstance(elapsed, (int, float)) and math.isfinite(elapsed)
+                         and 0 <= elapsed < limits.get("wall_time_s", 0)
+                         and len(calls) < limits.get("max_model_calls", 0)
+                         and tokens < limits.get("max_total_tokens", 0))
+            retry_provider = retryable and remaining
+        can_resume = (interrupted or retry_provider) and bool(run.get("checkpoint", {}).get("request")) and run.get("step") in {
             "intake", "review", "revise", "reference", "properties", "rtl", "verify", "report"}
         return {"alive": alive, "can_resume": can_resume,
+                "retry_provider": bool(retry_provider and can_resume),
+                "recovery_message": ("Provider request failed. Retry from the saved checkpoint using the remaining budget."
+                                     if retry_provider and can_resume else
+                                     "Build interrupted. Resume from the last saved checkpoint." if can_resume else ""),
                 "state": "paused" if interrupted else run.get("state")}
 
     def resume_run(self, name: str) -> dict:
@@ -214,7 +238,7 @@ class UIState:
                 run_id = store.latest_run_id()
                 run = store.get_run(run_id) if run_id else None
                 if not run or not self._recovery_state(name, run, store)["can_resume"]:
-                    raise ValueError("This run has no interrupted checkpoint to resume.")
+                    raise ValueError("This run has no recoverable checkpoint with remaining budget.")
                 cfg = Config.model_validate(run["config"])
             finally:
                 store.close()

@@ -239,8 +239,9 @@ async function tick() {
   renderFeed(d);
   logSeen = d.log_total || logSeen;
   const o = d.outcome || {};
-  $('runstatus').textContent = d.can_resume ? 'Build interrupted. Resume from the last saved checkpoint.' : d.result?.sentence || 'Starting…';
+  $('runstatus').textContent = d.can_resume ? d.recovery_message || 'Build interrupted. Resume from the last saved checkpoint.' : d.result?.sentence || 'Starting…';
   $('resume-run').hidden = !d.can_resume;
+  $('resume-run').textContent = d.retry_provider ? 'Retry provider request' : 'Resume build';
   $('technical-status').textContent = o.status_line || '';
   renderQuestions(d);
   $('copy-rtl').disabled = !Object.keys(d.rtl || {}).length;
