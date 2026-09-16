@@ -553,18 +553,22 @@ class Runner:
             code = reviewed_code
             out_path.write_text(code)
             from ..verification.cellularcheck import check_cellular
-            from ..verification.neighborcheck import check_neighbors
-            from ..verification.directionalcheck import check_directional
-            from ..verification.packetcheck import check_packet
-
             assert self.budget
             t0 = time.time()
-            for directory, check in (("cellular", check_cellular), ("neighbors", check_neighbors),
-                                     ("directional", check_directional), ("packets", check_packet)):
-                cellular = check(contract, ck.get("request", ""), out_path, work / directory,
-                                 min(60, self.budget.remaining_s()), sys.executable)
-                if cellular is not None:
-                    break
+            cellular = check_cellular(contract, ck.get("request", ""), out_path, work / "cellular",
+                                      min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.neighborcheck import check_neighbors
+                cellular = check_neighbors(contract, ck.get("request", ""), out_path, work / "neighbors",
+                                           min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.directionalcheck import check_directional
+                cellular = check_directional(contract, ck.get("request", ""), out_path, work / "directional",
+                                             min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.packetcheck import check_packet
+                cellular = check_packet(contract, ck.get("request", ""), out_path, work / "packets",
+                                        min(60, self.budget.remaining_s()), sys.executable)
             self.tool_time_s += time.time() - t0
             if cellular is not None:
                 self.store.event(self.run_id, "reference_request_check", {"path": str(out_path), **cellular})
