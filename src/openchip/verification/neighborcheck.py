@@ -4,12 +4,11 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-import tempfile
 from pathlib import Path
 
 from ..contracts.neighbors import neighbor_scope
 from ..contracts.schema import Contract
-from .harness import run_reference
+from .harness import replay_reference
 
 
 def check_neighbors(contract: Contract, request: str, reference: Path, work: Path,
@@ -53,13 +52,8 @@ def check_neighbors(contract: Contract, request: str, reference: Path, work: Pat
             'out_any': sum((((value >> bit) & 1) | ((value >> (bit-1)) & 1)) << bit for bit in range(1, width)),
             'out_different': sum((((value >> bit) & 1) ^ ((value >> ((bit+1) % width)) & 1)) << bit for bit in range(width)),
         })
-    work.mkdir(parents=True, exist_ok=True)
-    run = Path(tempfile.mkdtemp(prefix='neighbors-', dir=work))
-    cp = run / 'contract.json'; cp.write_text(contract.model_dump_json(indent=1))
-    replay = run / 'inputs.json'; replay.write_text(json.dumps({'inputs': inputs}))
-    (run / 'request-expected.json').write_text(json.dumps(expected))
-    data = run_reference(reference, cp, 0, len(inputs), run / 'reference.json', python=python,
-                         timeout_s=timeout_s, replay=replay)
+    run, data = replay_reference(contract, reference, work, 'neighbors-', inputs,
+                                 expected, timeout_s, python)
     if data.get('error') or len(data.get('outputs', [])) != len(inputs):
         return fail('Neighbor reference evaluation failed: ' + str(data.get('error') or 'incomplete outputs')[:600])
     mismatches = []; total = 0

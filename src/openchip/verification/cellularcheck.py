@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import tempfile
 from pathlib import Path
 
 from ..contracts.cellular import cellular_scope
 from ..contracts.schema import Contract
-from .harness import run_reference
+from .harness import replay_reference
 
 
 def check_cellular(contract: Contract, request: str, reference: Path, work: Path,
@@ -47,12 +46,8 @@ def check_cellular(contract: Contract, request: str, reference: Path, work: Path
                                        ((state >> (i - 1)) & 1 if i else 0)] << i for i in range(width))
     # Observe the last transition too. Power-up before the first load is unspecified.
     inputs.append({'load': 1, 'data': 0}); expected.append(state)
-    work.mkdir(parents=True, exist_ok=True)
-    run = Path(tempfile.mkdtemp(prefix='cellular-', dir=work))
-    cp = run / 'contract.json'; cp.write_text(contract.model_dump_json(indent=1))
-    replay = run / 'inputs.json'; replay.write_text(json.dumps({'inputs': inputs}))
-    (run / 'request-expected.json').write_text(json.dumps(expected))
-    data = run_reference(reference, cp, 0, len(inputs), run / 'reference.json', python=python, timeout_s=timeout_s, replay=replay)
+    run, data = replay_reference(contract, reference, work, 'cellular-', inputs,
+                                 expected, timeout_s, python)
     if data.get('error') or len(data.get('outputs', [])) != len(inputs):
         return fail('Sequential reference evaluation failed: ' + str(data.get('error') or 'incomplete outputs')[:600])
     mismatches = []

@@ -122,6 +122,22 @@ def _archive_previous_reference_output(out: Path) -> None:
         out.replace(previous / out.name)
 
 
+def replay_reference(contract: Contract, reference: Path, work: Path, prefix: str,
+                     inputs: list[dict], expected: list | dict,
+                     timeout_s: float, python: str) -> tuple[Path, dict]:
+    """Retain directed request vectors and replay them in a fresh sandbox run."""
+    work.mkdir(parents=True, exist_ok=True)
+    run = Path(tempfile.mkdtemp(prefix=prefix, dir=work))
+    contract_path = run / "contract.json"
+    contract_path.write_text(contract.model_dump_json(indent=1))
+    replay = run / "inputs.json"
+    replay.write_text(json.dumps({"inputs": inputs}))
+    (run / "request-expected.json").write_text(json.dumps(expected))
+    data = run_reference(reference, contract_path, 0, len(inputs), run / "reference.json",
+                         python=python, timeout_s=timeout_s, replay=replay)
+    return run, data
+
+
 def run_reference(reference_py: Path, contract_json: Path, seed: int, cycles: int, out: Path, python: str = sys.executable, timeout_s: float = 180.0,
                   replay: Optional[Path] = None) -> dict:
     _archive_previous_reference_output(out)

@@ -3,11 +3,10 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
-import tempfile
 from pathlib import Path
 from ..contracts.directional import directional_scope
 from ..contracts.schema import Contract
-from .harness import run_reference
+from .harness import replay_reference
 from .directionalformal import directional_contract_matches
 
 
@@ -69,13 +68,8 @@ def check_directional(contract: Contract, request: str, reference: Path, work: P
             tick(0, 0, 1, 0, context)
             tick(0, 0, 1, 0, context)  # observe remembered direction after landing
             cases += 1
-    work.mkdir(parents=True, exist_ok=True)
-    run = Path(tempfile.mkdtemp(prefix='directional-', dir=work))
-    cp = run / 'contract.json'; cp.write_text(contract.model_dump_json(indent=1))
-    replay = run / 'inputs.json'; replay.write_text(json.dumps({'inputs': inputs}))
-    (run / 'request-expected.json').write_text(json.dumps({'outputs': expected, 'observations': observations}))
-    data = run_reference(reference, cp, 0, len(inputs), run / 'reference.json', python=python,
-                         timeout_s=timeout_s, replay=replay)
+    run, data = replay_reference(contract, reference, work, 'directional-', inputs,
+                                 {'outputs': expected, 'observations': observations}, timeout_s, python)
     if data.get('error') or len(data.get('outputs', [])) != len(inputs):
         return fail('Controller reference evaluation failed: ' + str(data.get('error') or 'incomplete outputs')[:600])
     mismatches = []; total = 0

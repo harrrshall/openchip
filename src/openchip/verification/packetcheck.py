@@ -2,11 +2,10 @@
 from __future__ import annotations
 import hashlib
 import json
-import tempfile
 from pathlib import Path
 from ..contracts.packet import packet_scope
 from ..contracts.schema import Contract
-from .harness import run_reference
+from .harness import replay_reference
 from .packetformal import packet_contract_matches
 
 
@@ -41,13 +40,8 @@ def check_packet(contract: Contract, request: str, reference: Path, work: Path,
         elif edge == completion_edge:
             previous_done = 1
             completion_edge = None  # closing byte cannot also become a new start
-    work.mkdir(parents=True, exist_ok=True)
-    run = Path(tempfile.mkdtemp(prefix='packets-', dir=work))
-    cp = run / 'contract.json'; cp.write_text(contract.model_dump_json(indent=1))
-    replay = run / 'inputs.json'; replay.write_text(json.dumps({'inputs': inputs}))
-    (run / 'request-expected.json').write_text(json.dumps(expected))
-    data = run_reference(reference, cp, 0, len(inputs), run / 'reference.json', python=python,
-                         timeout_s=timeout_s, replay=replay)
+    run, data = replay_reference(contract, reference, work, 'packets-', inputs,
+                                 expected, timeout_s, python)
     if data.get('error') or len(data.get('outputs', [])) != len(inputs):
         return fail('Packet reference evaluation failed: ' + str(data.get('error') or 'incomplete outputs')[:600])
     mismatches = []; total = 0
