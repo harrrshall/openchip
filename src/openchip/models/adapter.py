@@ -380,12 +380,10 @@ def extract_code(text: str, langs: tuple[str, ...]) -> Optional[str]:
     `module` to the last `endmodule`; for Python, everything from the first import/class/def line.
     """
     blocks = list(FENCE_RE.finditer(text))
-    for m in reversed(blocks):
-        if m.group("lang").lower() in langs:
-            return m.group("body").strip("\n") + "\n"
-    for m in reversed(blocks):
-        if not m.group("lang"):
-            return m.group("body").strip("\n") + "\n"
+    for allowed in (langs, ("",)):
+        for block in reversed(blocks):
+            if block.group("lang").lower() in allowed:
+                return block.group("body").strip("\n") + "\n"
     if not blocks:
         if {"verilog", "v", "sv", "systemverilog"} & set(langs):
             ms = MODULE_RE.findall(text)
@@ -405,23 +403,20 @@ def extract_code(text: str, langs: tuple[str, ...]) -> Optional[str]:
 def extract_json(text: str) -> Optional[dict]:
     """Best-effort JSON object extraction from a model reply."""
     text = text.strip()
-    try:
-        obj = json.loads(text)
-        return obj if isinstance(obj, dict) else None
-    except Exception:  # noqa: BLE001
-        pass
-    blk = extract_code(text, ("json",))
-    if blk:
+
+    def candidates():
+        yield text
+        yield extract_code(text, ("json",))
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            yield text[start:end + 1]
+
+    for candidate in candidates():
+        if not candidate:
+            continue
         try:
-            obj = json.loads(blk)
+            obj = json.loads(candidate)
             return obj if isinstance(obj, dict) else None
         except Exception:  # noqa: BLE001
             pass
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end > start:
-        try:
-            obj = json.loads(text[start:end + 1])
-            return obj if isinstance(obj, dict) else None
-        except Exception:  # noqa: BLE001
-            return None
     return None

@@ -1,14 +1,13 @@
 """Deterministic, semantics-preserving normalisation of model-written Verilog before verification.
 
 Only fixes declaration-level mistakes that tools reject outright and that carry no design intent:
-  - an `output` (or internal `wire`) that is assigned inside an `always` block is redeclared `reg`.
+  - an `output` assigned inside an `always` block is redeclared `reg`.
 Every change is returned so it can be recorded in the run's event log.
 """
 from __future__ import annotations
 
 import re
 
-ALWAYS_RE = re.compile(r"\balways\b[^;]*?\bbegin\b(.*?)\bend\b|\balways\b[^;]*?\n\s*([^;]*;)", re.S)
 LVAL_RE = re.compile(r"(?<![<>!=\w])([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:<=|=)(?![=<>])")
 COND_RE = re.compile(r"\b(?:if|case|casez|casex|while|for)\s*\((?:[^()]|\([^()]*\))*\)")
 OUT_DECL_RE = re.compile(r"(\boutput\s+)(?!reg\b)(?:wire\s+)?((?:signed\s+)?(?:\[[^\]]*\]\s*)?)([A-Za-z_]\w*)")
@@ -16,26 +15,25 @@ OUT_DECL_RE = re.compile(r"(\boutput\s+)(?!reg\b)(?:wire\s+)?((?:signed\s+)?(?:\
 
 def procedural_lvalues(src: str) -> set[str]:
     names: set[str] = set()
-    for m in re.finditer(r"\balways\b", src):
+    for always in re.finditer(r"\balways\b", src):
         # take the block that follows: either begin...end (balanced) or a single statement
-        rest = src[m.end():]
-        b = re.search(r"\bbegin\b", rest)
+        rest = src[always.end():]
+        begin = re.search(r"\bbegin\b", rest)
         semi = rest.find(";")
-        if b and (semi == -1 or b.start() < semi):
+        if begin and (semi == -1 or begin.start() < semi):
             depth = 0
-            i = b.start()
-            for t in re.finditer(r"\bbegin\b|\bend\b", rest[i:]):
-                depth += 1 if t.group() == "begin" else -1
+            start = begin.start()
+            for token in re.finditer(r"\bbegin\b|\bend\b", rest[start:]):
+                depth += 1 if token.group() == "begin" else -1
                 if depth == 0:
-                    body = rest[i:i + t.end()]
+                    body = rest[start:start + token.end()]
                     break
             else:
-                body = rest[i:]
+                body = rest[start:]
         else:
             body = rest[: semi + 1] if semi != -1 else rest
         body = COND_RE.sub(" ", body)  # drop conditions so `<=` comparisons are not mistaken for assignments
-        for lv in LVAL_RE.finditer(body):
-            names.add(lv.group(1))
+        names.update(match.group(1) for match in LVAL_RE.finditer(body))
     return names
 
 
