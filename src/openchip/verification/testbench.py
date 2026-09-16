@@ -17,18 +17,13 @@ def write_vectors(vec: dict, contract: Contract, path_in: Path, path_out: Path) 
     """Write $readmemh files: one hex word per cycle (inputs concatenated in port order)."""
     din = contract.data_inputs()
     outs = contract.outputs()
-    with open(path_in, "w") as f:
-        for cyc in vec["inputs"]:
-            word = 0
-            for p in din:
-                word = (word << p.width) | (cyc[p.name] & ((1 << p.width) - 1))
-            f.write(f"{word:x}\n")
-    with open(path_out, "w") as f:
-        for cyc in vec["outputs"]:
-            word = 0
-            for p in outs:
-                word = (word << p.width) | (cyc[p.name] & ((1 << p.width) - 1))
-            f.write(f"{word:x}\n")
+    for key, ports, path in (("inputs", din, path_in), ("outputs", outs, path_out)):
+        with open(path, "w") as stream:
+            for cycle in vec[key]:
+                word = 0
+                for port in ports:
+                    word = (word << port.width) | (cycle[port.name] & ((1 << port.width) - 1))
+                stream.write(f"{word:x}\n")
 
 
 def _with_private_signals(contract: Contract, n_cycles: int, max_report: int, generate) -> str:
@@ -61,6 +56,26 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
 
 def generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
     return _with_private_signals(contract, n_cycles, max_report, _generate_comb_testbench)
+
+
+def _compare_outputs(din, outs, max_report: int) -> list[str]:
+    """Compare packed outputs and emit capped per-port mismatch diagnostics."""
+    L = []
+    L.append("      got = {" + ", ".join(p.name for p in outs) + "};")
+    L.append("      if (got !== exp_vec[i]) begin")
+    L.append("        mismatches = mismatches + 1;")
+    L.append(f"        if (reported < {max_report}) begin")
+    L.append("          reported = reported + 1;")
+    hi = sum(p.width for p in outs)
+    for p in outs:
+        lo = hi - p.width
+        L.append(f"          if ({p.name} !== exp_vec[i][{hi - 1}:{lo}]) $display(\"MISMATCH cycle=%0d port={p.name} expected=%0h got=%0h\", i, exp_vec[i][{hi - 1}:{lo}], {p.name});")
+        hi = lo
+    if din:
+        L.append("          $display(\"  inputs: " + " ".join(f"{p.name}=%0h" for p in din) + "\", " + ", ".join(p.name for p in din) + ");")
+    L.append("        end")
+    L.append("      end")
+    return L
 
 
 def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
@@ -131,21 +146,7 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
         L.append(f"      {cr.reset} = {rst_off};")
     L.append("      drive(i);")
     L.append("      #1;")
-    L.append("      got = {" + ", ".join(p.name for p in outs) + "};")
-    L.append("      if (got !== exp_vec[i]) begin")
-    L.append("        mismatches = mismatches + 1;")
-    L.append(f"        if (reported < {max_report}) begin")
-    L.append("          reported = reported + 1;")
-    # report per-port
-    hi = out_w
-    for p in outs:
-        lo = hi - p.width
-        L.append(f"          if ({p.name} !== exp_vec[i][{hi - 1}:{lo}]) $display(\"MISMATCH cycle=%0d port={p.name} expected=%0h got=%0h\", i, exp_vec[i][{hi - 1}:{lo}], {p.name});")
-        hi = lo
-    if din:
-        L.append("          $display(\"  inputs: " + " ".join(f"{p.name}=%0h" for p in din) + "\", " + ", ".join(p.name for p in din) + ");")
-    L.append("        end")
-    L.append("      end")
+    L.extend(_compare_outputs(din, outs, max_report))
     L.append("    end")
     L.append(f"    @(negedge {cr.clock});")
     L.append(f"    if (mismatches == 0) $display(\"RESULT PASS cycles={n_cycles}\");")
@@ -191,20 +192,7 @@ def _generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int 
     if din:
         L.append("      {" + ", ".join(p.name for p in din) + "} = in_vec[i];")
     L.append("      #10;")
-    L.append("      got = {" + ", ".join(p.name for p in outs) + "};")
-    L.append("      if (got !== exp_vec[i]) begin")
-    L.append("        mismatches = mismatches + 1;")
-    L.append(f"        if (reported < {max_report}) begin")
-    L.append("          reported = reported + 1;")
-    hi = out_w
-    for p in outs:
-        lo = hi - p.width
-        L.append(f"          if ({p.name} !== exp_vec[i][{hi - 1}:{lo}]) $display(\"MISMATCH cycle=%0d port={p.name} expected=%0h got=%0h\", i, exp_vec[i][{hi - 1}:{lo}], {p.name});")
-        hi = lo
-    if din:
-        L.append("          $display(\"  inputs: " + " ".join(f"{p.name}=%0h" for p in din) + "\", " + ", ".join(p.name for p in din) + ");")
-    L.append("        end")
-    L.append("      end")
+    L.extend(_compare_outputs(din, outs, max_report))
     L.append("    end")
     L.append(f"    if (mismatches == 0) $display(\"RESULT PASS cycles={n_cycles}\");")
     L.append(f"    else $display(\"RESULT FAIL mismatches=%0d cycles={n_cycles}\", mismatches);")
