@@ -186,7 +186,8 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "lfsr_check": ck.get("lfsr_check"),
         "properties_origin": ck.get("properties_origin", "model-generated"),
         "contract_origin": ck.get("contract_origin", "model-generated"),
-        "resetless_startup": ({"zero_data_conditioning_edges": 3, "power_up_state_verified": False}
+        "resetless_startup": ({"conditioning": contract.clock_reset.conditioning or [{p.name: 0 for p in contract.data_inputs()}] * 3,
+                               "conditioning_edges": len(contract.clock_reset.conditioning) or 3, "power_up_state_verified": False}
                               if contract and contract.clock_reset and contract.clock_reset.reset is None else None),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
@@ -202,8 +203,10 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     # ---- markdown --------------------------------------------------------------------------
     md = [f"# OpenChip delivery report — run `{run_id}`", "", f"**Outcome:** {status_line}", ""]
     if outcome["resetless_startup"]:
-        md += ["**Startup scope:** no reset port. Simulation checks outputs after three zero-data conditioning edges. "
-               "DUT state is not initialized by the harness; X/Z remains a failure. Power-up state is not verified.", ""]
+        startup = outcome["resetless_startup"]
+        md += [f"**Startup scope:** no reset port. Simulation checks outputs after {startup['conditioning_edges']} input-conditioning edges. "
+               "DUT state is not initialized by the harness; X/Z remains a failure. Power-up state is not verified.",
+               "", "Conditioning inputs (one vector per edge):", "", "```json", json.dumps(startup["conditioning"]), "```", ""]
     if ck.get("properties_origin"):
         md += [f"**Formal checker source:** {ck['properties_origin']}. Earlier replaced checkers are retained with the verification artifacts.", ""]
     if ck.get("table_repair"):

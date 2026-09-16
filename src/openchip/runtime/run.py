@@ -386,6 +386,9 @@ class Runner:
         if corrections and self.cfg.review.apply_corrections:
             new_data = contract.model_dump(mode="json")
             for c in corrections:
+                if c.get("kind") == "behavior" and any(a.get("kind") == "behavior" for a in applied):
+                    rejected.append({**c, "result": "Only one complete behavior replacement is allowed per review."})
+                    continue
                 ok, why = _apply_correction(new_data, c)
                 (applied if ok else rejected).append({**c, "result": why})
             for u in unresolved:
@@ -1082,7 +1085,7 @@ REVIEW_SCHEMA = {
     "properties": {
         "verdict": {"type": "string", "enum": ["consistent", "needs_correction"]},
         "corrections": {"type": "array", "items": {"type": "object", "properties": {
-            "kind": {"type": "string", "enum": ["port_timing", "port_width", "parameter", "behavior", "requirement"]},
+            "kind": {"type": "string", "enum": ["port_timing", "port_width", "parameter", "behavior", "requirement", "conditioning"]},
             "target": {"type": "string"}, "value": {"type": "string"}, "reason": {"type": "string"}},
             "required": ["kind", "target", "value", "reason"]}},
         "unresolved": {"type": "array", "items": {"type": "string"}},
@@ -1133,8 +1136,21 @@ def _apply_correction(data: dict, c: dict) -> tuple[bool, str]:
     if kind == "behavior":
         if len(value) < 15:
             return False, "too short"
-        data["behavior"] = data["behavior"].rstrip() + "\n\nReviewer clarification: " + value
-        return True, "behavior clarified"
+        data["behavior"] = value
+        return True, "behavior replaced; previous version retained"
+    if kind == "conditioning":
+        cr = data.get("clock_reset")
+        if not cr or cr.get("reset") is not None:
+            return False, "conditioning requires a resetless contract"
+        try:
+            sequence = json.loads(value)
+            candidate = Contract.model_validate({**data, "clock_reset": {**cr, "conditioning": sequence}})
+        except (ValueError, TypeError):
+            return False, "conditioning must contain bounded complete input vectors with valid port values"
+        if cr.get("conditioning", []) == candidate.clock_reset.conditioning:
+            return False, "already so"
+        cr["conditioning"] = candidate.clock_reset.conditioning
+        return True, "resetless simulation conditioning replaced"
     if kind == "requirement":
         if len(value) < 12:
             return False, "too short"

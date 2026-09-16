@@ -55,10 +55,14 @@ evidence blocks acceptance. A recorded formal counterexample always withholds
 sign-off pending review of the RTL or property checker, even for optional formal
 checking. Timeouts and skipped checks are never described as formal passes.
 
-Single-clock designs may use a rising or falling active edge, with an explicit
-reset. Simulation and formal reset sequencing follow that edge. Dual-edge logic,
-resetless sequential designs and compositions mixing active clock edges remain
-unsupported. General production readiness is not established.
+Single-clock designs may use a rising or falling active edge. Resetless designs
+can declare `clock_reset.conditioning`: a bounded sequence of complete input
+vectors that physically establishes state before simulation comparisons. The
+harness applies the same sequence to the reference and RTL; it never initializes
+DUT registers or ignores unknown outputs. The report records this startup scope;
+power-up behavior is not verified. An empty sequence uses three zero-data edges.
+Dual-edge logic and compositions mixing active clock edges remain unsupported.
+General production readiness is not established.
 
 ## Command line
 ```bash

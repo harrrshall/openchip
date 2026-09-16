@@ -42,6 +42,7 @@ def _with_private_signals(contract: Contract, n_cycles: int, max_report: int, ge
     for port in private.ports:
         port.name = aliases[port.name]
     if private.clock_reset:
+        private.clock_reset.conditioning = [{aliases[k]: v for k, v in row.items()} for row in private.clock_reset.conditioning]
         private.clock_reset.clock = aliases[private.clock_reset.clock]
         if private.clock_reset.reset is not None:
             private.clock_reset.reset = aliases[private.clock_reset.reset]
@@ -115,7 +116,15 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     L.append(f"    @({inactive_edge} {cr.clock});")
     if din:
         L.append("    {" + ", ".join(p.name for p in din) + "} = 0;")
-    L.append(f"    repeat ({RESET_CYCLES}) @({cr.clock_edge} {cr.clock});")
+    if cr.reset is None and cr.conditioning:
+        for index, vector in enumerate(cr.conditioning):
+            if index:
+                L.append(f"    @({inactive_edge} {cr.clock});")
+            for p in din:
+                L.append(f"    {p.name} = {p.width}'h{vector[p.name]:x};")
+            L.append(f"    @({cr.clock_edge} {cr.clock});")
+    else:
+        L.append(f"    repeat ({RESET_CYCLES}) @({cr.clock_edge} {cr.clock});")
     L.append(f"    for (i = 0; i < {n_cycles}; i = i + 1) begin")
     L.append(f"      @({inactive_edge} {cr.clock});")
     if cr.reset is not None:

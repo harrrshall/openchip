@@ -12,7 +12,7 @@ import re
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -67,6 +67,7 @@ class ClockReset(BaseModel):
     reset: Optional[str] = "rst"
     reset_active: Literal["high", "low"] = "high"
     reset_kind: Literal["synchronous", "asynchronous"] = "synchronous"
+    conditioning: list[dict[str, StrictInt]] = Field(default_factory=list, max_length=256, description="Resetless simulation startup: one complete data-input vector per clock edge. Empty uses three zero-data edges. Not a hardware reset or power-up guarantee.")
     reset_description: str = "All state returns to its documented initial value."
 
 
@@ -148,6 +149,21 @@ class Contract(BaseModel):
                     raise ValueError("clock must be a 1-bit input")
                 if p.name == cr.reset and (p.direction != Direction.input or p.width != 1):
                     raise ValueError("reset must be a 1-bit input")
+            if cr.conditioning:
+                if cr.reset is not None:
+                    raise ValueError("conditioning is only supported for resetless circuits")
+                inputs = {p.name: p for p in self.data_inputs()}
+                for vector in cr.conditioning:
+                    # Clock levels sometimes accompany input vectors. The harness
+                    # owns clock edges; a valid level is redundant, never a drive.
+                    if cr.clock in vector:
+                        if vector[cr.clock] not in (0, 1):
+                            raise ValueError("a conditioning clock level must be a bit")
+                        vector.pop(cr.clock)
+                    if set(vector) != set(inputs):
+                        raise ValueError("every conditioning vector must specify exactly all data/control inputs")
+                    if any(not 0 <= value < (1 << inputs[name].width) for name, value in vector.items()):
+                        raise ValueError("conditioning values must fit their input port widths")
         if not self.requirements:
             raise ValueError("at least one requirement is required")
         ids = [r.id for r in self.requirements]
@@ -223,7 +239,11 @@ class Contract(BaseModel):
             out += ["- Purely combinational: no clock, no reset, no internal state.", ""]
         elif cr.reset is None:
             out += [f"- Clock `{cr.clock}`, {cr.clock_edge}; no reset port.",
-                    "- Power-up state is not initialized by the harness. Simulation compares after three zero-data conditioning edges; this is not a hardware reset.", ""]
+                    "- Power-up state is not initialized by the harness. Conditioning uses only the declared input ports; it is not a hardware reset.", ""]
+            if cr.conditioning:
+                out += [f"- Simulation compares after {len(cr.conditioning)} explicit conditioning edges:", "", "```json", json.dumps(cr.conditioning), "```", ""]
+            else:
+                out += ["- Simulation compares after three zero-data conditioning edges.", ""]
         else:
             out += [f"- Clock `{cr.clock}`, {cr.clock_edge}. Reset `{cr.reset}`, active-{cr.reset_active}, {cr.reset_kind}.", f"- {cr.reset_description}", ""]
         out += [

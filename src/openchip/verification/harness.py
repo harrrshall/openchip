@@ -247,7 +247,9 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
                        "State reflects preceding cycles' inputs; current inputs affect the upcoming edge. "
                        "Combinational outputs may respond immediately to current inputs.")
         if contract.clock_reset and contract.clock_reset.reset is None:
-            sr.sampling += " No reset: comparison begins after three zero-data conditioning edges; DUT startup state is not initialized and X/Z still fails."
+            sequence = contract.clock_reset.conditioning
+            startup = f"{len(sequence)} declared input-conditioning edges" if sequence else "three zero-data conditioning edges"
+            sr.sampling += f" No reset: comparison begins after {startup}; DUT startup state is not initialized and X/Z still fails."
         res.sims.append(asdict(sr))
         (work / f"sim_{seed}.log").write_text(sim.stdout + sim.stderr)
         if sr.status != "pass":

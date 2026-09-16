@@ -47,13 +47,12 @@ def main() -> int:
         ref = mod.Reference(params)
         ref.reset()
         if cr and cr.get("reset") is None:
-            # Match testbench.RESET_CYCLES zero-data edges; no DUT reset or
-            # initialized state is assumed. X/Z in the RTL is still a failure.
-            conditioning = {p["name"]: 0 for p in data_in}
-            conditioning[cr["clock"]] = 0
-            for _ in range(3):
-                ref.step(dict(conditioning))
-            result["startup"] = {"reset": False, "zero_data_conditioning_edges": 3}
+            # Apply the same physical input sequence as the RTL testbench.
+            sequence = cr.get("conditioning") or [{p["name"]: 0 for p in data_in}] * 3
+            for vector in sequence:
+                ref.step({**vector, cr["clock"]: 0})
+            result["startup"] = {"reset": False, "conditioning": sequence,
+                                 "conditioning_edges": len(sequence)}
         stim = getattr(mod, "stimulus", None)
         if stim is None and callable(getattr(ref, "stimulus", None)):
             stim = ref.stimulus

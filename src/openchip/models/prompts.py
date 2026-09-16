@@ -16,7 +16,8 @@ Rules:
 - Every externally visible behavior must be captured as a numbered requirement R001, R002, ... Each requirement records its source: user_text (quote it in source_detail), inference (you inferred it), or default (routine choice).
 - Distinguish explicit requirements from defaults and inferences. Put consequential choices the user should confirm in `unresolved`; do not block on them, pick a documented default and record it in `defaults`.
 - `behavior` must be a cycle-accurate description precise enough that two engineers would implement identical observable behavior: what happens at each clock edge, what outputs are combinational vs registered, reset values, boundary/overflow behavior.
-- For sequential interfaces without a reset port, set clock_reset.reset to null. Never invent a reset or reuse the clock as reset. Initial hardware state is unspecified unless the request explicitly defines an initialization mechanism.
+- For sequential interfaces without a reset port, set clock_reset.reset to null. Never invent a reset or reuse the clock as reset. Initial hardware state is unspecified unless the request explicitly defines an initialization mechanism. For resetless circuits, set clock_reset.conditioning to a bounded list (at most 256) of complete data/control input vectors that physically establish a known state using the requested operations (for example shift in one full register of zero bits with shift enable asserted). This is a simulation startup sequence, not an invented reset or power-up guarantee. Every vector must specify every data/control input as an unsigned integer fitting its port; exclude clock and reset because the harness drives them. Empty conditioning uses three zero-data edges; choose explicit conditioning when idle edges cannot establish state. Never add initial blocks or initialized DUT registers to satisfy the harness.
+- Serial bit order: MSB-first means the most-significant bit of a word is transmitted first; it does NOT mean each received bit enters the destination register MSB. For a four-bit word sent as b3,b2,b1,b0, shifting q <= {q[2:0], data} assembles q=b3b2b1b0. Preserve any explicit shift equation/direction in the request over a convention.
 - Outputs must be fully determined by the reset state (when present), the input history, and the parameters. Describe the value of every output on every cycle including after reset.
 - Keep the interface minimal and conventional: valid/ready handshakes where streaming is implied. If the request names ports, use exactly those names, directions and widths. If the request names parameters (e.g. "parameter N (default 4)"), declare them in `parameters` with exactly those names and defaults — never hard-code them away.
 - For every OUTPUT port set `timing`: "registered" if it is driven by a flip-flop (changes only at the clock edge; "becomes", "pulses for one cycle", "is updated at the edge"), or "combinational" if it is a function of the current inputs (and state) with no clock delay ("shows", "reflects", "asynchronous read", "combinational"). This field is checked mechanically against the reference model.
@@ -37,7 +38,7 @@ Reply with ONE JSON object and nothing else, with exactly these keys:
 - "module_name" (string), "purpose" (string), "language" ("verilog-2001"), "target" (string)
 - "parameters": [{{"name","default"(int),"description"}}]
 - "ports": [{{"name","direction"("input"|"output"),"width"(int at default parameters),"width_expr"(string or null),"signed"(bool),"role"("clock"|"reset"|"data"|"control"|"status"|"handshake"),"timing"("registered"|"combinational" for outputs, "n/a" for inputs),"description"}}]
-- "clock_reset": {{"clock","clock_edge"("posedge"|"negedge"),"reset"(port name or null when absent),"reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
+- "clock_reset": {{"clock","clock_edge"("posedge"|"negedge"),"reset"(port name or null when absent),"reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description","conditioning"(array of complete input-value objects for resetless simulation startup; otherwise [])}} or null for a purely combinational block
 - "behavior" (several precise sentences), "timing" (string), "arithmetic" (string)
 - "requirements": [{{"id":"R001","text","source"("user_text"|"document"|"inference"|"default"|"protocol"),"source_detail","disposition":"tested","verification_plan"}}]
 - "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)
@@ -57,7 +58,7 @@ Semantics of step(inputs):
 - FIRST compute and return the values of ALL output ports as observed just BEFORE the active clock edge (i.e. combinational outputs use the current inputs and the current state; registered outputs are the current state).
 - THEN update internal state as the clock edge would, using the current inputs.
 - Return a dict mapping every output port name to a non-negative int masked to the port width.
-- For a resetless sequential contract, reset() initializes only your software bookkeeping. Before recorded vectors the harness calls step() three times with zero data inputs, matching three RTL conditioning edges. Do not add a reset input; do not treat these edges as a hardware reset. Return pre-edge registered values as usual.
+- For a resetless sequential contract, reset() initializes only your software bookkeeping. Before recorded vectors the harness calls step() on every clock_reset.conditioning input vector, matching the physical RTL startup edges; an empty list uses three zero-data edges. Start from ordinary software bookkeeping, then let those calls establish the comparison state; do not pre-apply the sequence. Do not add a reset input; do not treat these edges as a hardware reset. Return pre-edge registered values as usual.
 - Reset, when a reset port exists, is handled by the harness: it calls reset() and then steps with reset asserted are NOT sent to you; after reset() the next step is the first cycle after reset is released. Outputs returned by the first step() must be the values visible while reset was just released (i.e. reset state). `inputs` also contains the clock and reset ports at their idle/inactive values; ignore them.
 - No randomness, no I/O, no imports besides the standard library. Standard library only.
 
@@ -248,23 +249,24 @@ REVIEW_SYSTEM = """You are an INDEPENDENT specification reviewer for OpenChip. Y
 Check, in this order:
 1. Every OUTPUT's timing label: "registered" only if the request says it changes at the clock edge / is a register / "becomes" / "pulses"; "combinational" if it is described as a function of current inputs, "shows", "reflects", asynchronous read. A wrong label is the most common defect.
 2. Pulse outputs: if the request says an output is high for exactly one cycle / is 0 otherwise, the behavior text must say it is reassigned EVERY cycle from its condition (not set-and-hold).
-3. Priorities between control inputs (load vs enable, clear vs everything, start while busy) exactly as the request states.
-4. Port names, directions and widths exactly as requested; parameters the request names (with their defaults).
-5. Requirements: every externally visible behavior in the request appears as a requirement; nothing invented.
-6. Reset values and boundary/overflow/saturation behavior as stated.
+3. Serial bit order: for an MSB-first word b3,b2,b1,b0, q <= {q[2:0], data} assembles that word. MSB-first is transmission order, not the position at which each received bit enters the register. Do not reverse a correct shift equation based on that confusion. Explicit user shift equations take precedence.
+4. Priorities between control inputs (load vs enable, clear vs everything, start while busy) exactly as the request states.
+5. Port names, directions and widths exactly as requested; parameters the request names (with their defaults).
+6. Requirements: every externally visible behavior in the request appears as a requirement; nothing invented.
+7. Reset values and boundary/overflow/saturation behavior as stated. For resetless circuits, check the actual clock_reset.conditioning array: prose describing a startup sequence does not execute it. If idle edges cannot establish a known state, supply a conditioning correction containing concrete complete input vectors using only the requested operations. Never invent DUT initialization.
 
 Reply with JSON only:
 {
   "verdict": "consistent" | "needs_correction",
   "corrections": [
-    {"kind": "port_timing" | "port_width" | "parameter" | "behavior" | "requirement", "target": "<port/parameter/requirement id, or 'behavior'>",
-     "value": "<for port_timing: registered|combinational; for port_width: integer[:width_expr]; for parameter: NAME=default; for behavior/requirement: the corrected or added sentence>",
+    {"kind": "port_timing" | "port_width" | "parameter" | "behavior" | "requirement" | "conditioning", "target": "<port/parameter/requirement id, or 'behavior'/'clock_reset.conditioning'>",
+     "value": "<for port_timing: registered|combinational; for port_width: integer[:width_expr]; for parameter: NAME=default; for behavior: the COMPLETE replacement behavior preserving all unaffected semantics and removing contradictions; for requirement: corrected requirement text; for conditioning: JSON-encoded array of complete input-value objects>",
      "reason": "<quote the request wording that decides it>"}
   ],
   "unresolved": ["<questions only the user can answer; leave empty if none>"],
   "notes": "<one line>"
 }
-List at most 8 corrections, most consequential first. Do not restate things that are already correct."""
+List at most 8 corrections, most consequential first. Use at most ONE behavior correction; it replaces the entire behavior field, so include every behavior that must remain. Correct any affected requirements as well. Do not restate things that are already correct."""
 
 REVIEW_USER = """User request:
 <<<
