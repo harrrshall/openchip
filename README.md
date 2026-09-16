@@ -10,15 +10,27 @@ openchip turns a hardware request into a project with a behavioral contract, a r
 
 [open the hosted app](https://13f5f45067271.notebooksn.jarvislabs.net).
 
-this deployment requires credentials from its owner. after signing in:
+no owner-issued login is needed. each browser gets a private session. to start:
 
-1. open settings and configure your model provider, model, and api key. test the connection.
+1. open settings and enter your own model provider, model, and api key. test the connection. provider usage is billed to your provider account.
 2. create a project and describe the hardware, including ports, clock, reset, and expected behavior.
 3. run build & verify. review the contract and report, then download the project or request a change.
 
 try a request like:
 
 > create an 8-bit counter with a rising-edge clock, synchronous active-high reset, and an enable input. reset sets the count to zero. enable increments the count with wraparound; otherwise it holds its value.
+
+### privacy and session data
+
+projects, settings, and downloads are isolated by a secure, httponly browser cookie. other browser sessions cannot list or access your projects. api keys stay in server memory; they are not saved in browser storage, project files, or activity records. re-enter your key after a service restart or an inactive session expires. download your work before clearing cookies: clearing them removes your access, while retained data remains on the service.
+
+openchip retains submitted prompts, generated designs, build evidence, and session activity to operate and improve the product. do not submit confidential designs. hosted connections support the listed public provider endpoints; arbitrary local or private server urls are available only in a self-hosted installation.
+
+### operate a hosted installation
+
+set `OPENCHIP_HOSTED_ORIGIN` to the public https origin and put the ui behind an https reverse proxy that preserves the host header. `OPENCHIP_WORKSPACES` selects a persistent data directory. this enables private browser sessions instead of the shared owner login. existing owner projects remain outside the public sessions directory. the browser session authorizes access; an api key authorizes model calls only.
+
+session data is retained under `OPENCHIP_WORKSPACES/sessions/<opaque-id>/`: `activity.sqlite3` records request time, method, route category, and response status; `settings.json` contains non-secret model settings; `projects/` retains prompts, model-generated artifacts, run databases, usage, and verification evidence. keep this directory private and back it up outside the published repository. request headers, cookies, and submitted api-key fields are excluded from activity records. hosted builds are limited to one per session and two concurrent builds overall.
 
 ## run locally
 
@@ -85,6 +97,22 @@ in the browser interface choose provider `openai`, enter the same base url, mode
 5. the project retains source files, logs, `report.md`, and `outcome.json` so you can inspect each result.
 
 a passing result is limited to the recorded contract, checks, and bounds. openchip is experimental; general production readiness is still being evaluated. review the contract and evidence before using a design. timing closure and silicon validation remain outside this workflow.
+
+## cloud demo helpers
+
+on a provisioned jarvislabs instance, the [demo launcher](scripts/cloud/run_demo.sh) accepts a core-v1 task id, request file, or request text:
+
+```sh
+bash scripts/cloud/run_demo.sh /home/openchip-runs/counter-demo updown_counter 20m
+```
+
+these helpers expect the repository at `/home/openchip` and environment/credentials in `/home/openchip-env/{env.sh,secrets.env}`. keep credentials outside the repository.
+
+[interrupt_demo.sh](scripts/cloud/interrupt_demo.sh) exercises checkpoint recovery: it starts a build, interrupts it after reference generation, resumes, and reverifies the delivered artifacts. choose a fresh workspace; it refuses an existing workspace or `<workspace>.build.log`, including symlinks, and retains the log. it never deletes an earlier run.
+
+```sh
+bash scripts/cloud/interrupt_demo.sh /home/openchip-runs/counter-recovery updown_counter
+```
 
 ## architecture
 
