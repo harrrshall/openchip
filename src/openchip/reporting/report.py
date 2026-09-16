@@ -242,7 +242,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         if evidence.get("compile"):
             md.append(f"- Icarus compile (`{evidence['compile'].get('version','')}`): {'ok' if evidence['compile'].get('ok') else 'FAILED'}.")
         for s in evidence.get("sims", []):
-            md.append(f"- Simulation seed {s['seed']}: **{s['status']}** ({s['cycles']} cycles after reset; {s['mismatches']} mismatching cycles).")
+            md.append(f"- Simulation seed {s['seed']}: **{s['status']}** ({s['cycles']} checked cycles; {s['mismatches']} mismatching cycles).")
         if evidence.get("synth"):
             syn = evidence["synth"]
             cells = syn.get("num_cells")

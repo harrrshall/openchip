@@ -674,7 +674,7 @@ class Runner:
         if ref2 is None:
             ck["consensus"]["outcome"] = "alt1_failed"
             ck["consensus"]["confidence"] = "low"
-            self.log("[corroborate] could not derive a second reference; accepting on a single reference (low confidence)")
+            self.log("[corroborate] could not derive a second reference; single-reference evidence is low confidence and sign-off will be withheld")
             return ck, ref, True
         ck["consensus"]["references"].append({"path": str(ref2), "role": "alt1"})
         res2 = verify(contract, rp, ref2, cwork / "rtl_vs_alt1", self._reference_comparison_config(), run_synth=False)
@@ -696,7 +696,7 @@ class Runner:
         if res3.accepted:
             ck["consensus"]["outcome"] = "rtl_corroborated_2_of_3"
             ck["consensus"]["confidence"] = "medium"
-            self.log("[corroborate] RTL matches references 1 and 3 (2 of 3); accepting")
+            self.log("[corroborate] RTL matches references 1 and 3 (2 of 3); disagreement remains and sign-off will be withheld")
             return ck, ref, True
         cmp23 = compare_references(contract, ref2, ref3, cwork / "r2_vs_r3", self.cfg.verification.seeds, self.cfg.verification.sim_cycles)
         if not cmp23.get("error") and cmp23["mismatches"] == 0:
@@ -706,7 +706,7 @@ class Runner:
             return ck, Path(ck["reference_path"]), False
         ck["consensus"]["outcome"] = "no_majority"
         ck["consensus"]["confidence"] = "low"
-        self.log("[corroborate] three references disagree; accepting on the first reference with LOW confidence — contract likely ambiguous")
+        self.log("[corroborate] three references disagree; first-reference evidence is low confidence and sign-off will be withheld — contract likely ambiguous")
         return ck, ref, True
 
     def _correct_timing_labels(self, ck: dict, contract: Contract, outputs: list[str]) -> Contract:
