@@ -92,9 +92,7 @@ def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_n
             q["timing"] = "n/a"
         elif q.get("timing") not in ("registered", "combinational"):
             desc = f"{q.get('description','')} {q.get('name','')}"
-            if d.get("clock_reset") is None:
-                q["timing"] = "combinational"
-            elif COMB_HINT.search(desc) and not REG_HINT.search(desc):
+            if d.get("clock_reset") is None or (COMB_HINT.search(desc) and not REG_HINT.search(desc)):
                 q["timing"] = "combinational"
             else:
                 q["timing"] = "registered"

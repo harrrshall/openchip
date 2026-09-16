@@ -24,7 +24,7 @@ class Workspace:
         return self.manifest_path.is_file()
 
     def init(self, request: str | None = None, name: str | None = None) -> None:
-        if self.root.exists() and any(self.root.iterdir()) and not self.exists():
+        if self.root.exists() and not self.exists():
             # Never take over an unrelated non-empty directory silently.
             foreign = [p.name for p in self.root.iterdir() if p.name not in SUBDIRS and not p.name.startswith(".")]
             if foreign:
