@@ -440,6 +440,35 @@ class Handler(BaseHTTPRequestHandler):
 class UIHTTPServer(ThreadingHTTPServer):
     # Browser tabs can issue bursts while other requests are completing.
     request_queue_size = 64
+    max_connection_workers = 64
+    connection_idle_timeout_s = 15
+
+    def __init__(self, *args, **kwargs):
+        self._connection_slots = threading.BoundedSemaphore(self.max_connection_workers)
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        request, address = super().get_request()
+        # Authentication happens after headers are read. Even unauthenticated
+        # peers must not retain a worker forever with an incomplete request.
+        request.settimeout(self.connection_idle_timeout_s)
+        return request, address
+
+    def process_request(self, request, client_address):
+        if not self._connection_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._connection_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._connection_slots.release()
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False) -> None:
