@@ -196,6 +196,16 @@ def cmd_report(args) -> int:
     return 0
 
 
+def positive_cycles(value: str) -> int:
+    try:
+        cycles = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("cycles must be a positive integer") from None
+    if cycles < 1:
+        raise argparse.ArgumentTypeError("cycles must be a positive integer")
+    return cycles
+
+
 def cmd_verify(args) -> int:
     """Re-run verification of delivered artifacts (no model calls)."""
     import sqlite3
@@ -361,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_report)
     s = sub.add_parser("verify", help="re-run verification on delivered artifacts")
     s.add_argument("--project", required=True)
-    s.add_argument("--cycles", type=int)
+    s.add_argument("--cycles", type=positive_cycles)
     s.add_argument("--seeds", help="comma-separated seeds")
     s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("compose", help="build and verify a small multi-module system from a request")

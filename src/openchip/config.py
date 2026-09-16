@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -64,8 +64,8 @@ class ReviewConfig(BaseModel):
 
 class VerificationConfig(BaseModel):
     review_counterexamples: bool = False  # experimental independent checker review; preserve CE unless recheck passes
-    sim_cycles: int = 20000
-    seeds: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    sim_cycles: StrictInt = Field(default=20000, ge=1)
+    seeds: list[StrictInt] = Field(default_factory=lambda: [1, 2, 3], min_length=1)
     require_lint: bool = True
     require_synth: bool = True
     corroborate: bool = True      # acceptance needs agreement with a second independent reference (or 2 of 3)
