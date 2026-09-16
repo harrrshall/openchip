@@ -13,17 +13,20 @@ def result_summary(outcome: dict, state: str | None) -> dict:
     withheld = "SIGN-OFF WITHHELD" in outcome.get("status_line", "")
     clock = outcome.get("clock_check") or {}
     clock_failed = clock.get("status") in {"mismatch", "error"}
+    lfsr_failed = (outcome.get("lfsr_check") or {}).get("status") in {"mismatch", "error"}
     table_failed = (outcome.get("request_table_check") or {}).get("status") in {"mismatch", "error"}
     formal_failed = formal.get("status") == "counterexample"
     module_failed = bool(outcome.get("requested_module") and outcome["requested_module"] != outcome.get("module"))
     consensus = outcome.get("reference_consensus") or {}
     references_uncertain = bool(consensus) and consensus.get("confidence") != "high"
-    if (provisional or (withheld and references_uncertain)) and not questions and not clock_failed and not table_failed and not formal_failed and not module_failed:
+    if (provisional or (withheld and references_uncertain)) and not questions and not clock_failed and not table_failed and not formal_failed and not module_failed and not lfsr_failed:
         questions = ["The independent references disagree or lack corroboration. Please clarify the intended behavior, including timing and priority when inputs coincide."]
     if state in {"running", "planned", "created"}:
         sentence = "Building and checking your design"
     elif clock_failed:
         sentence = "Independent clock verification failed; sign-off withheld"
+    elif lfsr_failed:
+        sentence = "Independent LFSR verification failed; sign-off withheld"
     elif table_failed:
         sentence = "Request-table verification failed; sign-off withheld"
     elif formal_failed:

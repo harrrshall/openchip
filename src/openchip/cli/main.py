@@ -205,6 +205,7 @@ def cmd_verify(args) -> int:
     from ..verification.harness import verify
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
+    from ..verification.lfsrcheck import check_lfsr
     from ..reporting.report import sign_off_withheld
 
     cfg = _cfg(args)
@@ -238,10 +239,12 @@ def cmd_verify(args) -> int:
     ck["request_table_check"] = check_reference_against_request_tables(
         contract, ck["request"], ref, work / "request_tables")
     ck["clock_check"] = check_clock(contract, ck["request"], rtl, work / "clock_check", cfg)
+    ck["lfsr_check"] = check_lfsr(contract, ck["request"], ref, work / "lfsr_check")
     withheld = sign_off_withheld(ck, evidence, contract)
     accepted = res.accepted and not withheld
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
+                    lfsr_check=ck["lfsr_check"],
                     contract_path=str(contracts[-1]), contract_version=contract.version)
     (work / "evidence.json").write_text(json.dumps(evidence, indent=2))
     print(json.dumps({"accepted": accepted, "stage": res.stage,

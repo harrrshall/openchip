@@ -27,6 +27,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.clockcheck import check_clock
+from ..verification.lfsrcheck import check_lfsr, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
@@ -748,6 +749,26 @@ class Runner:
         signatures: list[str] = [h.get("signature", "") for h in history]
         ref_regenerated = bool(ck.get("reference_regenerated", False))
         while True:
+            # Check explicit request semantics before repairing RTL against a
+            # correlated, erroneous reference. Recheck only when inputs change.
+            fingerprint = hashlib.sha256((LFSR_CHECK_VERSION + contract.digest() + ck.get("request", "")).encode()
+                                         + ref.read_bytes()).hexdigest()
+            lfsr = ck.get("lfsr_check") or {}
+            if lfsr.get("input_digest") != fingerprint or lfsr.get("status") == "error":
+                t0 = time.time()
+                lfsr = check_lfsr(contract, ck.get("request", ""), ref, vdir / "lfsr_check",
+                                  min(60, self.budget.wall_time_s - (time.time() - self.budget.started) - 2))
+                self.tool_time_s += time.time() - t0
+                lfsr["input_digest"] = fingerprint
+                ck["lfsr_check"] = lfsr
+                if lfsr["status"] != "not_applicable":
+                    self.store.event(self.run_id, "lfsr_check", lfsr)
+                    self.log(f"[lfsr] {lfsr['status']}: {lfsr['detail']}")
+                self.store.checkpoint(self.run_id, "verify", ck)
+            if lfsr["status"] == "mismatch" and not ck.get("table_repair") and attempt < max_iter:
+                return self._queue_table_repair(ck, attempt + 1, check_key="lfsr_check")
+            if lfsr["status"] in {"mismatch", "error"}:
+                raise Stalled("Independent LFSR request check did not pass: " + lfsr["detail"])
             work = vdir / "attempts" / f"attempt_{attempt}"
             if work.exists():
                 archived = work.with_name(work.name + "-previous-" + uuid.uuid4().hex[:10])
@@ -955,6 +976,9 @@ class Runner:
                       "Correct the contract's behavior and requirements to agree with the observed counterexample. " if clock else
                       "The generated reference contradicts rows printed in the original request. "
                       "Correct the contract's erroneous behavior/requirements to match every printed row. ")
+        if check_key == "lfsr_check":
+            correction = ("The generated reference contradicts the request's explicit right-shifting Galois LFSR transitions. "
+                          "Correct the contract's transition equation to match the observed request-derived sequence and tap numbering. ")
         feedback = ({k: evidence[k] for k in ("kind", "status", "binding", "detail", "checked_cycles") if k in evidence}
                     if clock else evidence)
         change = ("Automatic correction from tool evidence, not a new user requirement. "
