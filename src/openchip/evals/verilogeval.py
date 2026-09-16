@@ -25,6 +25,7 @@ from ..models.adapter import ModelAdapter, extract_code
 from ..tools import iverilog
 from ..runtime.run import Runner
 from ..runtime.workspace import Workspace
+from ..verification.rtl_policy import check_rtl
 
 DIRECT_SYSTEM = """You are a Verilog RTL engineer. Implement exactly the module requested, named TopModule, with the exact ports given. Synthesizable Verilog-2001 (SystemVerilog `logic`/`always_ff` are acceptable only if the prompt uses them). Reply with the complete module in a single ```verilog fenced block and nothing else."""
 
@@ -44,6 +45,10 @@ def load_problems(dataset: Path, only: Optional[list[str]] = None, limit: Option
 def score(rtl: Path, prob: dict, work: Path, cfg: Config) -> dict:
     """Compile TopModule + RefModule + upstream testbench and parse the mismatch line."""
     work.mkdir(parents=True, exist_ok=True)
+    findings, policy = check_rtl(rtl, work, cfg.tools.iverilog, cfg.tools.timeout_s)
+    (work / "rtl_policy.json").write_text(json.dumps({"findings": findings, "tool": policy}, indent=2))
+    if findings:
+        return {"status": "rtl_policy", "detail": findings}
     shutil.copy(prob["ref"], work / "ref.sv")
     # Upstream testbenches reference `tb_mismatch` in $dumpvars before its declaration; Icarus 14 rejects
     # that. Waveform dumping is irrelevant to scoring, so those lines are dropped (nothing else changes).
@@ -54,10 +59,12 @@ def score(rtl: Path, prob: dict, work: Path, cfg: Config) -> dict:
     if not comp.ok:
         return {"status": "compile_error", "detail": comp.tail(8)}
     sim = iverilog.simulate("sim.vvp", work, cfg.tools.vvp, cfg.tools.timeout_s)
-    m = MISMATCH_RE.search(sim.stdout)
-    if not m:
+    matches = MISMATCH_RE.findall(sim.stdout)
+    if not sim.ok or len(matches) != 1:
         return {"status": "sim_error", "detail": sim.tail(8)}
-    n, total = int(m.group(1)), int(m.group(2))
+    n, total = map(int, matches[0])
+    if total <= 0:
+        return {"status": "sim_error", "detail": "Independent testbench reported no samples"}
     return {"status": "pass" if n == 0 else "fail", "mismatches": n, "samples": total}
 
 
@@ -81,7 +88,7 @@ def run_agent(cfg: Config, prob: dict, work: Path, budget_s: float, log) -> dict
     t0 = time.time()
     ws = Workspace(work)
     if work.exists():
-        shutil.rmtree(work)
+        raise FileExistsError(f"Refusing to overwrite retained evaluation artifacts: {work}")
     ws.init(request=prob["prompt"], name=prob["id"])
     runner = Runner(ws, cfg, log=lambda m: log(f"  [{prob['id']}] {m}"))
     runner.start(prob["prompt"], budget_s=budget_s)
