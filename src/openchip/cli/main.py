@@ -72,6 +72,12 @@ def _parse_duration(s: str) -> float:
     return float(s)
 
 
+def _print_outcome(outcome: dict, *extra_fields: str) -> int:
+    fields = ("run_id", "state", "accepted", "status_line", "attempts", *extra_fields)
+    print(json.dumps({k: outcome.get(k) for k in fields}, indent=1))
+    return 0 if outcome.get("accepted") else 3
+
+
 def cmd_build(args) -> int:
     from ..runtime.run import Runner
     from ..runtime.workspace import Workspace
@@ -94,8 +100,7 @@ def cmd_build(args) -> int:
     run_id = runner.start(request, budget_s=budget)
     print(f"run {run_id} started in {ws.root}")
     outcome = runner.execute()
-    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts")}, indent=1))
-    return 0 if outcome.get("accepted") else 3
+    return _print_outcome(outcome)
 
 
 def cmd_resume(args) -> int:
@@ -129,8 +134,7 @@ def cmd_resume(args) -> int:
         outcome = runner.execute()
     finally:
         runner.store.close()
-    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts")}, indent=1))
-    return 0 if outcome.get("accepted") else 3
+    return _print_outcome(outcome)
 
 
 def cmd_revise(args) -> int:
@@ -149,8 +153,7 @@ def cmd_revise(args) -> int:
     run_id = runner.revise(change, budget_s=budget)
     print(f"revision run {run_id} started in {ws.root}")
     outcome = runner.execute()
-    print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts", "contract_version")}, indent=1))
-    return 0 if outcome.get("accepted") else 3
+    return _print_outcome(outcome, "contract_version")
 
 
 def cmd_status(args) -> int:
@@ -266,21 +269,19 @@ def cmd_verify(args) -> int:
         ck.get("consensus"), contract, rtl, ref, res, work / "consensus", cfg,
         cfg.verification.sim_cycles if args.cycles is None else args.cycles,
         cfg.verification.seeds if seeds is None else seeds)
-    withheld = sign_off_withheld(ck, evidence, contract)
+    reasons = [sign_off_withheld(ck, evidence, contract)]
     if consensus_recheck["status"] not in {"pass", "not_applicable"}:
-        reason = "retained reference consensus was not re-established: " + consensus_recheck["detail"]
-        withheld = "; ".join(filter(None, (withheld, reason)))
+        reasons.append("retained reference consensus was not re-established: " + consensus_recheck["detail"])
     prior_failures = prior_simulation_failures(ws.root, res.artifacts)
     if prior_failures:
-        reason = ("recorded simulation mismatches remain unresolved for this unchanged RTL, "
+        reasons.append("recorded simulation mismatches remain unresolved for this unchanged RTL, "
                   "reference and contract; a passing recheck does not clear those failing traces")
-        withheld = "; ".join(filter(None, (withheld, reason)))
     formal_failures = prior_formal_failures(ws.root, res.artifacts, res.formal)
     if formal_failures:
-        reason = ("recorded formal counterexamples remain unresolved for this unchanged RTL "
+        reasons.append("recorded formal counterexamples remain unresolved for this unchanged RTL "
                   "and contract; skipping or shortening formal checking does not clear them. "
                   "Review the RTL/checker; a corrected checker must pass at least the recorded depth")
-        withheld = "; ".join(filter(None, (withheld, reason)))
+    withheld = "; ".join(filter(None, reasons))
     accepted = res.accepted and not withheld
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
                     consensus_recheck=consensus_recheck,
@@ -362,70 +363,62 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", help="config TOML (default: ./openchip.toml or configs/default.toml)")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("doctor", help="report prerequisites, tool versions, model connectivity")
-    s.set_defaults(fn=cmd_doctor)
-    s = sub.add_parser("init", help="create a design workspace")
+    def command(name, handler, help_text):
+        parser = sub.add_parser(name, help=help_text)
+        parser.set_defaults(fn=handler)
+        return parser
+
+    s = command("doctor", cmd_doctor, "report prerequisites, tool versions, model connectivity")
+    s = command("init", cmd_init, "create a design workspace")
     s.add_argument("project")
     s.add_argument("--request", help="request text or path to a file")
     s.add_argument("--name")
-    s.set_defaults(fn=cmd_init)
-    s = sub.add_parser("build", help="run the full request -> RTL -> verification pipeline")
+    s = command("build", cmd_build, "run the full request -> RTL -> verification pipeline")
     s.add_argument("--project", required=True)
     s.add_argument("--request", help="request text or path; overrides request/request.md")
     s.add_argument("--budget", help="wall-time budget, e.g. 20m, 2h")
-    s.set_defaults(fn=cmd_build)
-    s = sub.add_parser("revise", help="apply a change request: new contract version, re-verify")
+    s = command("revise", cmd_revise, "apply a change request: new contract version, re-verify")
     s.add_argument("--project", required=True)
     s.add_argument("--change", required=True, help="change request text or path")
     s.add_argument("--budget")
-    s.set_defaults(fn=cmd_revise)
-    s = sub.add_parser("resume", help="resume an interrupted run")
+    s = command("resume", cmd_resume, "resume an interrupted run")
     s.add_argument("--project", required=True)
     s.add_argument("--run")
-    s.set_defaults(fn=cmd_resume)
-    s = sub.add_parser("status", help="show runs in a workspace")
+    s = command("status", cmd_status, "show runs in a workspace")
     s.add_argument("--project", required=True)
     s.add_argument("--run")
     s.add_argument("-v", "--verbose", action="store_true")
-    s.set_defaults(fn=cmd_status)
-    s = sub.add_parser("report", help="print the latest delivery report")
+    s = command("report", cmd_report, "print the latest delivery report")
     s.add_argument("--project", required=True)
     s.add_argument("--json", action="store_true")
-    s.set_defaults(fn=cmd_report)
-    s = sub.add_parser("verify", help="re-run verification on delivered artifacts")
+    s = command("verify", cmd_verify, "re-run verification on delivered artifacts")
     s.add_argument("--project", required=True)
     s.add_argument("--cycles", type=positive_cycles)
     s.add_argument("--seeds", help="comma-separated seeds")
-    s.set_defaults(fn=cmd_verify)
-    s = sub.add_parser("compose", help="build and verify a small multi-module system from a request")
+    s = command("compose", cmd_compose, "build and verify a small multi-module system from a request")
     s.add_argument("--project", required=True, help="new system workspace (must not exist)")
     s.add_argument("--request", required=True)
     s.add_argument("--budget", default="20m")
-    s.set_defaults(fn=cmd_compose)
-    s = sub.add_parser("assemble", help="validate pinned module connections and generate top-level RTL")
+    s = command("assemble", cmd_assemble, "validate pinned module connections and generate top-level RTL")
     s.add_argument("--system", required=True, help="system contract JSON")
     s.add_argument("--out", required=True, help="new top-level Verilog file (must not exist)")
-    s.set_defaults(fn=cmd_assemble)
-    s = sub.add_parser("eval", help="run an evaluation suite")
+    s = command("eval", cmd_eval, "run an evaluation suite")
     s.add_argument("--suite", required=True)
     s.add_argument("--out", default="evals/results")
     s.add_argument("--tasks", help="comma-separated task ids (default: all)")
     s.add_argument("--budget", default="20m")
     s.add_argument("--repeats", type=int, default=1)
-    s.set_defaults(fn=cmd_eval)
-    s = sub.add_parser("ui", help="start the local web UI")
+    s = command("ui", cmd_ui, "start the local web UI")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open a browser tab")
-    s.set_defaults(fn=cmd_ui)
-    s = sub.add_parser("veval", help="run VerilogEval v2 spec-to-rtl (direct single-shot or full agent)")
+    s = command("veval", cmd_veval, "run VerilogEval v2 spec-to-rtl (direct single-shot or full agent)")
     s.add_argument("--dataset", required=True, help="path to verilog-eval/dataset_spec-to-rtl")
     s.add_argument("--mode", choices=["direct", "agent"], default="direct")
     s.add_argument("--out", default="evals/results")
     s.add_argument("--problems", help="comma-separated problem ids")
     s.add_argument("--limit", type=int)
     s.add_argument("--budget", default="10m")
-    s.set_defaults(fn=cmd_veval)
     return p
 
 
