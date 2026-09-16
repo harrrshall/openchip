@@ -65,6 +65,8 @@ def sign_off_withheld(ck: dict) -> str:
     t = ck.get("request_table_check") or {}
     if t.get("status") == "mismatch":
         reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
+    elif t.get("status") == "error":
+        reasons.append("the request-table check could not complete: " + (t.get("detail") or "checker error"))
     from ..verification.clockcheck import requires_clock_check
     clock = ck.get("clock_check") or {}
     if requires_clock_check(ck.get("request", "")) and clock.get("status") != "ok":
@@ -92,7 +94,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
             if accepted:
                 disp = "tested (random simulation vs. independent reference; not a proof)"
             elif evidence and evidence.get("accepted") and withheld:
-                disp = "Tool checks passed; sign-off withheld pending reference agreement"
+                disp = "NOT signed off — an independent acceptance gate failed or is incomplete"
             elif evidence:
                 disp = f"NOT verified — last verification stopped at stage '{evidence.get('stage')}'"
             else:
@@ -127,7 +129,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         parts.append("formal not run")
     parts.append("timing closure not evaluated")
     if withheld:
-        parts.append("SIGN-OFF WITHHELD: " + withheld + "; the design needs the user")
+        parts.append("SIGN-OFF WITHHELD: " + withheld)
     conf = consensus_confidence(ck)
     n_unresolved = len(contract.unresolved) if contract else 0
     provisional = accepted and (n_unresolved > 0 or conf != "high")
@@ -155,6 +157,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
         "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
         "request_table_repair": ck.get("table_repair"),
+        "request_table_check": ck.get("request_table_check"),
         "clock_check": ck.get("clock_check"),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},

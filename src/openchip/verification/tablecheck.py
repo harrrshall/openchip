@@ -89,7 +89,7 @@ def check_reference_against_request_tables(
     out: dict = {"status": "not_applicable", "tables": 0, "rows": 0, "mismatches": [], "detail": ""}
     try:
         tables = parse_request_tables(request, include_external_mux=True)
-    except Exception as e:  # noqa: BLE001 — a parser crash must never fail a run
+    except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
         return out
     bound = [b for b in (bind(t, contract) for t in tables) if b is not None]

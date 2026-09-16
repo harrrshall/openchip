@@ -822,7 +822,7 @@ class Runner:
                 if (not self.cfg.verification.require_formal and self.cfg.verification.run_formal
                         and props is not None and props.is_file() and not contract.combinational
                         and clock["status"] in {"ok", "not_applicable"}
-                        and ck.get("request_table_check", {}).get("status") != "mismatch"):
+                        and ck.get("request_table_check", {}).get("status") not in {"mismatch", "error"}):
                     remaining = self.budget.wall_time_s - (time.time() - self.budget.started) - 2
                     if remaining > 0:
                         t0 = time.time()
@@ -917,7 +917,7 @@ class Runner:
 
     def _check_request_tables(self, ck: dict, contract: Contract, ref: Path) -> dict:
         """Compare the reference against any table printed in the request. No model call."""
-        if ck.get("request_table_check"):
+        if (ck.get("request_table_check") or {}).get("status") in {"ok", "mismatch", "not_applicable"}:
             return ck
         t0 = time.time()
         res = check_reference_against_request_tables(
