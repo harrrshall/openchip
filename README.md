@@ -139,7 +139,9 @@ long packets or multi-step transactions: set `sim_cycles = 20000` under
 `[verification]` in your build configuration, or run
 `openchip verify --project ws/timer --cycles 20000` on an existing design.
 This command preserves the original report and writes separate verification
-evidence. Check that the stimulus actually reaches completion, acknowledgment
+evidence. Recorded simulation failures for the same RTL, reference and
+contract identity continue to withhold sign-off, even when a shorter recheck
+passes. The new evidence links the retained failing results. Check that the stimulus actually reaches completion, acknowledgment
 and restart; more cycles alone do not establish those behaviors. Bounded formal
 depth is also a limit, not a claim that a long transaction was completed.
 

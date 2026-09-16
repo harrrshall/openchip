@@ -206,6 +206,7 @@ def cmd_verify(args) -> int:
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
     from ..verification.lfsrcheck import check_lfsr, lfsr_properties
+    from ..verification.history import prior_simulation_failures
     from ..reporting.report import sign_off_withheld
 
     cfg = _cfg(args)
@@ -245,8 +246,14 @@ def cmd_verify(args) -> int:
     ck["clock_check"] = check_clock(contract, ck["request"], rtl, work / "clock_check", cfg)
     ck["lfsr_check"] = check_lfsr(contract, ck["request"], ref, work / "lfsr_check")
     withheld = sign_off_withheld(ck, evidence, contract)
+    prior_failures = prior_simulation_failures(ws.root, res.artifacts)
+    if prior_failures:
+        reason = ("recorded simulation mismatches remain unresolved for this unchanged RTL, "
+                  "reference and contract; a passing recheck does not clear those failing traces")
+        withheld = "; ".join(filter(None, (withheld, reason)))
     accepted = res.accepted and not withheld
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
+                    prior_simulation_failures=prior_failures,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
                     lfsr_check=ck["lfsr_check"],
                     properties_origin="request-derived Galois transitions" if trusted_props else "existing checker",
