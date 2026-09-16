@@ -27,7 +27,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.clockcheck import check_clock
-from ..verification.lfsrcheck import check_lfsr, VERSION as LFSR_CHECK_VERSION
+from ..verification.lfsrcheck import check_lfsr, lfsr_properties, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
@@ -475,6 +475,20 @@ class Runner:
                 self.log(f"[reference] attempt {attempt + 1} failed to execute: {last_err.splitlines()[0][:120]}")
                 continue
             lint = lint_reference_timing(out_path, cj, work / "timing_lint.json")
+            if seed_offset != 0:
+                assert self.budget
+                semantic = check_lfsr(contract, ck.get("request", ""), out_path, work / "alternate_lfsr",
+                                      min(60, self.budget.wall_time_s - (time.time() - self.budget.started) - 2))
+                if semantic["status"] in {"mismatch", "error"}:
+                    last_err = semantic["detail"]
+                    saved = out_path.with_suffix(".request-rejected-" + uuid.uuid4().hex[:12] + ".py")
+                    shutil.copyfile(out_path, saved)
+                    self.store.event(self.run_id, "reference_rejected", {"attempt": attempt,
+                                     "request_check": semantic, "retained": str(saved)})
+                    self.log(f"[reference] alternate failed request-derived check: {semantic['status']}")
+                    if semantic["status"] == "error":
+                        return None, last_err
+                    continue
             if lint.get("violations"):
                 v = lint["violations"]
                 names = ", ".join(x["output"] for x in v)
@@ -677,11 +691,39 @@ class Runner:
             self.log("[guard] contract: " + "; ".join(f.code for f in finds) + " -> provisional")
         return contract
 
+    def _request_properties(self, ck: dict, contract: Contract) -> Optional[Path]:
+        """Use a full transition checker when the request specifies its semantics."""
+        if not self.cfg.verification.run_formal:
+            return None
+        code = lfsr_properties(contract, ck.get("request", ""))
+        if code is None:
+            return None
+        vdir = self.ws.dir("verification")
+        pp = vdir / f"{contract.module_name}_props.v"
+        same = pp.is_file() and pp.read_text() == code
+        if same and ck.get("properties_origin") == "request-derived Galois transitions":
+            return pp
+        retained = None
+        if pp.is_file() and not same:
+            retained = pp.with_name(pp.stem + ".retained-" + uuid.uuid4().hex[:12] + ".v")
+            shutil.copyfile(pp, retained)
+        pp.write_text(code)
+        chk = parse_check(pp, contract, vdir, self.cfg.tools.yosys, self.cfg.tools.timeout_s)
+        if not chk.ok:
+            raise Stalled("Request-derived formal checker failed to parse: " + chk.tail(8))
+        self._save("properties", pp, "properties")
+        ck.update(properties_path=str(pp), properties_origin="request-derived Galois transitions")
+        self.store.event(self.run_id, "request_properties", {"path": str(pp), "retained": str(retained) if retained else None})
+        return pp
+
     def _step_properties(self, ck: dict) -> dict:
         """Optional formal layer: a property checker written independently of the RTL. Failure is recorded, not fatal."""
         contract = self._load_contract(ck)
         ck["properties_done"] = True
         if not self.cfg.verification.run_formal or contract.combinational:
+            self.store.checkpoint(self.run_id, "rtl", ck)
+            return ck
+        if self._request_properties(ck, contract) is not None:
             self.store.checkpoint(self.run_id, "rtl", ck)
             return ck
         ctx = self._ctx(ck, contract)
@@ -781,7 +823,9 @@ class Runner:
                         ck[key] = str(archived / "evidence.json")
                 self.store.event(self.run_id, "verification_archived", {"from": str(work), "to": str(archived)})
             t0 = time.time()
-            props = Path(ck["properties_path"]) if ck.get("properties_path") else None
+            props = self._request_properties(ck, contract)
+            if props is None:
+                props = Path(ck["properties_path"]) if ck.get("properties_path") else None
             # Optional proof work must not consume the budget needed for the
             # mandatory independent-reference agreement and request checks.
             required_props = props if self.cfg.verification.require_formal else None

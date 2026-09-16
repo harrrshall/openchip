@@ -205,7 +205,7 @@ def cmd_verify(args) -> int:
     from ..verification.harness import verify
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
-    from ..verification.lfsrcheck import check_lfsr
+    from ..verification.lfsrcheck import check_lfsr, lfsr_properties
     from ..reporting.report import sign_off_withheld
 
     cfg = _cfg(args)
@@ -220,10 +220,6 @@ def cmd_verify(args) -> int:
     ref = ws.dir("reference") / "reference.py"
     work = Path(tempfile.mkdtemp(prefix="reverify-", dir=ws.dir("verification")))
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
-    props = ws.dir("verification") / f"{contract.module_name}_props.v"
-    res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds,
-                 props_path=props if props.is_file() else None)
-    evidence = res.to_dict()
     ck = {"request": ws.request_text()}
     # Keep the request's revision history and any unresolved reference disagreement.
     # Read-only access leaves the original run and its outcome untouched.
@@ -236,6 +232,14 @@ def cmd_verify(args) -> int:
                 ck.update({k: prior[k] for k in ("request", "consensus") if k in prior})
         finally:
             db.close()
+    props = ws.dir("verification") / f"{contract.module_name}_props.v"
+    trusted_props = lfsr_properties(contract, ck["request"]) if cfg.verification.run_formal else None
+    if trusted_props is not None:
+        props = work / f"{contract.module_name}_props.v"
+        props.write_text(trusted_props)
+    res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds,
+                 props_path=props if props.is_file() else None)
+    evidence = res.to_dict()
     ck["request_table_check"] = check_reference_against_request_tables(
         contract, ck["request"], ref, work / "request_tables")
     ck["clock_check"] = check_clock(contract, ck["request"], rtl, work / "clock_check", cfg)
@@ -245,6 +249,7 @@ def cmd_verify(args) -> int:
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
                     lfsr_check=ck["lfsr_check"],
+                    properties_origin="request-derived Galois transitions" if trusted_props else "existing checker",
                     contract_path=str(contracts[-1]), contract_version=contract.version)
     (work / "evidence.json").write_text(json.dumps(evidence, indent=2))
     print(json.dumps({"accepted": accepted, "stage": res.stage,
