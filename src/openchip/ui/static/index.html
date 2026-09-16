@@ -329,12 +329,11 @@ function renderFeed(d) {
 // -- settings ---------------------------------------------------------------------------------------------
 function providerChanged() {
   const p = $('provider').value; const s = status ? status.settings : {};
-  const defaults = {openrouter:'https://openrouter.ai/api/v1', openai:'https://api.openai.com/v1', 'openai-responses':'https://api.openai.com/v1', anthropic:'https://api.anthropic.com', 'openai-compatible':'http://127.0.0.1:8000/v1'};
-  const presets = {openrouter:['openai/gpt-oss-120b','qwen/qwen3.8-27b','anthropic/claude-sonnet-5','openai/gpt-5-codex'], openai:['gpt-5-codex','gpt-5','gpt-oss-120b'], 'openai-responses':[], anthropic:['claude-sonnet-5','claude-opus-5','claude-haiku-4-5-20251001'], 'openai-compatible':['openai/gpt-oss-120b','Qwen/Qwen3.8-27B','Qwen/Qwen3-8B']};
-  $('presets').innerHTML = presets[p].map(m => `<option value="${m}">`).join('');
-  $('baseurl').placeholder = defaults[p];
-  if (p !== s.provider) { $('model').value = presets[p][0] || ''; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === defaults[p] ? '' : (s.base_url || ''); }
-  $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${ {openrouter:'OPENROUTER_API_KEY', openai:'OPENAI_API_KEY', 'openai-responses':'OPENAI_API_KEY', anthropic:'ANTHROPIC_API_KEY'}[p] } also works)`;
+  const {base_url, presets, key_env} = s.providers[p];
+  $('presets').innerHTML = presets.map(m => `<option value="${escAttr(m)}">`).join('');
+  $('baseurl').placeholder = base_url;
+  if (p !== s.provider) { $('model').value = presets[0] || ''; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === base_url ? '' : (s.base_url || ''); }
+  $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${key_env} also works)`;
 }
 async function openSettings() { if (!status) { try { await refreshStatus(); } catch (e) { return toast('Still loading — try again in a moment.'); } }
   const s = status.settings; $('provider').value = s.provider; $('tokenrate').value = s.usd_per_million_tokens ?? ''; providerChanged(); $('apikey').value=''; $('testresult').textContent='';

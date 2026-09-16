@@ -90,7 +90,9 @@ class UIState:
             if key == "EMPTY":
                 key = ""
             return {**self.settings, "key_env": env, "key_present": bool(key), "key_hint": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("set" if key else ""),
-                    "presets": PRESETS.get(provider, [])}
+                    "presets": PRESETS.get(provider, []),
+                    "providers": {name: {**defaults, "presets": PRESETS.get(name, [])}
+                                  for name, defaults in PROVIDER_DEFAULTS.items()}}
 
     def config(self) -> Config:
         with self.lock:
