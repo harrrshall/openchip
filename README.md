@@ -114,6 +114,17 @@ these helpers expect the repository at `/home/openchip` and environment/credenti
 bash scripts/cloud/interrupt_demo.sh /home/openchip-runs/counter-recovery updown_counter
 ```
 
+### recheck evaluation results
+
+on the linux verification host, use a copy of an evaluation results directory when rerunning these tools: they write verification artifacts and reports into that directory.
+
+```sh
+python -m openchip.evals.rescore /path/to/results-copy /path/to/suite
+python -m openchip.evals.mutate /path/to/results-copy /path/to/suite
+```
+
+rescoring checks saved rtl against the suite reference without new model calls. mutation checking introduces small rtl faults and measures whether the model-derived and suite references detect them. both use the highest numbered contract snapshot, so `contract.v10.json` takes precedence over `contract.v9.json`. mutation sensitivity is not a completeness proof.
+
 ## architecture
 
 - `src/openchip/contracts/` defines the design contract and its validation.

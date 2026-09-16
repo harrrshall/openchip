@@ -218,7 +218,7 @@ def cmd_verify(args) -> int:
     import sqlite3
     import tempfile
     from ..contracts.schema import Contract
-    from ..runtime.workspace import Workspace
+    from ..runtime.workspace import Workspace, contract_files
     from ..verification.harness import verify
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
@@ -230,7 +230,7 @@ def cmd_verify(args) -> int:
     cfg = _cfg(args)
     ws = Workspace(args.project)
     spec = ws.dir("spec")
-    contracts = sorted(spec.glob("contract.v*.json"), key=lambda p: int(p.stem.split(".v")[1]))
+    contracts = contract_files(spec)
     if not contracts:
         print("no contract found", file=sys.stderr)
         return 1

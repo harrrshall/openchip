@@ -17,7 +17,7 @@ from typing import Optional
 from ..config import Config, model_slug
 from ..contracts.schema import Contract
 from ..runtime.run import Runner
-from ..runtime.workspace import Workspace
+from ..runtime.workspace import Workspace, contract_files
 from ..verification.harness import verify
 
 SUITES_ROOT = Path(__file__).resolve().parents[3] / "evals" / "suite"
@@ -87,7 +87,7 @@ def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log
     # ---- independent golden check -------------------------------------------------------
     rec["golden_pass"] = False
     rec["golden_status"] = "not_run"
-    spec = sorted((tdir / "spec").glob("contract.v*.json"))
+    spec = contract_files(tdir / "spec")
     rtl = tdir / "rtl" / f"{task['expected']['module']}.v"
     if spec and rtl.is_file():
         contract = Contract.model_validate_json(spec[-1].read_text())

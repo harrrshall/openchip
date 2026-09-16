@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..contracts.schema import Contract
+from ..runtime.workspace import contract_files
 from ..verification.harness import verify
 from .runner import SUITES_ROOT, interface_matches
 
@@ -27,7 +28,7 @@ def main(argv: list[str]) -> int:
             continue
         task = json.loads(task_json.read_text())
         for rep in sorted(tdir.glob("rep*")):
-            spec = sorted((rep / "spec").glob("contract.v*.json"))
+            spec = contract_files(rep / "spec")
             rtl = rep / "rtl" / f"{task['expected']['module']}.v"
             row = {"task": task["id"], "rep": rep.name, "status": "no_rtl"}
             if spec and rtl.is_file():

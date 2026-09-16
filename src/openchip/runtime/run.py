@@ -37,7 +37,7 @@ from ..verification.tablecheck import CHECKER_VERSION, check_reference_against_r
 from ..verification.normalize import normalize_rtl
 from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
-from .workspace import Workspace
+from .workspace import Workspace, contract_files
 
 
 
@@ -125,7 +125,7 @@ class Runner:
         previous evidence (a new run, new reference/RTL/verification), and never edits earlier versions.
         """
         spec = self.ws.dir("spec")
-        contracts = sorted(spec.glob("contract.v*.json"), key=lambda p: int(p.stem.split(".v")[1]))
+        contracts = contract_files(spec)
         if not contracts:
             raise RuntimeError("no contract to revise; run `openchip build` first")
         base = Contract.model_validate_json(contracts[-1].read_text())

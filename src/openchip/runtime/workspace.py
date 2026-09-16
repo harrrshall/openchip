@@ -8,6 +8,11 @@ SUBDIRS = ("request", "spec", "reference", "rtl", "verification", "reports", ".o
 MANIFEST = ".openchip/manifest.json"
 
 
+def contract_files(spec: Path) -> list[Path]:
+    """Contract snapshots in numeric revision order, oldest first."""
+    return sorted(spec.glob("contract.v*.json"), key=lambda path: int(path.stem.split(".v")[1]))
+
+
 class Workspace:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
