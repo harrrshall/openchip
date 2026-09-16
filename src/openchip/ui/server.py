@@ -47,7 +47,9 @@ PRESETS = {
 
 
 class UIState:
-    def __init__(self, base_cfg: Config):
+    def __init__(self, base_cfg: Config, *, workspaces: Optional[Path] = None, settings_path: Optional[Path] = None):
+        self.workspaces = workspaces if workspaces is not None else WORKSPACES
+        self.settings_path = settings_path if settings_path is not None else UI_SETTINGS
         self.base_cfg = base_cfg
         self.lock = threading.RLock()
         self.logs: dict[str, list[dict]] = {}      # workspace name -> log lines
@@ -57,7 +59,7 @@ class UIState:
     # -- settings -------------------------------------------------------------------------
     def _load_settings(self) -> dict:
         try:
-            return json.loads(UI_SETTINGS.read_text())
+            return json.loads(self.settings_path.read_text())
         except OSError:
             m = self.base_cfg.model
             return {"provider": m.provider, "model": m.model, "base_url": m.base_url}
@@ -75,8 +77,8 @@ class UIState:
             self.settings = {"provider": provider, "model": (data.get("model") or self.settings.get("model") or "").strip(),
                              "base_url": (data.get("base_url") or "").strip() or PROVIDER_DEFAULTS[provider]["base_url"]}
             self.settings["usd_per_million_tokens"] = rate
-            UI_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-            UI_SETTINGS.write_text(json.dumps(self.settings, indent=1))
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            self.settings_path.write_text(json.dumps(self.settings, indent=1))
             key = (data.get("api_key") or "").strip()
             if key:
                 write_keys_file({PROVIDER_DEFAULTS[provider]["key_env"]: key})
@@ -123,9 +125,12 @@ class UIState:
         tools["reference_sandbox"] = sandbox_status()
         return {"tools": tools, "tools_ok": all(tools[t]["ok"] for t in ("iverilog", "vvp", "verilator", "yosys", "reference_sandbox"))}
 
+    def model_adapter(self, cfg: Config) -> ModelAdapter:
+        return ModelAdapter(cfg.model)
+
     def test_connection(self) -> dict:
         cfg = self.config()
-        ad = ModelAdapter(cfg.model)
+        ad = self.model_adapter(cfg)
         h = ad.health()
         if h.get("ok"):
             # reasoning models spend output tokens before answering: give the ping room
@@ -150,13 +155,13 @@ class UIState:
             return self._start_run(name, request, budget_s, change)
 
     def _start_run(self, name: str, request: str, budget_s: float, change: Optional[str] = None) -> dict:
-        WORKSPACES.mkdir(parents=True, exist_ok=True)
+        self.workspaces.mkdir(parents=True, exist_ok=True)
         # Existing CLI/imported workspaces may contain spaces, quotes or long names.
         # start_run validated this exact path; revisions must not redirect elsewhere.
         safe = name if change is not None else (
             "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name.strip())[:40]
             or time.strftime("design-%H%M%S"))
-        ws = Workspace(WORKSPACES / safe)
+        ws = Workspace(self.workspaces / safe)
         if change is None:
             base_name = safe
             while True:
@@ -165,7 +170,7 @@ class UIState:
                     break
                 except FileExistsError:
                     safe = f"{base_name}-{uuid.uuid4().hex[:12]}"
-                ws = Workspace(WORKSPACES / safe)
+                ws = Workspace(self.workspaces / safe)
             ws.init(request=request, name=safe)
         cfg = self.config()
         logs = self.logs[safe] = []
@@ -173,7 +178,7 @@ class UIState:
         def log(msg: str) -> None:
             logs.append({"t": time.time(), "msg": msg})
 
-        runner = Runner(ws, cfg, log=log)
+        runner = Runner(ws, cfg, adapter=self.model_adapter(cfg), log=log)
         if change is None:
             run_id = runner.start(request, budget_s=budget_s)
         else:
@@ -241,7 +246,7 @@ class UIState:
             finally:
                 store.close()
             logs = self.logs.setdefault(name, [])
-            runner = Runner(ws, cfg, log=lambda msg: logs.append({"t": time.time(), "msg": msg}))
+            runner = Runner(ws, cfg, adapter=self.model_adapter(cfg), log=lambda msg: logs.append({"t": time.time(), "msg": msg}))
             runner.resume(run_id)
             def work():
                 try:
@@ -257,9 +262,9 @@ class UIState:
 
     def list_runs(self) -> list[dict]:
         out = []
-        if not WORKSPACES.exists():
+        if not self.workspaces.exists():
             return out
-        for d in sorted(WORKSPACES.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        for d in sorted(self.workspaces.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
             ws = Workspace(d)
             if not ws.exists():
                 continue
@@ -311,7 +316,7 @@ class UIState:
         return detail
 
     def workspace_path(self, name: str) -> Path:
-        root = WORKSPACES.resolve()
+        root = self.workspaces.resolve()
         path = (root / name).resolve()
         if path.parent != root or not name or name in {".", ".."}:
             raise FileNotFoundError("Unknown workspace")
@@ -330,6 +335,8 @@ class UIState:
         return (self.workspace_path(name) / path).read_bytes()
 
     def bundle(self, name: str) -> bytes:
+        if not self.workspace_path(name).is_dir():
+            raise FileNotFoundError("Unknown workspace")
         buffer = io.BytesIO()
         contents = {path: self.artifact(name, path) for path in self.deliverable_files(name)}
         try:
@@ -350,9 +357,24 @@ class UIState:
 class Handler(BaseHTTPRequestHandler):
     state: UIState
     auth_token: str = ""
+    sessions = None
 
     def _authorized(self) -> bool:
         host = self.headers.get("Host", "")
+        if self.sessions is not None:
+            origin = self.headers.get("Origin")
+            if origin and origin != self.sessions.origin:
+                self._send(403, {"error": "Cross-origin requests are not allowed"})
+                return False
+            if host != urlparse(self.sessions.origin).netloc:
+                self._send(403, {"error": "Invalid host"})
+                return False
+            try:
+                self.state, self.session_cookie = self.sessions.select(self.headers.get("Cookie", ""))
+            except ValueError:
+                self._send(503, {"error": "Service is busy. Please try again later."})
+                return False
+            return True
         if not self.auth_token:
             try:
                 hostname = urlparse("http://" + host).hostname or ""
@@ -399,8 +421,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if getattr(self, "session_cookie", None):
+            self.send_header("Set-Cookie", self.session_cookie)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
         self.end_headers()
         self.wfile.write(data)
+        if self.sessions is not None and getattr(self, "session_cookie", None):
+            self.state.record_http(self.command, urlparse(self.path).path, code)
 
     def _json(self) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
@@ -422,8 +450,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path in ("/", "/index.html"):
                 return self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/logo.svg":
+                return self._send(200, (STATIC / "logo.svg").read_bytes(), "image/svg+xml")
             if u.path == "/api/status":
-                return self._send(200, {"settings": self.state.public_settings(), "doctor": self.state.doctor(), "workspaces": str(WORKSPACES), "runs": self.state.list_runs()})
+                return self._send(200, {"settings": self.state.public_settings(), "doctor": self.state.doctor(), "workspaces": "this browser session" if self.sessions else str(self.state.workspaces), "hosted": self.sessions is not None, "runs": self.state.list_runs()})
             if u.path == "/api/runs":
                 return self._send(200, self.state.list_runs())
             if u.path.startswith("/api/runs/"):
@@ -512,10 +542,16 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False)
         loopback = host == "localhost" or ipaddress.ip_address(host).is_loopback
     except ValueError:
         loopback = False
-    if (not loopback or token) and len(token) < 32:
+    hosted_origin = os.environ.get("OPENCHIP_HOSTED_ORIGIN", "")
+    if not hosted_origin and (not loopback or token) and len(token) < 32:
         raise ValueError("Set OPENCHIP_UI_TOKEN to a secret of at least 32 characters before exposing the UI.")
     Handler.auth_token = token
     Handler.state = UIState(Config.load())
+    if hosted_origin:
+        from .sessions import HostedSessions
+        Handler.sessions = HostedSessions(Config.load(), WORKSPACES / "sessions", hosted_origin)
+    else:
+        Handler.sessions = None
     httpd = UIHTTPServer((host, port), Handler)
     url = f"http://{host}:{port}"
     print(f"OpenChip UI at {url}  (workspaces: {WORKSPACES})")

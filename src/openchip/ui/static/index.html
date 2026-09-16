@@ -56,7 +56,7 @@
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; } .kv div:nth-child(odd) { color: var(--muted); }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 1fr; } aside { display: none; } .topbar { display: flex; } }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
-  .modal-bg.open { display: flex; } .modal { width: min(560px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .modal-bg.open { display: flex; } .modal { max-height: 90vh; overflow-y: auto; width: min(560px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
   .hint { font-size: 12px; color: var(--muted); }
   .status-line { font-size: 13px; }
   .empty { color: var(--muted); padding: 30px 0; text-align: center; }
@@ -79,8 +79,9 @@
 </style>
 </head>
 <body>
+<div id="hosted-notice" hidden style="padding:12px 20px;background:#eef2ff;color:#1e293b">Private browser session · Bring your own API key in Settings. Prompts, outputs and activity are retained by OpenChip for product improvement. Clearing cookies loses access to your projects. <button class="btn" onclick="openSettings()">Details &amp; API key</button></div>
 <div class="topbar" id="topbar">
-  <div class="brand"><div class="logo"></div>OpenChip</div>
+  <div class="brand"><img class="logo" src="/logo.svg" alt="OpenChip logo">OpenChip</div>
   <div class="row" style="gap:8px;flex-wrap:nowrap">
     <button class="btn primary" onclick="showHome()">+ New design</button>
     <button class="btn" onclick="openSettings()">Settings &amp; API key</button>
@@ -88,7 +89,7 @@
 </div>
 <div class="app">
   <aside>
-    <div class="brand"><div class="logo"></div>OpenChip <small id="ver"></small></div>
+    <div class="brand"><img class="logo" src="/logo.svg" alt="OpenChip logo">OpenChip <small id="ver"></small></div>
     <div class="nav"><button class="btn primary" style="width:100%" onclick="showHome()">+ New design</button></div>
     <div class="projects" id="projects"></div>
     <div class="foot">
@@ -133,7 +134,7 @@
 <div class="modal-bg" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
   <div class="modal">
     <h2 id="settings-title" style="margin-top:0">Model &amp; API key</h2>
-    <p class="hint">Bring your own key. Paste a key from OpenRouter, OpenAI or Anthropic, or point at a local/hosted OpenAI-compatible server (vLLM). Keys are stored only in <code>~/.config/openchip/keys.env</code>.</p>
+    <p class="hint" id="key-storage-note">Bring your own key. Paste a key from OpenRouter, OpenAI or Anthropic, or point at a local/hosted OpenAI-compatible server (vLLM). Keys are stored only in <code>~/.config/openchip/keys.env</code>.</p>
     <label for="provider">Provider</label>
     <select id="provider" onchange="providerChanged()">
       <option value="openrouter">OpenRouter (any model, one key)</option>
@@ -211,9 +212,13 @@ function md(src) {
 async function refreshStatus() {
   status = await api('/api/status');
   const s = status.settings;
-  $('modelline').innerHTML = `<b>${esc(s.provider)}</b> · ${esc(s.model || 'no model')}<br><span class="${s.key_present||s.provider==='openai-compatible'?'':'chip warn'}">${s.key_present ? 'key ' + esc(s.key_hint) : (s.provider==='openai-compatible' ? 'no key needed' : 'no API key')}</span>`;
+  if (status.hosted) {
+    $("key-storage-note").textContent = "Use your own provider key. It stays in server memory for this browser session and is forgotten after inactivity or a service restart. Projects are private to this browser. OpenChip retains your prompts, generated designs, tool results and activity to operate and improve the product. Do not submit confidential designs. Clearing cookies removes your access to saved projects; it does not delete retained data.";
+    $("hosted-notice").hidden = false;
+  }
+  $('modelline').innerHTML = `<b>${esc(s.provider)}</b> · ${esc(s.model || 'no model')}<br><span class="${s.key_present||(!status.hosted && s.provider==='openai-compatible')?'':'chip warn'}">${s.key_present ? 'key ' + esc(s.key_hint) : ((!status.hosted && s.provider==='openai-compatible') ? 'no key needed' : 'no API key')}</span>`;
   const d = status.doctor; const missing = Object.entries(d.tools).filter(([k,v]) => !v.ok && k !== 'sby').map(([k])=>k);
-  $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || s.provider==='openai-compatible' ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
+  $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || (!status.hosted && s.provider==='openai-compatible') ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
   renderProjects(status.runs);
 }
 function stateChip(run) {
@@ -387,7 +392,7 @@ function providerChanged() {
     $('model').value = settings.model || '';
     $('baseurl').value = settings.base_url === base_url ? '' : (settings.base_url || '');
   }
-  $('keyhint').textContent = provider === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${key_env} also works)`;
+  $('keyhint').textContent = status.hosted ? '(private to this browser session)' : provider === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${key_env} also works)`;
 }
 async function openSettings() {
   if (!status) {
