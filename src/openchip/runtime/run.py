@@ -691,33 +691,28 @@ class Runner:
         self.log("[consensus] RTL disagrees with the reference; deriving a second independent reference to arbitrate")
         ref2, err = self._generate_reference(ck, contract, refdir / "reference.alt1.py", seed_offset=17, attempts=2)
         if ref2 is None:
-            ck["consensus"]["outcome"] = "alt1_failed: " + err[:200]
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="alt1_failed: " + err[:200], confidence="low")
             return ck, ref, False
         cmp12 = compare_references(contract, ref, ref2, cwork / "r1_vs_r2", vcfg.seeds, vcfg.sim_cycles)
         ck["consensus"]["references"].append({"path": str(ref2), "role": "alt1", "vs_initial": {k: v for k, v in cmp12.items() if k != "first"}})
         self.store.event(self.run_id, "consensus", {"stage": "r1_vs_r2", **{k: v for k, v in cmp12.items() if k != "first"}})
         if cmp12.get("error"):
-            ck["consensus"]["outcome"] = "compare_error"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="compare_error", confidence="low")
             return ck, ref, False
         if cmp12["mismatches"] == 0:
-            ck["consensus"]["outcome"] = "reference_corroborated"
-            ck["consensus"]["confidence"] = "high"
+            ck["consensus"].update(outcome="reference_corroborated", confidence="high")
             self.log(f"[consensus] second reference agrees with the first on {cmp12['cycles']} cycles; the RTL is the likely culprit")
             return ck, ref, False
         self.log(f"[consensus] the two references disagree on {cmp12['mismatches']}/{cmp12['cycles']} cycles; checking RTL against the second")
         res2 = verify(contract, rp, ref2, cwork / "rtl_vs_r2", self._reference_comparison_config(), run_synth=False)
         if res2.accepted:
-            ck["consensus"]["outcome"] = "rtl_corroborated_by_alt1"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="rtl_corroborated_by_alt1", confidence="low")
             self._adopt_reference(ck, ref, ref2)
             self.log("[consensus] RTL matches the second reference; adopting it and marking the first as disputed")
             return ck, Path(ck["reference_path"]), True
         ref3, err = self._generate_reference(ck, contract, refdir / "reference.alt2.py", seed_offset=41, attempts=2)
         if ref3 is None:
-            ck["consensus"]["outcome"] = "alt2_failed"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="alt2_failed", confidence="low")
             return ck, ref, False
         cmp13 = compare_references(contract, ref, ref3, cwork / "r1_vs_r3", vcfg.seeds, vcfg.sim_cycles)
         cmp23 = compare_references(contract, ref2, ref3, cwork / "r2_vs_r3", vcfg.seeds, vcfg.sim_cycles)
@@ -726,18 +721,15 @@ class Runner:
         m13 = cmp13.get("mismatches", 10**9)
         m23 = cmp23.get("mismatches", 10**9)
         if m23 == 0 and m13 > 0:
-            ck["consensus"]["outcome"] = "majority_alt1"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="majority_alt1", confidence="low")
             self._adopt_reference(ck, ref, ref2)
             self.log("[consensus] references 2 and 3 agree; adopting reference 2 (majority) and re-verifying")
             return ck, Path(ck["reference_path"]), False
         if m13 == 0 and m23 > 0:
-            ck["consensus"]["outcome"] = "majority_initial"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="majority_initial", confidence="low")
             self.log("[consensus] references 1 and 3 agree; keeping the initial reference")
             return ck, ref, False
-        ck["consensus"]["outcome"] = "no_majority"
-        ck["consensus"]["confidence"] = "low"
+        ck["consensus"].update(outcome="no_majority", confidence="low")
         self.log("[consensus] no two references agree; keeping the initial reference and flagging the contract as ambiguous")
         return ck, ref, False
 
@@ -758,30 +750,26 @@ class Runner:
         ck["consensus"] = {"references": [{"path": str(ref), "role": "initial"}], "outcome": "", "mode": "corroboration"}
         ref2, err = self._generate_reference(ck, contract, refdir / "reference.alt1.py", seed_offset=17, attempts=2)
         if ref2 is None:
-            ck["consensus"]["outcome"] = "alt1_failed"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="alt1_failed", confidence="low")
             self.log("[corroborate] could not derive a second reference; single-reference evidence is low confidence and sign-off will be withheld")
             return ck, ref, True
         ck["consensus"]["references"].append({"path": str(ref2), "role": "alt1"})
         res2 = verify(contract, rp, ref2, cwork / "rtl_vs_alt1", self._reference_comparison_config(), run_synth=False)
         self.store.event(self.run_id, "consensus", {"stage": "rtl_vs_alt1", "accepted": res2.accepted, "summary": res2.summary})
         if res2.accepted:
-            ck["consensus"]["outcome"] = "rtl_corroborated_by_two_references"
-            ck["consensus"]["confidence"] = "high"
+            ck["consensus"].update(outcome="rtl_corroborated_by_two_references", confidence="high")
             self.log("[corroborate] RTL also matches a second independently derived reference")
             return ck, ref, True
         self.log("[corroborate] second reference disagrees with the RTL; deriving a third to break the tie")
         ref3, err = self._generate_reference(ck, contract, refdir / "reference.alt2.py", seed_offset=41, attempts=2)
         if ref3 is None:
-            ck["consensus"]["outcome"] = "split_1_1_alt2_failed"
-            ck["consensus"]["confidence"] = "low"
+            ck["consensus"].update(outcome="split_1_1_alt2_failed", confidence="low")
             return ck, ref, True
         ck["consensus"]["references"].append({"path": str(ref3), "role": "alt2"})
         res3 = verify(contract, rp, ref3, cwork / "rtl_vs_alt2", self._reference_comparison_config(), run_synth=False)
         self.store.event(self.run_id, "consensus", {"stage": "rtl_vs_alt2", "accepted": res3.accepted, "summary": res3.summary})
         if res3.accepted:
-            ck["consensus"]["outcome"] = "rtl_corroborated_2_of_3"
-            ck["consensus"]["confidence"] = "medium"
+            ck["consensus"].update(outcome="rtl_corroborated_2_of_3", confidence="medium")
             self.log("[corroborate] RTL matches references 1 and 3 (2 of 3); disagreement remains and sign-off will be withheld")
             return ck, ref, True
         cmp23 = compare_references(contract, ref2, ref3, cwork / "r2_vs_r3", self.cfg.verification.seeds, self.cfg.verification.sim_cycles)
@@ -790,8 +778,7 @@ class Runner:
             self._adopt_reference(ck, ref, ref2)
             self.log("[corroborate] references 2 and 3 agree with each other and disagree with the RTL; adopting reference 2 and repairing the RTL")
             return ck, Path(ck["reference_path"]), False
-        ck["consensus"]["outcome"] = "no_majority"
-        ck["consensus"]["confidence"] = "low"
+        ck["consensus"].update(outcome="no_majority", confidence="low")
         self.log("[corroborate] three references disagree; first-reference evidence is low confidence and sign-off will be withheld — contract likely ambiguous")
         return ck, ref, True
 
