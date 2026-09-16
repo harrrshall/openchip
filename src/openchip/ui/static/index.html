@@ -171,7 +171,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0, feedText = '';
+let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0;
 const $ = id => document.getElementById(id);
 const api = async (path, body) => { const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 3200); };
@@ -226,7 +226,7 @@ function showHome() { current = null; if (poll) clearInterval(poll); $('run').st
 
 // -- run view --------------------------------------------------------------------------------------------
 async function openRun(name) {
-  current = name; logSeen = 0; feedText = ''; $('feed').textContent = '';
+  current = name; logSeen = 0; $('feed').textContent = '';
   $('home').style.display='none'; $('run').style.display='block'; $('runtitle').textContent = name;
   if (poll) clearInterval(poll);
   await tick(); poll = setInterval(tick, 2500);
@@ -284,7 +284,7 @@ async function resumeRun() {
   finally { $('resume-run').disabled = false; }
 }
 function openRevise() { if (!current) return; $('revise').classList.add('open'); }
-async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${encodeURIComponent(current)}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
+async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${encodeURIComponent(current)}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
 
 const artifactURL = p => `/api/runs/${encodeURIComponent(current)}/artifact?path=${encodeURIComponent(p)}`;
 let questionKey = '';
