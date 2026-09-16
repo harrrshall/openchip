@@ -35,8 +35,8 @@ def write_sby(work: Path, sources: list[str], top: str, depth: int, solver: str 
     return p
 
 
-def run_bmc(sby_file: Path, cwd: str | Path, exe: str = "sby", timeout_s: float = 600.0) -> ToolResult:
-    r = run_tool("sby", [exe, "-f", sby_file.name], cwd, timeout_s, version=tool_version(exe))
+def run_bmc(sby_file: Path, cwd: str | Path, exe: str = "sby", timeout_s: float = 600.0, inputs: list[str] | None = None) -> ToolResult:
+    r = run_tool("sby", [exe, "-f", sby_file.name], cwd, timeout_s, version=tool_version(exe), inputs=inputs)
     text = r.stdout + r.stderr
     if r.timed_out:
         status = "timeout"

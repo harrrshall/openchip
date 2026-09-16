@@ -39,8 +39,13 @@ and permission to create namespaces. `openchip doctor` and the UI check this
 prerequisite; execution stops if isolation is unavailable. References receive
 only their inputs and a result file, with no host network or credential
 environment. Restricted GPU containers may need a VM-based deployment.
-Public multi-user hosting remains unsupported: EDA tool execution still needs
-isolation against host-file access from generated RTL.
+EDA tools also run in isolated namespaces with a clean environment, explicit
+read-only source inputs, and a private work-directory copy. Only regular output
+files are collected; symlinks and special files are rejected. Install the trusted
+toolchain in a traversable dedicated prefix such as `/opt/openchip-cad` and put
+its `bin` directory on PATH. Namespace setup must work for the service account;
+there is no unisolated fallback. Public multi-user hosting remains unsupported;
+per-tenant authorization and aggregate resource quotas are not implemented.
 
 ## Command line
 ```bash

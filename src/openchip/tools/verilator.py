@@ -13,7 +13,7 @@ def lint(sources: list[str], top: str, cwd: str | Path, exe: str = "verilator", 
          extra_args: list[str] | None = None) -> ToolResult:
     argv = [exe, "--lint-only", "-Wall", "-Wno-fatal", "-Wno-DECLFILENAME", "-Wno-UNUSEDPARAM", "-Wno-UNUSEDSIGNAL",
             "--top-module", top, *(extra_args or []), *sources]
-    r = run_tool("verilator", argv, cwd, timeout_s, version=tool_version(exe))
+    r = run_tool("verilator", argv, cwd, timeout_s, version=tool_version(exe), inputs=sources)
     r.extra["diagnostics"] = parse_diagnostics(r.stderr + "\n" + r.stdout)
     return r
 

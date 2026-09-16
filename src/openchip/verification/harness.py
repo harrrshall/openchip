@@ -196,12 +196,8 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
     res.stage = "lint"
     lint = verilator.lint([rtl_path.name], contract.module_name, rtl_path.parent, tcfg.verilator, tcfg.timeout_s)
     res.lint = _tr(lint)
-    # Only errors block; warnings are recorded.
-    lint_errors = [d for d in lint.extra.get("diagnostics", []) if d["kind"] == "error"]
-    if lint.error:  # tool missing
-        res.lint["ok"] = False
-    elif not lint.ok and not lint_errors:
-        res.lint["ok"] = True  # warnings-only exit status
+    # -Wno-fatal keeps warnings nonfatal. Every nonzero exit is a failure,
+    # including namespace startup, crashes, and diagnostics we cannot parse.
     if cfg.verification.require_lint and not res.lint["ok"]:
         res.summary = "verilator lint failed"
         return res

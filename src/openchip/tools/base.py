@@ -6,17 +6,12 @@ Processes run in their own process group and the whole tree is killed on timeout
 """
 from __future__ import annotations
 
-import os
 import shutil
-import signal
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
-
-MAX_CAPTURE = 200_000  # characters kept per stream
-
 
 @dataclass
 class ToolResult:
@@ -53,7 +48,7 @@ def tool_version(exe: str, args: tuple[str, ...] = ("--version",)) -> str:
     if not path:
         return ""
     try:
-        r = subprocess.run([path, *args], capture_output=True, text=True, timeout=20)
+        r = subprocess.run([path, *args], env={"PATH": str(Path(path).parent) + ":/usr/bin:/bin", "LANG": "C.UTF-8"}, capture_output=True, text=True, timeout=20)
         out = (r.stdout or r.stderr).strip().splitlines()
         return out[0][:120] if out else ""
     except Exception as e:  # noqa: BLE001
@@ -68,55 +63,19 @@ def run_tool(
     env: Optional[dict[str, str]] = None,
     version: str = "",
     stdin: Optional[str] = None,
+    inputs: list[str | Path] | None = None,
 ) -> ToolResult:
     cwd = str(cwd)
     exe = which(argv[0])
     if exe is None:
         return ToolResult(tool, argv, cwd, None, 0.0, "", "", error=f"{argv[0]} not found on PATH", version=version)
-    full_env = {**os.environ, **(env or {})}
+    from .isolation import execute
     t0 = time.monotonic()
-    timed_out = False
     try:
-        proc = subprocess.Popen(
-            [exe, *argv[1:]],
-            cwd=cwd,
-            env=full_env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-            text=True,
-            start_new_session=True,
-        )
-    except OSError as e:
-        return ToolResult(tool, argv, cwd, None, 0.0, "", "", error=str(e), version=version)
-    try:
-        out, err = proc.communicate(input=stdin, timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _kill_tree(proc)
-        out, err = proc.communicate()
-    dur = time.monotonic() - t0
-    return ToolResult(
-        tool=tool,
-        argv=argv,
-        cwd=cwd,
-        exit_code=proc.returncode,
-        duration_s=round(dur, 3),
-        stdout=(out or "")[-MAX_CAPTURE:],
-        stderr=(err or "")[-MAX_CAPTURE:],
-        timed_out=timed_out,
-        version=version,
-    )
-
-
-def _kill_tree(proc: subprocess.Popen) -> None:
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-        try:
-            proc.wait(timeout=5)
-            return
-        except subprocess.TimeoutExpired:
-            pass
-        os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+        code, out, err, timed_out = execute(exe, argv[1:], Path(cwd), inputs or [], timeout_s, stdin, env)
+        return ToolResult(tool, argv, cwd, code, round(time.monotonic() - t0, 3),
+                          out, err, timed_out=timed_out, version=version,
+                          extra={"isolation": "bubblewrap"})
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        return ToolResult(tool, argv, cwd, None, round(time.monotonic() - t0, 3), "", "",
+                          error=f"EDA isolation failed: {e}", version=version)

@@ -97,7 +97,7 @@ def run_formal(contract: Contract, rtl_path: Path, props_path: Path, work: Path,
     top.write_text(generate_formal_top(contract))
     sources = [str(rtl_path.resolve()), str(props_path.resolve()), str(top.resolve())]
     sby_file = sbytool.write_sby(work, sources, "formal_top", depth)
-    r = sbytool.run_bmc(sby_file, work, sby, timeout_s)
+    r = sbytool.run_bmc(sby_file, work, sby, timeout_s, inputs=sources)
     r.extra["depth"] = depth
     m = re.search(r"Assert failed in (\S+): ([^\s]+)", r.stdout + r.stderr)
     if m:

@@ -17,14 +17,14 @@ def compile_verilog(
     for k, v in (defines or {}).items():
         argv.append(f"-D{k}={v}")
     argv += sources
-    r = run_tool("iverilog", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)))
+    r = run_tool("iverilog", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=sources)
     r.extra["diagnostics"] = parse_diagnostics(r.stderr + "\n" + r.stdout)
     return r
 
 
 def simulate(vvp_file: str, cwd: str | Path, exe: str = "vvp", timeout_s: float = 300.0, plusargs: list[str] | None = None) -> ToolResult:
     argv = [exe, "-n", vvp_file, *(plusargs or [])]
-    return run_tool("vvp", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)))
+    return run_tool("vvp", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=[vvp_file])
 
 
 def parse_diagnostics(text: str) -> list[dict]:

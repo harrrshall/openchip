@@ -17,7 +17,7 @@ def synth_generic(sources: list[str], top: str, cwd: str | Path, exe: str = "yos
     reads = " ".join(f"read_verilog -sv {s}" for s in sources)
     script = f"{reads}; hierarchy -check -top {top}; proc; flatten; opt; memory; opt; techmap; opt; tee -q -o {json_out} stat -json; check -assert"
     argv = [exe, "-q", "-p", script]
-    r = run_tool("yosys", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)))
+    r = run_tool("yosys", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=sources)
     stat_path = Path(cwd) / json_out
     if stat_path.is_file():
         try:
