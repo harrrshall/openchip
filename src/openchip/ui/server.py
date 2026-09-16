@@ -156,21 +156,60 @@ class UIState:
         if change is None:
             run_id = runner.start(request, budget_s=budget_s)
         else:
-            run_id = None
+            run_id = runner.revise(change, budget_s=budget_s)
 
         def work() -> None:
             try:
-                if change is not None:
-                    runner.revise(change, budget_s=budget_s)
                 runner.execute()
             except Exception as e:  # noqa: BLE001
                 log(f"[error] {type(e).__name__}: {e}")
                 log(traceback.format_exc()[-800:])
+                if runner.run_id:
+                    runner.store.set_state(runner.run_id, "failed", reason=str(e))
+            finally:
+                runner.store.close()
 
         t = threading.Thread(target=work, name=f"run-{safe}", daemon=True)
         self.threads[safe] = t
         t.start()
         return {"workspace": safe, "run_id": run_id}
+
+    def _recovery_state(self, name: str, run: dict, store: RunStore) -> dict:
+        alive = bool(self.threads.get(name) and self.threads[name].is_alive()) or store.lock_is_live(run["run_id"])
+        interrupted = not alive and run.get("state") in {"created", "planned", "running", "paused"}
+        can_resume = interrupted and bool(run.get("checkpoint", {}).get("request")) and run.get("step") in {
+            "intake", "review", "revise", "reference", "properties", "rtl", "verify", "report"}
+        return {"alive": alive, "can_resume": can_resume,
+                "state": "paused" if interrupted else run.get("state")}
+
+    def resume_run(self, name: str) -> dict:
+        with self.lock:
+            ws = Workspace(self.workspace_path(name))
+            if not ws.db_path.is_file():
+                raise FileNotFoundError(name)
+            store = RunStore(ws.db_path)
+            try:
+                run_id = store.latest_run_id()
+                run = store.get_run(run_id) if run_id else None
+                if not run or not self._recovery_state(name, run, store)["can_resume"]:
+                    raise ValueError("This run has no interrupted checkpoint to resume.")
+                cfg = Config.model_validate(run["config"])
+            finally:
+                store.close()
+            logs = self.logs.setdefault(name, [])
+            runner = Runner(ws, cfg, log=lambda msg: logs.append({"t": time.time(), "msg": msg}))
+            runner.resume(run_id)
+            def work():
+                try:
+                    runner.execute()
+                except Exception as e:
+                    logs.append({"t": time.time(), "msg": f"[error] {type(e).__name__}: {e}"})
+                finally:
+                    runner.store.close()
+            thread = threading.Thread(target=work, name=f"resume-{name}", daemon=True)
+            self.threads[name] = thread
+            thread.start()
+            return {"workspace": name, "run_id": run_id}
 
     def list_runs(self) -> list[dict]:
         out = []
@@ -188,6 +227,8 @@ class UIState:
                     entry.update({"state": runs[0]["state"], "step": runs[0]["step"], "run_id": runs[0]["run_id"], "updated": runs[0]["updated"]})
                     full = store.get_run(runs[0]["run_id"])
                     entry["accepted"] = (full or {}).get("outcome", {}).get("accepted")
+                    if full:
+                        entry.update(self._recovery_state(d.name, full, store))
                 store.close()
             out.append(entry)
         return out
@@ -205,6 +246,7 @@ class UIState:
                 run = store.get_run(runs[0]["run_id"]) or {}
                 detail.update({"run_id": runs[0]["run_id"], "state": run.get("state"), "step": run.get("step"), "outcome": run.get("outcome") or {},
                                "events": [{k: v for k, v in e.items() if k != "error" or v} for e in store.events(runs[0]["run_id"])][-60:]})
+                detail.update(self._recovery_state(name, run, store))
                 detail["stages"] = stage_durations(store.events(runs[0]["run_id"]), time.time() if detail["alive"] else run["updated"])
             store.close()
         spec = sorted(ws.dir("spec").glob("contract.v*.md"), key=lambda p: int(p.stem.split(".v")[1]))
@@ -356,6 +398,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(req) < 20:
                     return self._send(400, {"error": "Describe the module in at least a sentence."})
                 return self._send(200, self.state.start_run(body.get("name") or "", req, float(body.get("budget_s", 1200))))
+            if u.path.startswith("/api/runs/") and u.path.endswith("/resume"):
+                name = unquote(u.path.split("/")[3])
+                return self._send(200, self.state.resume_run(name))
             if u.path.startswith("/api/runs/") and u.path.endswith("/revise"):
                 name = u.path.split("/")[3]
                 change = (body.get("change") or "").strip()

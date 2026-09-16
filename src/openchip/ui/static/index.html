@@ -115,7 +115,7 @@
     <section id="run" style="display:none">
       <div class="row" style="align-items:flex-start">
         <div><h1 id="runtitle">design</h1><div class="status-line" id="runstatus"></div></div>
-        <div class="fix row" style="gap:8px"><button class="btn" onclick="openRevise()">Request a change</button><button class="btn" onclick="showHome()">Back</button></div>
+        <div class="fix row" style="gap:8px"><button class="btn primary" id="resume-run" hidden onclick="resumeRun()">Resume build</button><button class="btn" onclick="openRevise()">Request a change</button><button class="btn" onclick="showHome()">Back</button></div>
       </div>
       <div class="card" style="margin-top:14px">
         <div class="row" style="justify-content:space-between"><div id="chips" class="row" style="gap:8px"></div><div class="hint" id="elapsed"></div></div>
@@ -238,7 +238,8 @@ async function tick() {
   renderFeed(d);
   logSeen = d.log_total || logSeen;
   const o = d.outcome || {};
-  $('runstatus').textContent = d.result?.sentence || 'Starting…';
+  $('runstatus').textContent = d.can_resume ? 'Build interrupted. Resume from the last saved checkpoint.' : d.result?.sentence || 'Starting…';
+  $('resume-run').hidden = !d.can_resume;
   $('technical-status').textContent = o.status_line || '';
   renderQuestions(d);
   $('copy-rtl').disabled = !Object.keys(d.rtl || {}).length;
@@ -266,6 +267,17 @@ function renderPane() {
   if (activeTab === 'diff') $('pane').innerHTML = `<pre>${esc(d.contract_diff || '')}</pre>`;
   if (activeTab === 'evidence') $('pane').innerHTML = (d.files || []).map(p => `<p><a href="${artifactURL(p)}" target="_blank" rel="noopener">${esc(p)}</a></p>`).join('') || 'No evidence yet.';
   if (activeTab === 'request') $('pane').innerHTML = `<pre>${esc(d.request||'')}</pre>`;
+}
+async function resumeRun() {
+  $('resume-run').disabled = true;
+  try {
+    await api(`/api/runs/${encodeURIComponent(current)}/resume`, {});
+    toast('Build resumed');
+    await tick();
+    if (poll) clearInterval(poll);
+    poll = setInterval(tick, 2500);
+  } catch (e) { toast(e.message); }
+  finally { $('resume-run').disabled = false; }
 }
 function openRevise() { if (!current) return; $('revise').classList.add('open'); }
 async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }

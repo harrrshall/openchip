@@ -90,6 +90,7 @@ class Runner:
         self.run_id: str = ""
         self.budget: Optional[Budget] = None
         self.tool_time_s = 0.0
+        self._resumed_elapsed_s = 0.0
         self._no_think_roles = _PROCESS_NO_THINK_ROLES
 
     # ---------------------------------------------------------------------------------------
@@ -118,9 +119,16 @@ class Runner:
         if budget_s:
             cfg_dump["budget"]["wall_time_s"] = budget_s
         self.run_id = self.store.create_run(str(self.ws.root), request, cfg_dump)
-        b = cfg_dump["budget"]
-        self.budget = Budget(b["wall_time_s"], b["max_model_calls"], b["max_total_tokens"], b["max_repair_iterations"])
         (self.ws.root / "request" / f"change.v{base.version + 1}.md").write_text(change.strip() + "\n")
+        self.store.checkpoint(self.run_id, "revise", {
+            "request": request, "change": change.strip(), "base_contract_path": str(contracts[-1])})
+        self.store.set_state(self.run_id, "planned")
+        return self.run_id
+
+    def _step_revise(self, ck: dict) -> dict:
+        spec = self.ws.dir("spec")
+        base = Contract.model_validate_json(Path(ck["base_contract_path"]).read_text())
+        request, change = ck["request"], ck["change"]
         schema = contract_json_schema()
         errors: list[str] = []
         for attempt in range(3):
@@ -153,8 +161,7 @@ class Runner:
             self.log(f"[revise] contract v{contract.version} (parent v{base.version}); changed/new requirements: {changed or 'none'}; previous evidence invalidated")
             ck = {"request": request + "\n\nChange request (v" + str(contract.version) + "): " + change.strip(), "contract_path": str(cj), "contract_version": contract.version}
             self.store.checkpoint(self.run_id, "reference", ck)
-            self.store.set_state(self.run_id, "planned")
-            return self.run_id
+            return ck
         raise RuntimeError("revision failed: " + (errors[-1] if errors else "no valid contract"))
 
     def resume(self, run_id: str) -> None:
@@ -162,12 +169,38 @@ class Runner:
         if not run:
             raise KeyError(f"unknown run {run_id}")
         self.run_id = run_id
+        events = self.store.events(run_id)
+        # Rehydrate recorded usage; a restart must not reset the model-call cap.
+        adapters = [a for a in (self.adapter, self.alt_adapter, self.review_adapter) if a]
+        for adapter in adapters:
+            calls = [e for e in events if e["kind"] == "model_call" and
+                     e.get("model", self.adapter.cfg.model) == adapter.cfg.model]
+            adapter.usage.calls = len(calls)
+            adapter.usage.prompt_tokens = sum(e.get("prompt_tokens", 0) for e in calls)
+            adapter.usage.completion_tokens = sum(e.get("completion_tokens", 0) for e in calls)
+            adapter.usage.latency_s = sum(e.get("latency_s", 0) for e in calls)
+        # Count recorded active intervals, excluding time offline between resumes.
+        start = None
+        last = run["created"]
+        for event in events:
+            if event["kind"] == "state" and event.get("state") == "running":
+                if start is not None:
+                    self._resumed_elapsed_s += max(0, last - start)
+                start = event["ts"]
+            elif event["kind"] == "state" and event.get("state") in {"paused", "failed", "stalled", "budget_exhausted", "completed"}:
+                if start is not None:
+                    self._resumed_elapsed_s += max(0, event["ts"] - start)
+                    start = None
+            last = event["ts"]
+        if start is not None:
+            self._resumed_elapsed_s += max(0, last - start)
 
     def execute(self) -> dict:
         run = self.store.get_run(self.run_id)
         assert run
         b = run["config"]["budget"]
         self.budget = Budget(b["wall_time_s"], b["max_model_calls"], b["max_total_tokens"], b["max_repair_iterations"])
+        self.budget.started -= self._resumed_elapsed_s
         owner = lock_owner_id()
         if not self.store.acquire_lock(self.run_id, owner):
             raise RuntimeError("run is locked by another live process")
@@ -176,6 +209,9 @@ class Runner:
         step = run["step"]
         outcome: dict = {}
         try:
+            if step == "revise":
+                ck = self._step_revise(ck)
+                step = "reference"
             if step == "intake":
                 ck = self._step_intake(ck)
                 step = "review"

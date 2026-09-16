@@ -116,6 +116,10 @@ class RunStore:
         self.db.execute("UPDATE runs SET lock_owner=?, lock_ts=? WHERE run_id=?", (owner, time.time(), run_id))
         return True
 
+    def lock_is_live(self, run_id: str) -> bool:
+        row = self.db.execute("SELECT lock_owner FROM runs WHERE run_id=?", (run_id,)).fetchone()
+        return bool(row and row[0] and _owner_alive(row[0]))
+
     def touch_lock(self, run_id: str) -> None:
         self.db.execute("UPDATE runs SET lock_ts=? WHERE run_id=?", (time.time(), run_id))
 
