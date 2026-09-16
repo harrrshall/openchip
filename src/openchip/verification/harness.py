@@ -37,6 +37,7 @@ class SimSeedResult:
     mismatches: int = 0
     first_mismatches: list[dict] = field(default_factory=list)
     detail: str = ""
+    sampling: str = ""
 
 
 @dataclass
@@ -70,6 +71,12 @@ class VerificationResult:
         for s in self.sims:
             if s["status"] == "fail":
                 lines = [f"SIMULATION seed={s['seed']}: {s['mismatches']} mismatching cycles out of {s['cycles']}. First mismatches (cycle numbers count from the first cycle after reset release; expected = reference model; got=x/X/z means the RTL output is undefined — an uninitialized register, missing reset assignment, or unassigned wire):"]
+                if s.get("sampling"):
+                    lines.append(s["sampling"])
+                first = next(iter(s["first_mismatches"]), {})
+                if first.get("preceding"):
+                    lines.append("Preceding stimulus before the first mismatch (decimal values; expected outputs are reference predictions, not observed DUT outputs):")
+                    lines += [f"  cycle {v['cycle']}: inputs={v['inputs']} expected={v['expected']}" for v in first["preceding"]]
                 lines += [f"  cycle {m['cycle']}: {m['port']} expected=0x{m['expected']} got=0x{m['got']}" + (f"  inputs: {m['inputs']}" if m.get("inputs") else "") for m in s["first_mismatches"][:12]]
                 parts.append("\n".join(lines))
             elif s["status"] not in ("pass",):
@@ -234,6 +241,11 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         sim = iverilog.simulate("sim.vvp", work, tcfg.vvp, tcfg.timeout_s,
                                 plusargs=[f"+vin=vectors_in_{seed}.hex", f"+vexp=vectors_exp_{seed}.hex"])
         sr = parse_sim(sim, seed, cycles, vectors[seed])
+        sr.sampling = ("Sampling: combinational outputs are compared after current inputs settle."
+                       if contract.combinational else
+                       "Sampling: outputs are compared BEFORE the active clock edge, after current inputs settle. "
+                       "State reflects preceding cycles' inputs; current inputs affect the upcoming edge. "
+                       "Combinational outputs may respond immediately to current inputs.")
         res.sims.append(asdict(sr))
         (work / f"sim_{seed}.log").write_text(sim.stdout + sim.stderr)
         if sr.status != "pass":
@@ -283,7 +295,9 @@ def parse_sim(sim: ToolResult, seed: int, cycles: int, vec: dict) -> SimSeedResu
     for m in MISMATCH_RE.finditer(text):
         cyc = int(m.group(1))
         mm.append({"cycle": cyc, "port": m.group(2), "expected": m.group(3), "got": m.group(4),
-                   "inputs": vec["inputs"][cyc] if cyc < len(vec["inputs"]) else {}})
+                   "inputs": vec["inputs"][cyc] if cyc < len(vec["inputs"]) else {},
+                   "preceding": [{"cycle": i, "inputs": vec["inputs"][i], "expected": vec["outputs"][i]}
+                                 for i in range(max(0, cyc - 4), min(cyc, len(vec["inputs"]), len(vec.get("outputs", []))))]})
     m = re.search(r"RESULT FAIL mismatches=(\d+)", text)
     if m:
         return SimSeedResult(seed, cycles, "fail", int(m.group(1)), mm)
