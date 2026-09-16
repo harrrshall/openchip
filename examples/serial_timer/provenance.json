@@ -1,0 +1,34 @@
+{
+  "source_commit": "41187894d",
+  "model": "glm-5.3-flash",
+  "revision": "unknown",
+  "requested_reasoning_effort": "low",
+  "run_id": "20260916-141628-60af4a",
+  "accepted": true,
+  "provisional": false,
+  "journey": "Original attempt stalled after provider HTTP 500; explicit CLI resume completed within the original accumulated budget. Original fresh gate remains failed.",
+  "pipeline_simulation": {
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "cycles_per_seed": 20000
+  },
+  "independent": {
+    "samples": 136193,
+    "mismatches": 0,
+    "payload_values": 16
+  },
+  "formal": {
+    "status": "bounded_pass",
+    "depth": 20,
+    "wrong_payload_control": "counterexample"
+  },
+  "archive_sha256": "1c00b693b915e115a084b69b06bd5ee0de6d47d6504f7272b3acf4b2f42f74b7",
+  "files": {
+    "TopModule.v": "8a7c8adba2f1b1605a672c08d505b6d40849398f948058143f1d07897f718cc9",
+    "tb.v": "da1090bcd0797c207c1e3eee45fbabacf858f4cf8e77cc749e96de4313148ce3",
+    "request.md": "af37348496f1dd3fce803bdf00f761de7e6beed692bbd0f2e80cf755381eae38"
+  }
+}

@@ -131,6 +131,18 @@ openchip compose --project ws/registered-sum --request examples/registered_sum_r
 ```
 Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openai-responses`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
 
+A measured serially programmed timer, with a full-transaction bench and recovery
+provenance, is available in [`examples/serial_timer`](examples/serial_timer/).
+
+Simulation defaults to 400 cycles per seed. Choose a longer horizon for timers,
+long packets or multi-step transactions: set `sim_cycles = 20000` under
+`[verification]` in your build configuration, or run
+`openchip verify --project ws/timer --cycles 20000` on an existing design.
+This command preserves the original report and writes separate verification
+evidence. Check that the stimulus actually reaches completion, acknowledgment
+and restart; more cycles alone do not establish those behaviors. Bounded formal
+depth is also a limit, not a claim that a long transaction was completed.
+
 `assemble` is an initial multi-module capability: supply a top contract, two to
 four named instances with pinned leaf contracts and parameter bindings, and explicit
 connections. It rejects floating inputs, conflicting drivers, incompatible widths
