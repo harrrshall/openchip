@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
+import shutil
 from pathlib import Path
 
 from .base import ToolResult, run_tool, tool_version
@@ -14,10 +16,33 @@ from .base import ToolResult, run_tool, tool_version
 
 def synth_generic(sources: list[str], top: str, cwd: str | Path, exe: str = "yosys", timeout_s: float = 300.0,
                   json_out: str = "synth_stat.json") -> ToolResult:
-    reads = " ".join(f"read_verilog -sv {s}" for s in sources)
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", top):
+        raise ValueError("synthesis top must be an ordinary Verilog identifier")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", json_out):
+        raise ValueError("synthesis statistics output must be a simple file name")
+    # Yosys command text is not a shell argv. Keep arbitrary workspace paths out
+    # of that language entirely, while retaining the source-to-staged mapping.
+    staged = []
+    source_files = []
+    for index, source in enumerate(sources):
+        original = Path(source)
+        if not original.is_absolute():
+            original = Path(cwd) / original
+        if original.is_symlink() or not original.is_file():
+            raise ValueError("synthesis input must be a regular file")
+        destination = Path(cwd) / f"openchip_synth_input_{index}.v"
+        if destination.is_symlink():
+            raise ValueError("synthesis staging destination must not be a symlink")
+        if original.resolve() != destination.resolve():
+            shutil.copyfile(original, destination)
+        staged.append(destination.name)
+        source_files.append({"source": str(original), "staged": destination.name,
+                             "sha256": hashlib.sha256(destination.read_bytes()).hexdigest()})
+    reads = "; ".join(f"read_verilog -sv {name}" for name in staged)
     script = f"{reads}; hierarchy -check -top {top}; proc; flatten; opt; memory; opt; techmap; opt; tee -q -o {json_out} stat -json; check -assert"
     argv = [exe, "-q", "-p", script]
-    r = run_tool("yosys", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=sources)
+    r = run_tool("yosys", argv, cwd, timeout_s, version=tool_version(exe, ("-V",)), inputs=staged)
+    r.extra["source_files"] = source_files
     stat_path = Path(cwd) / json_out
     if stat_path.is_file():
         try:

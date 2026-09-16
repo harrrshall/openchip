@@ -6,6 +6,8 @@ timeout, error/unsupported. A bounded pass is not a proof.
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
+import re
 
 from .base import ToolResult, run_tool, tool_version
 
@@ -30,8 +32,25 @@ prep -top {top}
 def write_sby(work: Path, sources: list[str], top: str, depth: int, solver: str = "yices") -> Path:
     if type(depth) is not int or depth < 3:
         raise ValueError("formal depth must be at least 3: initialization skips steps 0 and 1")
-    names = [Path(s).name for s in sources]
-    cfg = SBY_TEMPLATE.format(depth=depth, solver=solver, files=" ".join(names), top=top, file_list="\n".join(str(Path(s).resolve()) for s in sources))
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", top):
+        raise ValueError("formal top must be an ordinary Verilog identifier")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", solver):
+        raise ValueError("formal solver must be a simple executable name")
+    names = []
+    for index, source in enumerate(sources):
+        original = Path(source)
+        if not original.is_absolute():
+            original = work / original
+        if original.is_symlink() or not original.is_file():
+            raise ValueError("formal input must be a regular file")
+        destination = work / f"openchip_formal_input_{index}.v"
+        if destination.is_symlink():
+            raise ValueError("formal staging destination must not be a symlink")
+        if original.resolve() != destination.resolve():
+            shutil.copyfile(original, destination)
+        names.append(destination.name)
+    cfg = SBY_TEMPLATE.format(depth=depth, solver=solver, files=" ".join(names),
+                              top=top, file_list="\n".join(names))
     p = work / f"{top}.sby"
     p.write_text(cfg)
     return p

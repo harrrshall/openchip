@@ -25,7 +25,8 @@ Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
 [serial programmable timer](examples/serial_timer/README.md),
 [walking/falling/digging controller](examples/directional_controller/README.md),
 [continuous packet framer](examples/ps2_framer/README.md), and
-[counter with nonzero port indices](examples/range_counter/README.md). Each includes actual
+[counter with nonzero port indices](examples/range_counter/README.md), and its
+[browser-revised subtraction variant](examples/range_down_counter/README.md). Each includes actual
 RTL, a separate runnable bench, provenance and the limits of its measurements.
 Complete explicit elementary-cell transition requests are checked against their
 printed rows before generated references enter arbitration; power-up before a

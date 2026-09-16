@@ -177,6 +177,8 @@ const api = async (path, body) => { const r = await fetch(path, body ? {method:'
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 3200); };
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
+const escAttr = s => esc(s).replace(/["']/g, c => c === '"' ? '&quot;' : '&#39;');
+
 // -- minimal markdown (headings, tables, lists, code fences, inline code/bold) ---------------------
 function md(src) {
   const lines = (src || '').split('\n'); let out = [], i = 0, inList = false;
@@ -205,12 +207,12 @@ async function refreshStatus() {
   $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || s.provider==='openai-compatible' ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
   renderProjects(status.runs);
 }
-function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${lbl}</span>`; }
+function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${esc(lbl)}</span>`; }
 const kbdActivate = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"`;
 function renderProjects(runs) {
-  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
+  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" tabindex="0" role="button" ${kbdActivate} data-workspace="${escAttr(r.workspace)}" onclick="openRun(this.dataset.workspace)"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
   $('recentlist').className = runs.length ? '' : 'empty';
-  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
+  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" tabindex="0" role="button" ${kbdActivate} data-workspace="${escAttr(r.workspace)}" onclick="openRun(this.dataset.workspace)"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
 }
 
 // -- new run -------------------------------------------------------------------------------------------
@@ -282,7 +284,7 @@ async function resumeRun() {
   finally { $('resume-run').disabled = false; }
 }
 function openRevise() { if (!current) return; $('revise').classList.add('open'); }
-async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
+async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${encodeURIComponent(current)}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
 
 const artifactURL = p => `/api/runs/${encodeURIComponent(current)}/artifact?path=${encodeURIComponent(p)}`;
 let questionKey = '';

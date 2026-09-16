@@ -158,7 +158,11 @@ class UIState:
 
     def _start_run(self, name: str, request: str, budget_s: float, change: Optional[str] = None) -> dict:
         WORKSPACES.mkdir(parents=True, exist_ok=True)
-        safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name.strip())[:40] or time.strftime("design-%H%M%S")
+        # Existing CLI/imported workspaces may contain spaces, quotes or long names.
+        # start_run validated this exact path; revisions must not redirect elsewhere.
+        safe = name if change is not None else (
+            "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name.strip())[:40]
+            or time.strftime("design-%H%M%S"))
         ws = Workspace(WORKSPACES / safe)
         if change is None:
             base_name = safe
@@ -460,7 +464,7 @@ class Handler(BaseHTTPRequestHandler):
                 name = unquote(u.path.split("/")[3])
                 return self._send(200, self.state.resume_run(name))
             if u.path.startswith("/api/runs/") and u.path.endswith("/revise"):
-                name = u.path.split("/")[3]
+                name = unquote(u.path.split("/")[3])
                 change = (body.get("change") or "").strip()
                 if len(change) < 10:
                     return self._send(400, {"error": "Describe the change."})
