@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -24,7 +25,7 @@ from ..contracts.schema import Contract, contract_json_schema
 from ..models import prompts as P
 from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
-from ..verification.formal import checker_skeleton, parse_check
+from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
@@ -552,7 +553,7 @@ class Runner:
             self.log(f"[consensus] second reference agrees with the first on {cmp12['cycles']} cycles; the RTL is the likely culprit")
             return ck, ref, False
         self.log(f"[consensus] the two references disagree on {cmp12['mismatches']}/{cmp12['cycles']} cycles; checking RTL against the second")
-        res2 = verify(contract, rp, ref2, cwork / "rtl_vs_r2", self.cfg, run_synth=False)
+        res2 = verify(contract, rp, ref2, cwork / "rtl_vs_r2", self._reference_comparison_config(), run_synth=False)
         if res2.accepted:
             ck["consensus"]["outcome"] = "rtl_corroborated_by_alt1"
             ck["consensus"]["confidence"] = "low"
@@ -586,6 +587,14 @@ class Runner:
         self.log("[consensus] no two references agree; keeping the initial reference and flagging the contract as ambiguous")
         return ck, ref, False
 
+    def _reference_comparison_config(self) -> Config:
+        # These calls compare a reference against RTL. Required formal is checked
+        # once by the main verifier with the actual property checker attached.
+        cfg = self.cfg.model_copy(deep=True)
+        cfg.verification.require_formal = False
+        cfg.verification.run_formal = False
+        return cfg
+
     def _corroborate_acceptance(self, ck: dict, contract: Contract, rp: Path, ref: Path) -> tuple[dict, Path, bool]:
         """RTL passed the first reference. Check it against a second independent reference before accepting.
         Returns (ck, reference, accept_now). When the second disagrees, a third breaks the tie."""
@@ -600,7 +609,7 @@ class Runner:
             self.log("[corroborate] could not derive a second reference; accepting on a single reference (low confidence)")
             return ck, ref, True
         ck["consensus"]["references"].append({"path": str(ref2), "role": "alt1"})
-        res2 = verify(contract, rp, ref2, cwork / "rtl_vs_alt1", self.cfg, run_synth=False)
+        res2 = verify(contract, rp, ref2, cwork / "rtl_vs_alt1", self._reference_comparison_config(), run_synth=False)
         self.store.event(self.run_id, "consensus", {"stage": "rtl_vs_alt1", "accepted": res2.accepted, "summary": res2.summary})
         if res2.accepted:
             ck["consensus"]["outcome"] = "rtl_corroborated_by_two_references"
@@ -614,7 +623,7 @@ class Runner:
             ck["consensus"]["confidence"] = "low"
             return ck, ref, True
         ck["consensus"]["references"].append({"path": str(ref3), "role": "alt2"})
-        res3 = verify(contract, rp, ref3, cwork / "rtl_vs_alt2", self.cfg, run_synth=False)
+        res3 = verify(contract, rp, ref3, cwork / "rtl_vs_alt2", self._reference_comparison_config(), run_synth=False)
         self.store.event(self.run_id, "consensus", {"stage": "rtl_vs_alt2", "accepted": res3.accepted, "summary": res3.summary})
         if res3.accepted:
             ck["consensus"]["outcome"] = "rtl_corroborated_2_of_3"
@@ -747,10 +756,21 @@ class Runner:
         while True:
             work = vdir / "attempts" / f"attempt_{attempt}"
             if work.exists():
-                shutil.rmtree(work)
+                archived = work.with_name(work.name + "-previous-" + uuid.uuid4().hex[:10])
+                work.rename(archived)
+                for item in history:
+                    if item.get("evidence") == str(work / "evidence.json"):
+                        item["evidence"] = str(archived / "evidence.json")
+                for key in ("last_evidence", "final_evidence"):
+                    if ck.get(key) == str(work / "evidence.json"):
+                        ck[key] = str(archived / "evidence.json")
+                self.store.event(self.run_id, "verification_archived", {"from": str(work), "to": str(archived)})
             t0 = time.time()
             props = Path(ck["properties_path"]) if ck.get("properties_path") else None
-            res = verify(contract, rp, ref, work, self.cfg, props_path=props)
+            # Optional proof work must not consume the budget needed for the
+            # mandatory independent-reference agreement and request checks.
+            required_props = props if self.cfg.verification.require_formal else None
+            res = verify(contract, rp, ref, work, self.cfg, props_path=required_props)
             self.tool_time_s += time.time() - t0
             (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=1))
             shutil.copy(rp, work / rp.name)
@@ -793,6 +813,26 @@ class Runner:
                     if not ok:
                         continue  # a majority of references disagrees with the RTL: re-verify against the adopted one, then repair
                 ck = self._check_request_tables(ck, contract, ref)
+                if (not self.cfg.verification.require_formal and self.cfg.verification.run_formal
+                        and props is not None and props.is_file() and not contract.combinational):
+                    remaining = self.budget.wall_time_s - (time.time() - self.budget.started) - 2
+                    if remaining > 0:
+                        t0 = time.time()
+                        formal = run_formal(contract, rp, props, work / "formal", self.cfg.tools.sby,
+                                            self.cfg.verification.formal_depth,
+                                            min(self.cfg.verification.formal_timeout_s, remaining))
+                        self.tool_time_s += time.time() - t0
+                        res.formal = {"ok": formal.ok, **formal.to_dict(), **formal.extra,
+                                      "tail": formal.tail(40)}
+                        res.artifacts.update(properties=str(props), properties_sha256=hashlib.sha256(props.read_bytes()).hexdigest())
+                        res.summary = res.summary.replace("; formal not run", "") + f"; optional formal BMC depth {self.cfg.verification.formal_depth}: {formal.extra.get('status')}"
+                        self.log(f"[formal] optional check: {formal.extra.get('status')}")
+                    else:
+                        res.formal = {"ok": False, "status": "not_run", "error": "No remaining time for optional formal verification"}
+                    (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=1))
+                    history[-1]["summary"] = res.summary
+                    ck["history"] = history
+                    self.store.event(self.run_id, "optional_formal", res.formal)
                 ck["final_evidence"] = str(work / "evidence.json")
                 self.store.checkpoint(self.run_id, "report", ck)
                 return ck

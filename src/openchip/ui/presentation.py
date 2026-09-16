@@ -8,6 +8,7 @@ from pathlib import Path
 def result_summary(outcome: dict, state: str | None) -> dict:
     questions = [str(q) for q in outcome.get("unresolved", []) if str(q).strip()]
     questions = list(dict.fromkeys(questions))
+    formal = outcome.get("formal") or {}
     provisional = bool(outcome.get("provisional"))
     withheld = "SIGN-OFF WITHHELD" in outcome.get("status_line", "")
     if (provisional or withheld) and not questions:
@@ -17,14 +18,15 @@ def result_summary(outcome: dict, state: str | None) -> dict:
     elif questions:
         sentence = f"Needs your answer on {len(questions)} question{'s' if len(questions) != 1 else ''}"
     elif state == "completed" and outcome.get("accepted") and not provisional and not withheld:
-        sentence = "Verified and signed off"
+        sentence = ("Simulation and synthesis passed; formal check needs review"
+                    if formal.get("status") in {"counterexample", "error", "unknown", "timeout"}
+                    else "Verified and signed off")
     elif state == "budget_exhausted":
         sentence = "Stopped at the time limit; verification is incomplete"
     elif state == "paused":
         sentence = "Paused; verification is incomplete"
     else:
         sentence = "Needs more work before sign-off"
-    formal = outcome.get("formal") or {}
     required = (outcome.get("verification_config") or {}).get("require_formal")
     return {"sentence": sentence, "questions": questions,
             "formal": {"status": formal.get("status", "not_run"),

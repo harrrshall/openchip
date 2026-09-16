@@ -19,7 +19,7 @@ multiclock off
 smtbmc {solver}
 
 [script]
-read_verilog -formal -sv {files}
+read_verilog -formal -sv -noautowire {files}
 prep -top {top}
 
 [files]

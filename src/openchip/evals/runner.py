@@ -64,7 +64,7 @@ def interface_matches(contract: Contract, expected: dict) -> list[str]:
 def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log=print) -> dict:
     tdir = out_root / task["id"] / f"rep{rep}"
     if tdir.exists():
-        shutil.rmtree(tdir)
+        raise FileExistsError(f"Refusing to overwrite retained evaluation artifacts: {tdir}")
     ws = Workspace(tdir)
     ws.init(request=task["request"], name=task["id"])
     from ..cli.main import _parse_duration
@@ -99,7 +99,10 @@ def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log
         else:
             golden = Path(task["dir"]) / "golden.py"
             gwork = tdir / "verification" / "golden_check"
-            res = verify(contract, rtl, golden, gwork, cfg, cycles=task.get("golden_cycles", 600), seeds=task.get("golden_seeds", [101, 202, 303]), run_synth=False)
+            golden_cfg = cfg.model_copy(deep=True)
+            golden_cfg.verification.require_formal = False
+            golden_cfg.verification.run_formal = False
+            res = verify(contract, rtl, golden, gwork, golden_cfg, cycles=task.get("golden_cycles", 600), seeds=task.get("golden_seeds", [101, 202, 303]), run_synth=False)
             rec["golden_status"] = res.stage if not res.accepted else "pass"
             rec["golden_pass"] = res.accepted
             rec["golden_summary"] = res.summary

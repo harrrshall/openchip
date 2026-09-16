@@ -16,7 +16,7 @@ IGNORED = re.compile(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*', re.S)
 
 
 def check_rtl(path: Path, work: Path, exe: str, timeout_s: float) -> tuple[list[dict], dict]:
-    expanded = work / 'expanded_rtl.v'
+    expanded = work.resolve() / 'expanded_rtl.v'
     result = run_tool('iverilog-preprocess', [exe, '-g2012', '-E', '-o', str(expanded), str(path.resolve())],
                       work, timeout_s, inputs=[path.resolve()])
     evidence = result.to_dict()

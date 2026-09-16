@@ -60,7 +60,7 @@ def sign_off_withheld(ck: dict) -> str:
         outcome = c.get("outcome") or ""
         if not outcome:
             reasons.append("the reference arbitration recorded no outcome")
-        elif outcome in NON_UNANIMOUS_OUTCOMES:
+        elif outcome in NON_UNANIMOUS_OUTCOMES or c.get("confidence") != "high":
             reasons.append(f"the independently derived references never agreed unanimously (arbitration outcome `{outcome}`)")
     t = ck.get("request_table_check") or {}
     if t.get("status") == "mismatch":
@@ -87,6 +87,8 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         for r in contract.requirements:
             if accepted:
                 disp = "tested (random simulation vs. independent reference; not a proof)"
+            elif evidence and evidence.get("accepted") and withheld:
+                disp = "Tool checks passed; sign-off withheld pending reference agreement"
             elif evidence:
                 disp = f"NOT verified — last verification stopped at stage '{evidence.get('stage')}'"
             else:

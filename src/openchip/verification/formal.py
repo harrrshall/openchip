@@ -78,7 +78,7 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
     if re.search(r"\b(assert|assume|cover)\s+property\b", normalized):
         r = ToolResult("yosys", [yosys], str(cwd), 1, 0.0, "", "", error="concurrent SVA (`assert property`) is not supported by the open toolchain; use immediate assert(...) inside always @(posedge clk)")
         return r
-    script = f"read_verilog -formal -sv {props_path.name}; hierarchy -check -top {checker_name(contract)}; proc"
+    script = f"read_verilog -formal -sv -noautowire {props_path.name}; hierarchy -check -top {checker_name(contract)}; proc"
     r = run_tool("yosys", [yosys, "-q", "-p", script], cwd, timeout_s, version=tool_version(yosys, ("-V",)))
     text = props_path.read_text()
     problems = []

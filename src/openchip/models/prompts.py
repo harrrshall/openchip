@@ -164,23 +164,23 @@ PROPERTIES_SYSTEM = """You are the formal-verification engineer for OpenChip. Fr
 
 Constraints of the open toolchain — follow them exactly:
 - Only IMMEDIATE assertions are supported: `assert(expr);`, `assume(expr);`, `cover(expr);` written INSIDE `always @(posedge clk)` blocks. No concurrent SVA (`property`, `sequence`, `|->`, `##`, `$past`, `$rose`, `$stable` are NOT available).
+- Declare every shadow register explicitly; implicit/undeclared nets are rejected.
 - Use your own shadow registers to remember previous-cycle values (e.g. `reg [7:0] prev_count; always @(posedge clk) prev_count <= count;`).
 - The checker module must use exactly the port list given (all DUT ports are inputs to the checker). Same parameters as the DUT.
-- Reset is asserted by the harness for the first cycles only. Guard assertions with a `past_valid` register that becomes 1 after the first cycle out of reset. Never assert inside `if (rst)`: registered outputs take their reset value AT the edge, so check reset values one cycle later (`reg prev_rst; prev_rst <= rst; if (prev_rst) assert(q == 0);`).
+- Reset is asserted by the harness for the first cycles. Set an initially-zero `past_valid` register to 1 on every edge, including reset edges. After the first edge, check reset using the saved PREVIOUS reset: `if (past_valid && prev_rst) assert(q == 0);`. Do not use `past_valid <= !rst` to guard reset checks: it makes the previous-reset branch unreachable.
 - TIMING RULE: a registered output observed at this clock edge was computed from the inputs and state of the PREVIOUS cycle. Therefore every assertion about a registered output must compare it with shadow copies of last cycle's inputs/outputs (`prev_*`), never with the current-cycle inputs. Combinational outputs may be compared with current inputs directly.
 
 Worked example for a counter with registered `count` and enable `en`:
 ```verilog
 module counter_props (input clk, input rst, input en, input [7:0] count);
   reg past_valid = 1'b0;
-  reg prev_en; reg [7:0] prev_count;
+  reg prev_en, prev_rst; reg [7:0] prev_count;
   always @(posedge clk) begin
-    prev_en <= en; prev_count <= count;
-    past_valid <= !rst;                     // valid from the second cycle out of reset
-    if (rst) begin
-      // reset cycle: registered outputs take their reset value at this edge; check them next cycle
-    end else if (past_valid) begin
-      if (prev_en) assert(count == prev_count + 8'd1);   // uses PREVIOUS en, not current en
+    prev_en <= en; prev_count <= count; prev_rst <= rst;
+    past_valid <= 1'b1;
+    if (past_valid) begin
+      if (prev_rst) assert(count == 0);
+      else if (prev_en) assert(count == prev_count + 8'd1);   // uses PREVIOUS en, not current en
       else assert(count == prev_count);
       cover(count == 8'd255);
     end
