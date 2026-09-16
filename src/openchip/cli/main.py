@@ -100,22 +100,35 @@ def cmd_build(args) -> int:
 
 def cmd_resume(args) -> int:
     from ..runtime.run import Runner
+    from ..runtime.store import RunStore
     from ..runtime.workspace import Workspace
 
-    cfg = _cfg(args)
     ws = Workspace(args.project)
-    runner = Runner(ws, cfg, log=_logger())
-    run_id = args.run or runner.store.latest_run_id()
-    if not run_id:
+    if not ws.db_path.is_file():
         print("error: no run to resume", file=sys.stderr)
         return 2
-    run = runner.store.get_run(run_id)
-    if run and run["state"] in ("completed",):
+    store = RunStore(ws.db_path)
+    try:
+        run_id = args.run or store.latest_run_id()
+        run = store.get_run(run_id) if run_id else None
+    finally:
+        store.close()
+    if not run:
+        print("error: no matching run to resume", file=sys.stderr)
+        return 2
+    if run["state"] == "completed":
         print(f"run {run_id} already completed")
-        return 0
-    runner.resume(run_id)
-    print(f"resuming run {run_id} from step {run['step'] if run else '?'}")
-    outcome = runner.execute()
+        return 0 if run["outcome"].get("accepted") else 3
+    # Resume the recorded model/tool/verification configuration, just as the UI
+    # does. Current directory defaults must not silently change a saved run.
+    cfg = Config.model_validate(run["config"])
+    runner = Runner(ws, cfg, log=_logger())
+    try:
+        runner.resume(run_id)
+        print(f"resuming run {run_id} from step {run['step']}")
+        outcome = runner.execute()
+    finally:
+        runner.store.close()
     print(json.dumps({k: outcome.get(k) for k in ("run_id", "state", "accepted", "status_line", "attempts")}, indent=1))
     return 0 if outcome.get("accepted") else 3
 
