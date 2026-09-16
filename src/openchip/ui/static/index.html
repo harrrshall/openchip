@@ -173,7 +173,16 @@
 <script>
 let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0;
 const $ = id => document.getElementById(id);
-const api = async (path, body) => { const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
+async function api(path, body) {
+  const response = await fetch(path, body ? {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  } : {});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || response.statusText);
+  return result;
+}
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 3200); };
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -207,7 +216,19 @@ async function refreshStatus() {
   $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || s.provider==='openai-compatible' ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
   renderProjects(status.runs);
 }
-function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${esc(lbl)}</span>`; }
+function stateChip(run) {
+  const state = run.state || 'created';
+  let label = state, style = '';
+  if (state === 'completed') {
+    label = run.accepted ? 'accepted' : 'not accepted';
+    style = run.accepted ? 'ok' : 'warn';
+  } else if (['running', 'planned'].includes(state)) {
+    style = 'run';
+  } else if (['failed', 'stalled', 'budget_exhausted'].includes(state)) {
+    style = 'bad';
+  }
+  return `<span class="chip ${style}"><span class="dot ${style==='run'?'pulse':''}"></span>${esc(label)}</span>`;
+}
 const kbdActivate = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"`;
 function renderProjects(runs) {
   $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" tabindex="0" role="button" ${kbdActivate} data-workspace="${escAttr(r.workspace)}" onclick="openRun(this.dataset.workspace)"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
@@ -217,12 +238,24 @@ function renderProjects(runs) {
 
 // -- new run -------------------------------------------------------------------------------------------
 async function startRun() {
-  const req = $('req').value.trim(); if (req.length < 20) return toast('Describe the module in at least a sentence.');
+  const request = $('req').value.trim();
+  if (request.length < 20) return toast('Describe the module in at least a sentence.');
   $('go').disabled = true;
-  try { const r = await api('/api/runs', {request: req, name: $('name').value, budget_s: +$('budget').value}); toast('Run started'); await refreshStatus(); openRun(r.workspace); }
-  catch (e) { toast(e.message); } finally { $('go').disabled = false; }
+  try {
+    const run = await api('/api/runs', {request, name: $('name').value, budget_s: +$('budget').value});
+    toast('Run started');
+    await refreshStatus();
+    openRun(run.workspace);
+  } catch (e) { toast(e.message); }
+  finally { $('go').disabled = false; }
 }
-function showHome() { current = null; if (poll) clearInterval(poll); $('run').style.display='none'; $('home').style.display='block'; refreshStatus(); }
+function showHome() {
+  current = null;
+  if (poll) clearInterval(poll);
+  $('run').style.display = 'none';
+  $('home').style.display = 'block';
+  refreshStatus();
+}
 
 // -- run view --------------------------------------------------------------------------------------------
 async function openRun(name) {
@@ -284,7 +317,21 @@ async function resumeRun() {
   finally { $('resume-run').disabled = false; }
 }
 function openRevise() { if (!current) return; $('revise').classList.add('open'); }
-async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${encodeURIComponent(current)}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
+async function submitRevise() {
+  const change = $('change').value.trim();
+  if (change.length < 10) return toast('Describe the change.');
+  try {
+    await api(`/api/runs/${encodeURIComponent(current)}/revise`, {change, budget_s: 1200});
+    $('revise').classList.remove('open');
+    $('change').value = '';
+    toast('Revision started');
+    logSeen = 0;
+    $('feed').textContent = '';
+    await tick();
+    if (poll) clearInterval(poll);
+    poll = setInterval(tick, 2500);
+  } catch (e) { toast(e.message); }
+}
 
 const artifactURL = p => `/api/runs/${encodeURIComponent(current)}/artifact?path=${encodeURIComponent(p)}`;
 let questionKey = '';
@@ -328,25 +375,64 @@ function renderFeed(d) {
 
 // -- settings ---------------------------------------------------------------------------------------------
 function providerChanged() {
-  const p = $('provider').value; const s = status ? status.settings : {};
-  const {base_url, presets, key_env} = s.providers[p];
+  const provider = $('provider').value;
+  const settings = status ? status.settings : {};
+  const {base_url, presets, key_env} = settings.providers[provider];
   $('presets').innerHTML = presets.map(m => `<option value="${escAttr(m)}">`).join('');
   $('baseurl').placeholder = base_url;
-  if (p !== s.provider) { $('model').value = presets[0] || ''; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === base_url ? '' : (s.base_url || ''); }
-  $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${key_env} also works)`;
+  if (provider !== settings.provider) {
+    $('model').value = presets[0] || '';
+    $('baseurl').value = '';
+  } else {
+    $('model').value = settings.model || '';
+    $('baseurl').value = settings.base_url === base_url ? '' : (settings.base_url || '');
+  }
+  $('keyhint').textContent = provider === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${key_env} also works)`;
 }
-async function openSettings() { if (!status) { try { await refreshStatus(); } catch (e) { return toast('Still loading — try again in a moment.'); } }
-  const s = status.settings; $('provider').value = s.provider; $('tokenrate').value = s.usd_per_million_tokens ?? ''; providerChanged(); $('apikey').value=''; $('testresult').textContent='';
-  $('tools').innerHTML = Object.entries(status.doctor.tools).map(([k,v]) => `<div>${k}</div><div>${v.ok ? '<span class="chip ok">ok</span> <span class="hint">'+esc(v.version)+'</span>' : '<span class="chip warn">missing</span>'}</div>`).join('');
-  $('settings').classList.add('open'); }
+async function openSettings() {
+  if (!status) {
+    try { await refreshStatus(); }
+    catch (e) { return toast('Still loading — try again in a moment.'); }
+  }
+  const settings = status.settings;
+  $('provider').value = settings.provider;
+  $('tokenrate').value = settings.usd_per_million_tokens ?? '';
+  providerChanged();
+  $('apikey').value = '';
+  $('testresult').textContent = '';
+  $('tools').innerHTML = Object.entries(status.doctor.tools).map(([name, tool]) => `<div>${name}</div><div>${tool.ok ? '<span class="chip ok">ok</span> <span class="hint">'+esc(tool.version)+'</span>' : '<span class="chip warn">missing</span>'}</div>`).join('');
+  $('settings').classList.add('open');
+}
 function closeSettings() { $('settings').classList.remove('open'); }
-async function saveSettings() { try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value, usd_per_million_tokens: $('tokenrate').value}); $('apikey').value=''; toast('Saved'); await refreshStatus(); } catch (e) { toast(e.message); } }
+
+async function persistSettings() {
+  await api('/api/settings', {
+    provider: $('provider').value,
+    model: $('model').value,
+    base_url: $('baseurl').value,
+    api_key: $('apikey').value,
+    usd_per_million_tokens: $('tokenrate').value,
+  });
+  $('apikey').value = '';
+}
+async function saveSettings() {
+  try {
+    await persistSettings();
+    toast('Saved');
+    await refreshStatus();
+  } catch (e) { toast(e.message); }
+}
 async function testConnection() {
   $('testresult').textContent = 'Testing…';
-  try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value, usd_per_million_tokens: $('tokenrate').value}); $('apikey').value='';
-    const h = await api('/api/test', {});
-    if (!h.ok) { $('testresult').innerHTML = `<span class="chip bad">unreachable</span> ${esc(h.error||'')}`; }
-    else { const p = h.ping || {}; $('testresult').innerHTML = `${p.ok ? '<span class="chip ok">connected</span>' : '<span class="chip warn">reachable, but the model did not answer</span>'} ${esc(h.provider)} · ${esc(h.configured)}${h.configured_is_served===false ? ' · <span class="chip warn">model not in the served list</span>' : ''} ${p.latency_s ? '· '+p.latency_s+' s' : ''} ${p.error ? '· '+esc(p.error) : ''}`; }
+  try {
+    await persistSettings();
+    const health = await api('/api/test', {});
+    if (!health.ok) {
+      $('testresult').innerHTML = `<span class="chip bad">unreachable</span> ${esc(health.error||'')}`;
+    } else {
+      const ping = health.ping || {};
+      $('testresult').innerHTML = `${ping.ok ? '<span class="chip ok">connected</span>' : '<span class="chip warn">reachable, but the model did not answer</span>'} ${esc(health.provider)} · ${esc(health.configured)}${health.configured_is_served===false ? ' · <span class="chip warn">model not in the served list</span>' : ''} ${ping.latency_s ? '· '+ping.latency_s+' s' : ''} ${ping.error ? '· '+esc(ping.error) : ''}`;
+    }
     await refreshStatus();
   } catch (e) { $('testresult').innerHTML = `<span class="chip bad">${esc(e.message)}</span>`; }
 }
