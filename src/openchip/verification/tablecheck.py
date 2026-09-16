@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-state-graphs"
+CHECKER_VERSION = "request-tables-20260916-complete-results"
 
 
 @dataclass
@@ -136,16 +136,35 @@ def check_reference_against_request_tables(
         if not res_path.is_file():
             out.update(status="error", detail="reference evaluation produced no output")
             return out
-        data = json.loads(res_path.read_text())
-        if data.get("error"):
-            out.update(status="error", detail=data["error"][:600])
+        try:
+            data = json.loads(res_path.read_text())
+        except (OSError, ValueError):
+            out.update(status="error", detail="Reference evaluation produced unreadable JSON.")
             return out
-        for (vec, expected), got in zip(b.rows, data["results"]):
+        if not isinstance(data, dict):
+            out.update(status="error", detail="Reference evaluation must return a result object.")
+            return out
+        if data.get("error"):
+            out.update(status="error", detail=str(data["error"])[:600])
+            return out
+        results = data.get("results")
+        if not isinstance(results, list) or len(results) != len(b.rows):
+            out.update(status="error", detail=f"Reference evaluation must return exactly {len(b.rows)} table rows.")
+            return out
+        port = next(p for p in contract.ports if p.name == b.output_port)
+        width = port.width
+        minimum = -(1 << (width - 1)) if port.signed else 0
+        for got in results:
+            actual = got.get(b.output_port) if isinstance(got, dict) else None
+            if not isinstance(actual, int) or not minimum <= actual < (1 << width):
+                out.update(status="error", detail=f"Reference table output {b.output_port} must fit its declared {width}-bit port.")
+                return out
+        for (vec, expected), got in zip(b.rows, results):
             checked += 1
-            actual = got.get(b.output_port)
-            if actual is not None and b.table.output.bit is not None:
-                actual = (int(actual) >> b.table.output.bit) & 1
-            if actual is None or int(actual) != int(expected):
+            actual = got[b.output_port] & ((1 << width) - 1)
+            if b.table.output.bit is not None:
+                actual = (actual >> b.table.output.bit) & 1
+            if actual != int(expected):
                 if len(mismatches) < MAX_REPORTED:
                     inputs = ", ".join(_describe(v, val) for v, val in zip(b.table.inputs, _row_values(b, vec)))
                     mismatches.append({"kind": b.table.kind, "output": b.table.output.name, "inputs": inputs,
