@@ -2,18 +2,14 @@
 from __future__ import annotations
 from ..contracts.moore import moore_scope
 from ..contracts.schema import Contract
+from .interfaces import matches_clocked_interface
 
 
 def moore_contract_matches(contract: Contract, binding: dict) -> bool:
-    ports = {p.name:(p.direction.value,p.width,p.lsb,p.signed) for p in contract.ports}
-    cr = contract.clock_reset
-    return bool(contract.module_name == binding['module'] and not contract.parameters
-                and ports == {'clk':('input',1,0,False),'reset':('input',1,0,False),
-                              'in':('input',1,0,False),'out':('output',1,0,False)}
-                and cr and cr.clock == 'clk' and cr.clock_edge == 'posedge'
-                and cr.reset == 'reset' and cr.reset_kind == 'synchronous'
-                and cr.reset_active == binding['polarity']
-                and all(p.timing in {'registered', 'combinational'} for p in contract.outputs()))
+    return matches_clocked_interface(contract, binding['module'],
+                                     dict.fromkeys(('clk', 'reset', 'in'), 1), {'out': 1},
+                                     reset=('reset', 'synchronous', binding['polarity']),
+                                     output_timings=('registered', 'combinational'))
 
 
 def moore_properties(contract: Contract, request: str) -> str | None:

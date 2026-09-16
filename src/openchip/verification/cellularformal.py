@@ -3,17 +3,13 @@ from __future__ import annotations
 
 from ..contracts.cellular import cellular_scope
 from ..contracts.schema import Contract
+from .interfaces import matches_clocked_interface
 
 
 def cellular_contract_matches(contract: Contract, binding: dict) -> bool:
-    cr = contract.clock_reset
-    ports = {p.name: (p.direction.value, p.width) for p in contract.ports}
-    return bool(not contract.parameters and contract.module_name == binding['module']
-                and cr is not None and cr.clock == 'clk' and cr.clock_edge == 'posedge'
-                and cr.reset is None and all(p.lsb == 0 and not p.signed for p in contract.ports)
-                and ports == {'clk': ('input', 1), 'load': ('input', 1),
-                              'data': ('input', binding['width']), 'q': ('output', binding['width'])}
-                and next(p for p in contract.ports if p.name == 'q').timing == 'registered')
+    return matches_clocked_interface(contract, binding['module'],
+                                     {'clk': 1, 'load': 1, 'data': binding['width']},
+                                     {'q': binding['width']}, reset=None)
 
 
 def cellular_properties(contract: Contract, request: str) -> str | None:

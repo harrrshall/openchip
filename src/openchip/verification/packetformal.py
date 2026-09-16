@@ -2,17 +2,13 @@
 from __future__ import annotations
 from ..contracts.packet import packet_scope
 from ..contracts.schema import Contract
+from .interfaces import matches_clocked_interface
 
 
 def packet_contract_matches(contract: Contract, binding: dict) -> bool:
-    ports = {p.name: (p.direction.value, p.width, p.lsb, p.signed) for p in contract.ports}
-    cr = contract.clock_reset
-    return bool(contract.module_name == binding['module'] and not contract.parameters
-                and ports == {'clk': ('input', 1, 0, False), 'reset': ('input', 1, 0, False),
-                              'in': ('input', 8, 0, False), 'done': ('output', 1, 0, False)}
-                and cr and cr.clock == 'clk' and cr.reset == 'reset' and cr.clock_edge == 'posedge'
-                and cr.reset_active == 'high' and cr.reset_kind == 'synchronous'
-                and all(p.timing == 'registered' for p in contract.outputs()))
+    return matches_clocked_interface(contract, binding['module'],
+                                     {'clk': 1, 'reset': 1, 'in': 8}, {'done': 1},
+                                     reset=('reset', 'synchronous', 'high'))
 
 
 def packet_properties(contract: Contract, request: str) -> str | None:

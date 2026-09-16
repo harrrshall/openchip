@@ -2,17 +2,14 @@
 from __future__ import annotations
 from ..contracts.directional import directional_scope
 from ..contracts.schema import Contract
+from .interfaces import matches_clocked_interface
 
 
 def directional_contract_matches(contract: Contract, binding: dict) -> bool:
-    ports = {p.name: (p.direction.value, p.width, p.lsb, p.signed) for p in contract.ports}
-    wanted = {name: ('input', 1, 0, False) for name in ['clk', 'areset', 'bump_left', 'bump_right', 'ground', 'dig']}
-    wanted.update({name: ('output', 1, 0, False) for name in ['walk_left', 'walk_right', 'aaah', 'digging']})
-    cr = contract.clock_reset
-    return bool(contract.module_name == binding['module'] and not contract.parameters and ports == wanted
-                and cr and cr.clock == 'clk' and cr.reset == 'areset' and cr.clock_edge == 'posedge'
-                and cr.reset_active == 'high' and cr.reset_kind == 'asynchronous'
-                and all(p.timing == 'registered' for p in contract.outputs()))
+    return matches_clocked_interface(contract, binding['module'],
+                                     dict.fromkeys(('clk', 'areset', 'bump_left', 'bump_right', 'ground', 'dig'), 1),
+                                     dict.fromkeys(('walk_left', 'walk_right', 'aaah', 'digging'), 1),
+                                     reset=('areset', 'asynchronous', 'high'))
 
 
 def directional_properties(contract: Contract, request: str) -> str | None:

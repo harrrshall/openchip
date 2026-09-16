@@ -2,17 +2,15 @@
 from __future__ import annotations
 from ..contracts.hdlc import hdlc_scope
 from ..contracts.schema import Contract
+from .interfaces import matches_clocked_interface
 
 
 def hdlc_contract_matches(contract: Contract, binding: dict) -> bool:
-    ports={p.name:(p.direction.value,p.width,p.lsb,p.signed) for p in contract.ports}
-    cr=contract.clock_reset
-    return bool(contract.module_name==binding['module'] and not contract.parameters
-                and ports=={**{n:('input',1,0,False) for n in ('clk','reset','in')},
-                            **{n:('output',1,0,False) for n in ('disc','flag','err')}}
-                and cr and cr.clock=='clk' and cr.clock_edge=='posedge' and cr.reset=='reset'
-                and cr.reset_active=='high' and cr.reset_kind=='synchronous'
-                and all(p.timing in {'registered','combinational'} for p in contract.outputs()))
+    return matches_clocked_interface(contract, binding['module'],
+                                     dict.fromkeys(('clk', 'reset', 'in'), 1),
+                                     dict.fromkeys(('disc', 'flag', 'err'), 1),
+                                     reset=('reset', 'synchronous', 'high'),
+                                     output_timings=('registered', 'combinational'))
 
 
 def hdlc_properties(contract: Contract, request: str) -> str | None:
