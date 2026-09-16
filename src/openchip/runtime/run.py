@@ -304,7 +304,7 @@ class Runner:
             if data is None:
                 errors.append("reply was not a JSON object" if r.ok else r.error)
                 continue
-            data, coerce_notes = coerce_contract(data, request)
+            data, coerce_notes = coerce_contract(data, request, enforce_module_name=True)
             if coerce_notes:
                 self.store.event(self.run_id, "contract_coerced", {"attempt": attempt, "notes": coerce_notes})
                 ck["coerce_notes"] = coerce_notes

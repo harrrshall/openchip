@@ -14,9 +14,23 @@ COMB_HINT = re.compile(r"combinational|asynchronous|reflects|shows|function of|i
 REG_HINT = re.compile(r"register|flip-?flop|at the (rising|clock) edge|becomes|pulse|latch|hold", re.I)
 
 
-def coerce_contract(data: dict[str, Any], request: str = "") -> tuple[dict[str, Any], list[str]]:
+def requested_module_name(request: str) -> str | None:
+    """Recognize one explicit initial module name; user revisions need their own authority."""
+    if re.search(r"\n\nChange request \(v\d+\):", request):
+        return None
+    matches = re.finditer(r"\b(?:implement|create|build)\s+(?:a\s+)?module\s+named\s+[`\"']?([A-Za-z_]\w*)", request, re.I)
+    names = {m[1] for m in matches
+             if not re.search(r"\b(?:not|never|don't|avoid)\s+$", request[:m.start()], re.I)}
+    return next(iter(names)) if len(names) == 1 else None
+
+
+def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_name: bool = False) -> tuple[dict[str, Any], list[str]]:
     notes: list[str] = []
     d = dict(data)
+    named = requested_module_name(request) if enforce_module_name else None
+    if named and d.get("module_name") != named:
+        d["module_name"] = named
+        notes.append(f"module_name restored to explicitly requested {named}")
     if not d.get("purpose"):
         d["purpose"] = (d.get("behavior") or request or "").strip().split("\n")[0][:200] or "See behavior."
         notes.append("purpose defaulted from behavior")

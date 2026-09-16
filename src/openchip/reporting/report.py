@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..contracts.schema import Contract, Disposition
+from ..contracts.coerce import requested_module_name
 from ..tools.base import tool_version
 
 if TYPE_CHECKING:
@@ -45,10 +46,11 @@ def consensus_confidence(ck: dict) -> str:
 NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority_alt1"})
 
 
-def sign_off_withheld(ck: dict, evidence: dict | None = None) -> str:
+def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract | None = None) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
     Independent acceptance gates beyond agreement between generated RTL and references:
+      - the delivered name contradicts an explicit initial module-name request;
       - the model's own independent reference derivations never agreed unanimously;
       - the reference contradicts a table printed in the request, which is ground truth that
         never passed through the model (docs/decisions/0010-request-tables.md).
@@ -56,6 +58,9 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None) -> str:
       - a formal counterexample leaves a contradiction requiring review.
     """
     reasons: list[str] = []
+    named = requested_module_name(ck.get("request", ""))
+    if named and contract is not None and contract.module_name != named:
+        reasons.append(f"the request names module `{named}`, but the contract delivers `{contract.module_name}`")
     c = ck.get("consensus") or {}
     if c:
         outcome = c.get("outcome") or ""
@@ -83,7 +88,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     contract = Contract.model_validate_json(Path(ck["contract_path"]).read_text()) if ck.get("contract_path") else None
     evidence = json.loads(Path(ck["last_evidence"]).read_text()) if ck.get("last_evidence") and Path(ck["last_evidence"]).is_file() else None
     accepted = bool(evidence and evidence.get("accepted"))
-    withheld = sign_off_withheld(ck, evidence) if accepted else ""
+    withheld = sign_off_withheld(ck, evidence, contract) if accepted else ""
     if withheld:
         accepted = False
     history = ck.get("history", [])
@@ -149,6 +154,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     outcome = {
         "run_id": run_id, "state": final_state, "accepted": accepted, "status_line": status_line, "reason": reason,
         "module": contract.module_name if contract else None, "contract_version": contract.version if contract else None,
+        "requested_module": requested_module_name(ck.get("request", "")),
         "contract_digest": contract.digest() if contract else None,
         "artifacts": {
             "contract": ck.get("contract_path"), "contract_sha256": _sha(Path(ck["contract_path"])) if ck.get("contract_path") else "",
