@@ -104,10 +104,6 @@ open an issue describing the user problem, or submit a focused pull request with
 - a reproducible request or steps that demonstrate the problem.
 - tool evidence showing the result before and after your change, with relevant regression checks.
 
-keep verification gates intact. never change acceptance fixtures or expected results just to make a run pass. changes to locked acceptance assets require a separate reviewed rationale. keep credentials, private logs, and generated workspaces out of commits.
-
-for this repository, run tests, inference, simulation, synthesis, and evals on jarvislabs. local contributor work is limited to editing, inspection, and syncing. coordinate cloud access with the maintainer before running those checks.
-
 ## license
 
 [apache-2.0](LICENSE).
