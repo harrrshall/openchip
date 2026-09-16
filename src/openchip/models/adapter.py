@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,11 +40,17 @@ def read_keys_file() -> dict[str, str]:
     out: dict[str, str] = {}
     try:
         for line in KEYS_FILE.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
+            try:
+                tokens = shlex.split(line, comments=True)
+            except ValueError:
                 continue
-            k, v = line.split("=", 1)
-            out[k.strip().removeprefix("export ").strip()] = v.strip().strip('"').strip("'")
+            if tokens and tokens[0] == "export":
+                tokens = tokens[1:]
+            if len(tokens) != 1 or "=" not in tokens[0]:
+                continue
+            k, v = tokens[0].split("=", 1)
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+                out[k] = v
     except OSError:
         pass
     return out
@@ -54,15 +61,22 @@ def write_keys_file(updates: dict[str, str]) -> None:
     KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
     cur = read_keys_file()
     for k, v in updates.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+            raise ValueError("Invalid credential environment-variable name")
+        if any(c in v for c in "\r\n\x00"):
+            raise ValueError("Credential values must be single-line text")
         if v:
             cur[k] = v
         else:
             cur.pop(k, None)
-    KEYS_FILE.write_text("# OpenChip API keys (written by the UI). Never commit this file.\n" + "".join(f'{k}="{v}"\n' for k, v in cur.items()))
-    try:
-        KEYS_FILE.chmod(0o600)
-    except OSError:
-        pass
+    # Values are literal data even when the deployment sources this file in bash.
+    # Restrict permissions before writing, including when replacing an existing file.
+    fd = os.open(KEYS_FILE, os.O_WRONLY | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "w") as target:
+        os.fchmod(target.fileno(), 0o600)
+        target.truncate(0)
+        target.write("# OpenChip API keys (written by the UI). Never commit this file.\n"
+                     + "".join(f"{k}={shlex.quote(v)}\n" for k, v in cur.items()))
 
 
 def resolve_api_key(cfg: ModelConfig) -> str:
