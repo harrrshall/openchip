@@ -17,6 +17,7 @@ import os
 import threading
 import time
 import traceback
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
@@ -142,8 +143,13 @@ class UIState:
         safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name.strip())[:40] or time.strftime("design-%H%M%S")
         ws = Workspace(WORKSPACES / safe)
         if change is None:
-            if ws.root.exists() and any(ws.root.iterdir()):
-                safe = f"{safe}-{time.strftime('%H%M%S')}"
+            base_name = safe
+            while True:
+                try:
+                    ws.root.mkdir()
+                    break
+                except FileExistsError:
+                    safe = f"{base_name}-{uuid.uuid4().hex[:12]}"
                 ws = Workspace(WORKSPACES / safe)
             ws.init(request=request, name=safe)
         cfg = self.config()
