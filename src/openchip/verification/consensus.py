@@ -29,6 +29,15 @@ def recheck_consensus(consensus: dict | None, contract: Contract, rtl: Path,
     result = {"status": "error", "cycles": cycles, "seeds": list(seeds),
               "historical_outcome": consensus.get("outcome"), "references": [],
               "detail": ""}
+    if not primary_result.accepted and not primary_result.sims:
+        diagnostics = primary_result.evidence_for_model(max_chars=1200)
+        codes = [d.get("code") for d in (primary_result.lint or {}).get("diagnostics", []) if d.get("code")]
+        if codes:
+            diagnostics = ", ".join(dict.fromkeys(codes)) + ": " + diagnostics
+        result.update(status="blocked", detail=(
+            f"primary verification stopped at {primary_result.stage}: {primary_result.summary}. "
+            "Retained-reference simulations were not run. " + diagnostics))
+        return result
     entries = consensus.get("references")
     if not isinstance(entries, list) or len(entries) < 2:
         result["detail"] = "the historical reference set is incomplete"
