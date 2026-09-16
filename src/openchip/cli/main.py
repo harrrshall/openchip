@@ -31,6 +31,7 @@ def _read_request(arg: str | None) -> str | None:
 def cmd_doctor(args) -> int:
     from ..models.adapter import ModelAdapter
     from ..tools.base import tool_version, which
+    from ..verification.sandbox import sandbox_status
 
     cfg = _cfg(args)
     print(f"openchip {__version__}  python {sys.version.split()[0]}")
@@ -42,6 +43,9 @@ def cmd_doctor(args) -> int:
         print(f"  {name:10} {'ok     ' if path else 'MISSING'} {path or ''}  {ver}")
         if not path and name != "sby":
             ok = False
+    sandbox = sandbox_status()
+    print(f"  sandbox    {'ok' if sandbox['ok'] else 'UNAVAILABLE'} {sandbox.get('error') or sandbox['version']}")
+    ok = ok and sandbox["ok"]
     h = ModelAdapter(cfg.model, cfg.api_key()).health()
     print(f"  model      {'ok     ' if h.get('ok') else 'UNREACH'} {cfg.model.base_url} -> {cfg.model.model}"
           + (f"  served={h.get('served_models')}" if h.get("ok") else f"  ({h.get('error')})"))

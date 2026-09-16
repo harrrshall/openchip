@@ -25,6 +25,23 @@ openchip ui --open          # http://127.0.0.1:8765
 ```
 In **Settings** choose OpenRouter, OpenAI, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
 
+For OpenCode Go chat-completion models, choose **OpenAI**, set the base URL to
+`https://opencode.ai/zen/go/v1`, and enter the Go model ID and key. OpenChip sends
+its own user agent and a session ID. Responses-only models are not supported.
+
+Network binding requires `OPENCHIP_UI_TOKEN`, a secret of at least 32 characters.
+Keep it in your protected environment file, then run `openchip ui --host 0.0.0.0`.
+Access the deployment over HTTPS (or an SSH tunnel); the browser login uses
+username `openchip` and that token as its password. API clients may use a Bearer
+token. The default loopback UI needs no token. Cross-origin requests are rejected.
+Generated reference Python requires Linux with the system Bubblewrap package
+and permission to create namespaces. `openchip doctor` and the UI check this
+prerequisite; execution stops if isolation is unavailable. References receive
+only their inputs and a result file, with no host network or credential
+environment. Restricted GPU containers may need a VM-based deployment.
+Public multi-user hosting remains unsupported: EDA tool execution still needs
+isolation against host-file access from generated RTL.
+
 ## Command line
 ```bash
 openchip doctor                                   # tools, model connectivity, features

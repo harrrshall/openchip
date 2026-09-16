@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -32,6 +33,7 @@ class ModelConfig(BaseModel):
     thinking_budget: int = 12000
     extra_body: dict = Field(default_factory=dict)
     user_agent: Optional[str] = None   # some gateways allow-list clients by User-Agent; set per provider if required
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     # Optional second model for cross-family reference corroboration and an optional independent spec reviewer.
     alt: Optional["ModelConfig"] = None
     review: Optional["ModelConfig"] = None
@@ -97,6 +99,7 @@ class Config(BaseModel):
                 data = tomllib.loads(c.read_text())
                 break
         cfg = cls.model_validate(data)
+        identity = (cfg.model.provider, cfg.model.model, cfg.model.base_url)
         # environment overrides for cloud/local switching
         if os.environ.get("OPENCHIP_MODEL_BASE_URL"):
             cfg.model.base_url = os.environ["OPENCHIP_MODEL_BASE_URL"]
@@ -114,6 +117,8 @@ class Config(BaseModel):
             cfg.runs_dir = os.environ["OPENCHIP_RUNS_DIR"]
         if os.environ.get("OPENCHIP_PROVIDER"):
             cfg.model.provider = os.environ["OPENCHIP_PROVIDER"]  # type: ignore[assignment]
+        if identity != (cfg.model.provider, cfg.model.model, cfg.model.base_url) and not os.environ.get("OPENCHIP_MODEL_REVISION"):
+            cfg.model.revision = "unknown"
         if os.environ.get("OPENCHIP_MAX_TOKENS"):
             cfg.model.max_tokens = int(os.environ["OPENCHIP_MAX_TOKENS"])
         if os.environ.get("OPENCHIP_USER_AGENT"):

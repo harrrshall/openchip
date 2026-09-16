@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from .sandbox import run_isolated
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -106,9 +107,8 @@ def check_reference_against_request_tables(
         res_path = work / f"table{i}_result.json"
         rows_path.write_text(json.dumps({"rows": [r[0] for r in b.rows], "outputs": [b.output_port]}))
         try:
-            proc = subprocess.run([python, "-I", str(REFROWS), str(Path(reference_py).resolve()),
-                            str(contract_path.resolve()), str(rows_path.resolve()), str(res_path.resolve())],
-                           capture_output=True, text=True, timeout=timeout_s, cwd=str(work))
+            proc = run_isolated(REFROWS, [Path(reference_py), contract_path, rows_path, res_path],
+                                res_path, python=python, timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             out.update(status="error", detail="reference model timed out on the request table")
             return out

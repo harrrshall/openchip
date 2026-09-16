@@ -20,6 +20,7 @@ from ..contracts.schema import Contract
 from ..tools import iverilog, verilator, yosys
 from ..tools.base import ToolResult
 from .formal import run_formal
+from .sandbox import run_isolated
 from .testbench import dump_contract_json, generate_testbench, write_vectors
 
 REFGEN = Path(__file__).with_name("refgen.py")
@@ -112,8 +113,8 @@ def run_reference(reference_py: Path, contract_json: Path, seed: int, cycles: in
                   replay: Optional[Path] = None) -> dict:
     _archive_previous_reference_output(out)
     try:
-        proc = subprocess.run([python, "-I", str(REFGEN), str(Path(reference_py).resolve()), str(Path(contract_json).resolve()), str(seed), str(cycles), str(Path(out).resolve())] + ([str(Path(replay).resolve())] if replay else []),
-                              capture_output=True, text=True, timeout=timeout_s, cwd=str(out.parent))
+        proc = run_isolated(REFGEN, [Path(reference_py), Path(contract_json), str(seed), str(cycles), out]
+                            + ([Path(replay)] if replay else []), out, python=python, timeout_s=timeout_s)
     except subprocess.TimeoutExpired:
         return {"error": f"reference model timed out after {timeout_s}s (infinite loop?)"}
     if proc.returncode != 0:
@@ -128,8 +129,8 @@ def lint_reference_timing(reference_py: Path, contract_json: Path, out: Path, se
     output of the reference depends on same-cycle inputs."""
     _archive_previous_reference_output(out)
     try:
-        proc = subprocess.run([python, "-I", str(REFLINT), str(Path(reference_py).resolve()), str(Path(contract_json).resolve()), str(seed), str(steps), str(Path(out).resolve())],
-                       capture_output=True, text=True, timeout=timeout_s, cwd=str(out.parent))
+        proc = run_isolated(REFLINT, [Path(reference_py), Path(contract_json), str(seed), str(steps), out],
+                            out, python=python, timeout_s=timeout_s)
     except subprocess.TimeoutExpired:
         return {"violations": [], "checked_steps": 0, "error": "timing lint timed out"}
     if proc.returncode != 0:

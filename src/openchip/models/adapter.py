@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -133,6 +134,9 @@ class ModelAdapter:
         headers = {"Content-Type": "application/json"}
         if cfg.user_agent:
             headers["User-Agent"] = cfg.user_agent
+        if urlparse(self.base_url).hostname == "opencode.ai":
+            headers["User-Agent"] = cfg.user_agent or "openchip/0.1"
+            headers["x-opencode-session"] = cfg.session_id
         if self.provider == "anthropic":
             headers.update({"x-api-key": self.api_key, "anthropic-version": "2023-06-01"})
         else:
@@ -172,9 +176,18 @@ class ModelAdapter:
                 resp = self._chat_openai(messages, json_schema, max_tokens, temperature, seed, thinking)
             resp.latency_s = time.monotonic() - t0
         except Exception as e:  # noqa: BLE001
+            detail = f"{type(e).__name__}: {e}"
+            if isinstance(e, httpx.HTTPStatusError):
+                try:
+                    error = e.response.json().get("error", {})
+                    message = error.get("message", "") if isinstance(error, dict) else str(error)
+                    if message:
+                        detail = f"Provider HTTP {e.response.status_code}: {message}"
+                except (ValueError, AttributeError):
+                    pass
             resp = ModelResponse(text="", reasoning="", finish_reason="error", prompt_tokens=0, completion_tokens=0,
                                  latency_s=time.monotonic() - t0, model=self.cfg.model,
-                                 error=_scrub(f"{type(e).__name__}: {e}", self.api_key)[:500])
+                                 error=_scrub(detail, self.api_key)[:500])
         self.usage.add(role, resp)
         return resp
 

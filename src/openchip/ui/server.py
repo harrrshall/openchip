@@ -6,6 +6,10 @@ Run with `openchip ui` (default http://127.0.0.1:8765). Keys pasted in Settings 
 from __future__ import annotations
 
 import json
+import base64
+import binascii
+import hmac
+import ipaddress
 import io
 import math
 import zipfile
@@ -25,6 +29,7 @@ from ..runtime.run import Runner
 from ..runtime.store import RunStore
 from ..runtime.workspace import Workspace
 from ..tools.base import tool_version, which
+from ..verification.sandbox import sandbox_status
 
 STATIC = Path(__file__).with_name("static")
 UI_SETTINGS = Path(os.environ.get("OPENCHIP_UI_SETTINGS", Path.home() / ".config" / "openchip" / "ui.json"))
@@ -82,10 +87,13 @@ class UIState:
     def config(self) -> Config:
         cfg = Config.load()
         m = cfg.model
+        identity = (m.provider, m.model, m.base_url)
         m.provider = self.settings.get("provider", m.provider)  # type: ignore[assignment]
         m.model = self.settings.get("model") or m.model
         m.base_url = self.settings.get("base_url") or PROVIDER_DEFAULTS[m.provider]["base_url"]
         m.api_key_env = PROVIDER_DEFAULTS[m.provider]["key_env"]
+        if identity != (m.provider, m.model, m.base_url):
+            m.revision = "unknown"
         if m.provider != "openai-compatible":
             m.thinking = False
             m.thinking_roles = []
@@ -100,7 +108,8 @@ class UIState:
             exe = getattr(cfg.tools, name)
             path = which(exe)
             tools[name] = {"ok": bool(path), "version": tool_version(exe, ("-V",) if name in ("iverilog", "vvp", "yosys") else ("--version",)) if path else ""}
-        return {"tools": tools, "tools_ok": all(tools[t]["ok"] for t in ("iverilog", "vvp", "verilator", "yosys"))}
+        tools["reference_sandbox"] = sandbox_status()
+        return {"tools": tools, "tools_ok": all(tools[t]["ok"] for t in ("iverilog", "vvp", "verilator", "yosys", "reference_sandbox"))}
 
     def test_connection(self) -> dict:
         cfg = self.config()
@@ -110,13 +119,20 @@ class UIState:
             # reasoning models spend output tokens before answering: give the ping room
             r = ad.chat([{"role": "user", "content": "Reply with the single word OK."}], role="ping", max_tokens=256, thinking=False)
             h["ping"] = {"ok": r.ok and bool(r.text.strip()), "latency_s": round(r.latency_s, 2), "error": r.error, "reply": r.text.strip()[:40]}
+            h["ok"] = h["ping"]["ok"]
         return h
 
     # -- runs -----------------------------------------------------------------------------------
     def start_run(self, name: str, request: str, budget_s: float, change: Optional[str] = None) -> dict:
+        if not math.isfinite(budget_s) or not 0 < budget_s <= 86400:
+            raise ValueError("Budget must be positive and at most one day.")
         with self.lock:
             if change is not None:
-                self.workspace_path(name)
+                ws = Workspace(self.workspace_path(name))
+                if not ws.exists():
+                    raise FileNotFoundError("Unknown workspace")
+                if not list((ws.root / "spec").glob("contract.v*.json")):
+                    raise ValueError("This project has no contract to revise.")
                 if self.threads.get(name) and self.threads[name].is_alive():
                     raise ValueError("Wait for the current run to finish before revising.")
             return self._start_run(name, request, budget_s, change)
@@ -235,6 +251,46 @@ class UIState:
 
 class Handler(BaseHTTPRequestHandler):
     state: UIState
+    auth_token: str = ""
+
+    def _authorized(self) -> bool:
+        host = self.headers.get("Host", "")
+        if not self.auth_token:
+            try:
+                hostname = urlparse("http://" + host).hostname or ""
+                local = hostname == "localhost" or ipaddress.ip_address(hostname).is_loopback
+            except ValueError:
+                local = False
+            if not local:
+                self._send(403, {"error": "Invalid host"})
+                return False
+        else:
+            authorization = self.headers.get("Authorization", "")
+            supplied = ""
+            if authorization.startswith("Bearer "):
+                supplied = authorization[7:]
+            elif authorization.startswith("Basic "):
+                try:
+                    credentials = base64.b64decode(authorization[6:], validate=True).decode()
+                    user, supplied = credentials.split(":", 1)
+                    if user != "openchip":
+                        supplied = ""
+                except (ValueError, UnicodeDecodeError, binascii.Error):
+                    pass
+            if not hmac.compare_digest(supplied.encode(), self.auth_token.encode()):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="OpenChip", charset="UTF-8"')
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return False
+        origin = self.headers.get("Origin")
+        if origin:
+            parsed = urlparse(origin)
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != host.lower():
+                self._send(403, {"error": "Cross-origin requests are not allowed"})
+                return False
+        return True
 
     def log_message(self, fmt, *args):  # quiet
         pass
@@ -250,9 +306,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
-        return json.loads(self.rfile.read(n) or b"{}") if n else {}
+        if n < 0 or n > 1024 * 1024:
+            raise ValueError("Request body exceeds the allowed size.")
+        body = json.loads(self.rfile.read(n) or b"{}") if n else {}
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object.")
+        for key in ("request", "name", "change", "provider", "model", "base_url", "api_key"):
+            if key in body and not isinstance(body[key], str):
+                raise ValueError(f"{key} must be a string.")
+        return body
 
     def do_GET(self):
+        if not self._authorized():
+            return
         u = urlparse(self.path)
         q = parse_qs(u.query)
         try:
@@ -276,6 +342,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
     def do_POST(self):
+        if not self._authorized():
+            return
         u = urlparse(self.path)
         try:
             body = self._json()
@@ -287,19 +355,31 @@ class Handler(BaseHTTPRequestHandler):
                 req = (body.get("request") or "").strip()
                 if len(req) < 20:
                     return self._send(400, {"error": "Describe the module in at least a sentence."})
-                return self._send(200, self.state.start_run(body.get("name") or "", req, float(body.get("budget_s") or 1200)))
+                return self._send(200, self.state.start_run(body.get("name") or "", req, float(body.get("budget_s", 1200))))
             if u.path.startswith("/api/runs/") and u.path.endswith("/revise"):
                 name = u.path.split("/")[3]
                 change = (body.get("change") or "").strip()
                 if len(change) < 10:
                     return self._send(400, {"error": "Describe the change."})
-                return self._send(200, self.state.start_run(name, "", float(body.get("budget_s") or 1200), change=change))
+                return self._send(200, self.state.start_run(name, "", float(body.get("budget_s", 1200)), change=change))
             return self._send(404, {"error": "not found"})
+        except FileNotFoundError:
+            return self._send(404, {"error": "Unknown workspace"})
+        except (ValueError, TypeError):
+            return self._send(400, {"error": "Invalid request. Check the fields and budget."})
         except Exception as e:  # noqa: BLE001
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False) -> None:
+    token = os.environ.get("OPENCHIP_UI_TOKEN", "")
+    try:
+        loopback = host == "localhost" or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = False
+    if (not loopback or token) and len(token) < 32:
+        raise ValueError("Set OPENCHIP_UI_TOKEN to a secret of at least 32 characters before exposing the UI.")
+    Handler.auth_token = token
     Handler.state = UIState(Config.load())
     httpd = ThreadingHTTPServer((host, port), Handler)
     url = f"http://{host}:{port}"
