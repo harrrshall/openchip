@@ -13,7 +13,7 @@ one of the recognised shapes, because a later step treats the result as ground t
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 DONT_CARE = frozenset({"d", "x", "-"})
 SUBSCRIPT_RE = re.compile(r"([A-Za-z_]\w*)\[(\d+)\]")
@@ -42,6 +42,7 @@ class RequestTable:
     rows: tuple[tuple[tuple[int, ...], int], ...]  # ((value per entry of `inputs`), output)
     dont_care: int  # cells printed as don't-care or outside an explicit one-hot domain
     source: str  # the verbatim block of request text this came from
+    submodule_scope: str = ""  # a child described before an explicit top-level composition
 
 
 def _names_each_bit_once(table: RequestTable) -> bool:
@@ -65,6 +66,10 @@ def parse_request_tables(request: str, *, include_external_mux: bool = False, in
             table, nxt = parse(lines, i, request)
             if nxt > i:
                 if table is not None and _names_each_bit_once(table):
+                    prefix, suffix = "\n".join(lines[:i]), "\n".join(lines[nxt:])
+                    owners = list(re.finditer(r"(?im)^\s*Module\s+([A-Za-z_]\w*)\b", prefix))
+                    if owners and re.search(r"\btop[- ]level\s+module\b", suffix, re.I) and re.search(r"\bsubmodules?\b", suffix, re.I):
+                        table = replace(table, submodule_scope=owners[-1].group(1))
                     out.append(table)
                 elif include_external_mux and parse is _parse_kmap:
                     out.extend(_parse_mux_kmap(lines, i, request))
@@ -136,6 +141,8 @@ def render_table(table: RequestTable) -> str:
            "Every cell was read at the position printed: the axis labels decide which variable each "
            "character of a printed code belongs to, and neither an MSB-first nor a Gray-code "
            "ordering was assumed."]
+    if table.submodule_scope:
+        out.insert(0, f"Scope: submodule {table.submodule_scope} only. Its local output is NOT the composed top-level output, even when the port names match. Apply the request's stated interconnections to derive the top-level behavior.")
     if vectors:
         out.append("`s[k]` below means bit k of the value of `s`, contributing 2**k to it. That is the "
                    "only bit convention used here. The request's axis labels group the bits; they are "

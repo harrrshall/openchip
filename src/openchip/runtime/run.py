@@ -451,7 +451,7 @@ class Runner:
         except Exception:  # noqa: BLE001
             pass
         return ("\n\nThe request contains a table, expanded below by a parser that read the printed axis "
-                "labels literally and in the printed order. It is authoritative: state the behavior so that "
+                "labels literally and in the printed order. Respect each table's scope: a child-module table is not the composed top-level output. Within that scope it is authoritative: state the behavior so that "
                 "it reproduces exactly these rows, and do not re-derive them from the grid yourself.\n\n" + rendered)
 
     def _load_contract(self, ck: dict) -> Contract:
@@ -535,8 +535,49 @@ class Runner:
             return out_path, ""
         return None, last_err
 
+    def _plan_resetless_conditioning(self, ck: dict, contract: Contract) -> Contract:
+        cr = contract.clock_reset
+        if cr is None or cr.reset is not None or cr.conditioning:
+            return contract
+        inputs = {p.name: {"type": "integer", "minimum": 0, "maximum": (1 << p.width) - 1}
+                  for p in contract.data_inputs()}
+        schema = {"type": "object", "properties": {
+            "conditioning": {"type": "array", "minItems": 0, "maxItems": 256,
+                             "items": {"type": "object", "properties": inputs,
+                                       "required": list(inputs), "additionalProperties": False}},
+            "reason": {"type": "string"}}, "required": ["conditioning", "reason"]}
+        response = self._call("conditioning", P.CONDITIONING_SYSTEM,
+                              "Original request:\n" + ck.get("request", "") +
+                              "\nContract:\n" + contract.model_dump_json(indent=1), json_schema=schema)
+        plan = extract_json(response.text) if response.ok else None
+        if not isinstance(plan, dict) or not plan.get("conditioning"):
+            raise Stalled("No executable resetless startup sequence was provided; power-up state cannot be assumed.")
+        data = contract.model_dump(mode="json")
+        data["clock_reset"]["conditioning"] = plan["conditioning"]
+        versions = [int(p.stem.split(".v")[-1]) for p in self.ws.dir("spec").glob("contract.v*.json")]
+        data.update(version=max(versions + [contract.version]) + 1, parent_version=contract.version,
+                    revision_reason="Executable resetless simulation conditioning; hardware interface and behavior unchanged.",
+                    revision_authority="agent_inference")
+        try:
+            revised = Contract.model_validate(data)
+        except ValidationError as exc:
+            self.store.event(self.run_id, "conditioning_rejected", {"error": str(exc)[:1200]})
+            raise Stalled("Resetless startup vectors failed contract validation; no hardware initialization was substituted.") from exc
+        path = self.ws.dir("spec") / f"contract.v{revised.version}.json"
+        path.write_text(revised.model_dump_json(indent=1))
+        path.with_suffix(".md").write_text(revised.summary_md())
+        self._save("contract", path, "conditioning")
+        ck.update(contract_path=str(path), contract_version=revised.version)
+        for key in ("final_evidence", "last_evidence", "properties_done", "consensus_done", "consensus"):
+            ck.pop(key, None)
+        self.store.event(self.run_id, "conditioning", {"version": revised.version,
+                         "edges": len(revised.clock_reset.conditioning), "reason": str(plan.get("reason", ""))[:600]})
+        self.log(f"[conditioning] {len(revised.clock_reset.conditioning)} physical input edges recorded in contract v{revised.version}; power-up state remains unverified")
+        self.store.checkpoint(self.run_id, "reference", ck)
+        return revised
+
     def _step_reference(self, ck: dict) -> dict:
-        contract = self._load_contract(ck)
+        contract = self._plan_resetless_conditioning(ck, self._load_contract(ck))
         refdir = self.ws.dir("reference")
         rp, err = self._generate_reference(ck, contract, refdir / "reference.py", feedback=ck.get("reference_feedback", ""))
         if rp is None:

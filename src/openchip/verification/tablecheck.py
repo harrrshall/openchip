@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-complete-results"
+CHECKER_VERSION = "request-tables-20260916-submodule-scope"
 
 
 @dataclass
@@ -42,6 +42,8 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
     Declines unless the table pins down every input the reference can see: a row that leaves an
     input free does not predict an output, and guessing a value for it would invent evidence.
     """
+    if table.submodule_scope:
+        return None  # this driver checks the top-level reference, not a child implementation
     if contract.clock_reset is not None:
         return None  # a sequential contract: one row does not determine an output
     ports = {p.name: p for p in contract.ports}
@@ -95,6 +97,10 @@ def check_reference_against_request_tables(
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
         return out
+    scopes = sorted({table.submodule_scope for table in tables if table.submodule_scope})
+    if scopes:
+        out["submodule_tables_not_bound_to_top"] = scopes
+        out["detail"] = "Tables scoped to child modules are not evidence for the composed top-level output."
     bound = []
     for table in tables:
         b = bind(table, contract)

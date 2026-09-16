@@ -44,6 +44,14 @@ Reply with ONE JSON object and nothing else, with exactly these keys:
 - "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)
 Produce the design contract JSON now."""
 
+CONDITIONING_SYSTEM = """Plan ONLY the executable simulation startup inputs for a resetless sequential circuit.
+The actual contract conditioning array is empty, regardless of prose claiming a load/shift/reset sequence exists.
+Return JSON with conditioning (1 to 256 complete data/control input vectors, one per active clock edge) and reason.
+Choose the shortest finite sequence that establishes known comparison state from arbitrary initial hardware state using the documented operations. For a loadable register, assert its load input with known data; idle clocks cannot initialize it. For a shift register, enable enough shifts to replace every unknown bit. For directly clocked data registers, drive known data for enough pipeline edges.
+Every vector must include exactly every data/control input. Exclude clock and reset: the harness generates clock edges. Use unsigned integer port bit patterns. Do not change interface, behavior, shift direction or requirements. Do not initialize internal registers, invent reset, mask unknowns or claim power-up verification. The RTL will start with unknown state and must execute these physical input vectors before comparisons.
+If no finite sequence can establish state under the stated behavior, return an empty conditioning array and explain that limitation. Your claim is not proof: actual simulation and independent verification still decide acceptance.
+"""
+
 REFERENCE_SYSTEM = """You are the reference-model engineer for OpenChip. You write an INDEPENDENT executable specification in Python from a design contract. You never see the RTL.
 
 Write a single Python module that defines:
