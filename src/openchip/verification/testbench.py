@@ -83,9 +83,9 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     if cr.reset is not None:
         L.append(f"  reg {cr.reset} = {rst_on};")
     for p in din:
-        L.append(f"  reg [{p.width - 1}:0] {p.name};  // starts X; driven at the first inactive edge so always @* blocks get an event")
+        L.append(f"  reg [{p.lsb + p.width - 1}:{p.lsb}] {p.name};  // starts X; driven at the first inactive edge so always @* blocks get an event")
     for p in outs:
-        L.append(f"  wire [{p.width - 1}:0] {p.name};")
+        L.append(f"  wire [{p.lsb + p.width - 1}:{p.lsb}] {p.name};")
     L.append(f"  reg [{in_w - 1}:0] in_vec [0:{n_cycles - 1}];")
     L.append(f"  reg [{out_w - 1}:0] exp_vec [0:{n_cycles - 1}];")
     L.append(f"  reg [{out_w - 1}:0] got;")
@@ -170,9 +170,9 @@ def _generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int 
     params = contract.param_defaults()
     L = ["`timescale 1ns/1ps", f"module tb_{contract.module_name};"]
     for p in din:
-        L.append(f"  reg [{p.width - 1}:0] {p.name};")
+        L.append(f"  reg [{p.lsb + p.width - 1}:{p.lsb}] {p.name};")
     for p in outs:
-        L.append(f"  wire [{p.width - 1}:0] {p.name};")
+        L.append(f"  wire [{p.lsb + p.width - 1}:{p.lsb}] {p.name};")
     L.append(f"  reg [{in_w - 1}:0] in_vec [0:{n_cycles - 1}];")
     L.append(f"  reg [{out_w - 1}:0] exp_vec [0:{n_cycles - 1}];")
     L.append(f"  reg [{out_w - 1}:0] got;")

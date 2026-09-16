@@ -1284,7 +1284,7 @@ REVIEW_SCHEMA = {
     "properties": {
         "verdict": {"type": "string", "enum": ["consistent", "needs_correction"]},
         "corrections": {"type": "array", "items": {"type": "object", "properties": {
-            "kind": {"type": "string", "enum": ["port_timing", "port_width", "parameter", "behavior", "requirement", "conditioning"]},
+            "kind": {"type": "string", "enum": ["port_timing", "port_width", "port_lsb", "parameter", "behavior", "requirement", "conditioning"]},
             "target": {"type": "string"}, "value": {"type": "string"}, "reason": {"type": "string"}},
             "required": ["kind", "target", "value", "reason"]}},
         "unresolved": {"type": "array", "items": {"type": "string"}},
@@ -1305,6 +1305,17 @@ def _apply_correction(data: dict, c: dict) -> tuple[bool, str]:
             ports[target]["timing"] = value
             return True, f"{target}.timing -> {value}"
         return False, "unknown output or bad value"
+    if kind == "port_lsb":
+        if target not in ports:
+            return False, "unknown port"
+        try:
+            lsb = int(value)
+        except ValueError:
+            return False, "bad lower index"
+        if not -4096 <= lsb <= 4096:
+            return False, "lower index outside supported range"
+        ports[target]["lsb"] = lsb
+        return True, f"{target}.lsb -> {lsb}"
     if kind == "port_width":
         if target not in ports:
             return False, "unknown port"

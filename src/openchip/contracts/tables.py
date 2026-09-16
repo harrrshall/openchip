@@ -144,8 +144,9 @@ def render_table(table: RequestTable) -> str:
     if table.submodule_scope:
         out.insert(0, f"Scope: submodule {table.submodule_scope} only. Its local output is NOT the composed top-level output, even when the port names match. Apply the request's stated interconnections to derive the top-level behavior.")
     if vectors:
-        out.append("`s[k]` below means bit k of the value of `s`, contributing 2**k to it. That is the "
-                   "only bit convention used here. The request's axis labels group the bits; they are "
+        out.append("`s[k]` below preserves the request's declared bit label. For a descending bus [H:L], "
+                   "it contributes 2**(k-L) to the packed integer. A nonzero L must be recorded in "
+                   "the contract as lsb; do not shift by k or wrap labels modulo the width. The request's axis labels group the bits; they are "
                    "not a significance order, and neither is the order anything is listed in below.")
     # The decimal value set first and labelled authoritative: it is the only form that needs no
     # bit-packing decision, and a wrong packing decision is the measured failure (ADR 0010).

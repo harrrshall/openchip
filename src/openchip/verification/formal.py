@@ -33,7 +33,7 @@ def generate_formal_top(contract: Contract) -> str:
     din = contract.data_inputs()
     outs = contract.outputs()
     for p in din:
-        L.append(f"  input [{p.width - 1}:0] {p.name},")
+        L.append(f"  input [{p.lsb + p.width - 1}:{p.lsb}] {p.name},")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     # Reset is held for the first two cycles: the formal initial state is unconstrained, the first edge
@@ -45,7 +45,7 @@ def generate_formal_top(contract: Contract) -> str:
         L.append(f"  always @({cr.clock_edge} {cr.clock}) init <= {{init[0], 1'b0}};")
         L.append(f"  always @* {cr.reset} = init[1] ? {rst_on} : ~{rst_on};")
     for p in outs:
-        L.append(f"  wire [{p.width - 1}:0] {p.name};")
+        L.append(f"  wire [{p.lsb + p.width - 1}:{p.lsb}] {p.name};")
     params = contract.param_defaults()
     pstr = (" #(" + ", ".join(f".{k}({v})" for k, v in params.items()) + ")") if params else ""
     controls = [f".{cr.clock}({cr.clock})"]
@@ -65,7 +65,7 @@ def checker_skeleton(contract: Contract) -> str:
     if cr.reset is not None:
         ports.append(f"input {cr.reset}")
     for p in contract.data_inputs() + contract.outputs():
-        ports.append(f"input [{p.width - 1}:0] {p.name}")
+        ports.append(f"input [{p.lsb + p.width - 1}:{p.lsb}] {p.name}")
     params = contract.parameters
     pstr = ("#(" + ", ".join(f"parameter {p.name} = {p.default}" for p in params) + ") ") if params else ""
     return f"module {checker_name(contract)} {pstr}(\n  " + ",\n  ".join(ports) + "\n);\n  // shadow state and immediate assertions here\nendmodule\n"

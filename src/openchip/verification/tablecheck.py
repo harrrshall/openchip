@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-cellular"
+CHECKER_VERSION = "request-tables-20260916-packed-lsb"
 
 
 @dataclass
@@ -34,6 +34,7 @@ class BoundTable:
     table: RequestTable
     output_port: str
     rows: list[tuple[dict[str, int], int]]  # ({port: value}, expected output)
+    input_offsets: dict[str, int]
 
 
 def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
@@ -50,17 +51,17 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
     op = ports.get(table.output.port)
     if op is None or op.direction != "output":
         return None
-    if (table.output.bit is None and op.width != 1) or (table.output.bit is not None and not 0 <= table.output.bit < op.width):
+    if (table.output.bit is None and op.width != 1) or (table.output.bit is not None and not op.lsb <= table.output.bit < op.lsb + op.width):
         return None
     covered: set[tuple[str, int]] = set()
     for v in table.inputs:
         p = ports.get(v.port)
         if p is None or p.direction != "input":
             return None
-        bit = 0 if v.bit is None else v.bit
+        bit = p.lsb if v.bit is None else v.bit
         if v.bit is None and p.width != 1:
             return None
-        if bit >= p.width:
+        if not p.lsb <= bit < p.lsb + p.width:
             return None
         if (v.port, bit) in covered:
             return None
@@ -69,16 +70,17 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
     for p in contract.ports:
         if p.direction != "input":
             continue
-        for b in range(p.width):
+        for b in range(p.lsb, p.lsb + p.width):
             if (p.name, b) not in covered:
                 return None
     rows: list[tuple[dict[str, int], int]] = []
     for values, expected in table.rows:
         vec: dict[str, int] = {p.name: 0 for p in contract.ports if p.direction == "input"}
         for v, val in zip(table.inputs, values):
-            vec[v.port] |= (val & 1) << (0 if v.bit is None else v.bit)
+            vec[v.port] |= (val & 1) << (0 if v.bit is None else v.bit - ports[v.port].lsb)
         rows.append((vec, expected))
-    return BoundTable(table=table, output_port=table.output.port, rows=rows)
+    return BoundTable(table=table, output_port=table.output.port, rows=rows,
+                      input_offsets={p.name: p.lsb for p in contract.inputs()})
 
 
 def _describe(v: TableVar, value: int) -> str:
@@ -173,7 +175,7 @@ def check_reference_against_request_tables(
             checked += 1
             actual = got[b.output_port] & ((1 << width) - 1)
             if b.table.output.bit is not None:
-                actual = (actual >> b.table.output.bit) & 1
+                actual = (actual >> (b.table.output.bit - port.lsb)) & 1
             if actual != int(expected):
                 if len(mismatches) < MAX_REPORTED:
                     inputs = ", ".join(_describe(v, val) for v, val in zip(b.table.inputs, _row_values(b, vec)))
@@ -191,4 +193,4 @@ def check_reference_against_request_tables(
 
 
 def _row_values(b: BoundTable, vec: dict[str, int]) -> list[int]:
-    return [(vec[v.port] >> (0 if v.bit is None else v.bit)) & 1 for v in b.table.inputs]
+    return [(vec[v.port] >> (0 if v.bit is None else v.bit - b.input_offsets[v.port])) & 1 for v in b.table.inputs]

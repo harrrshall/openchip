@@ -31,6 +31,7 @@ class Port(BaseModel):
         description="REQUIRED for any port whose width depends on a parameter: Verilog width expression such as 'WIDTH' or 'clog2(DEPTH)+1'. "
         "`width` must equal this expression evaluated at default parameters.",
     )
+    lsb: StrictInt = Field(default=0, ge=-4096, le=4096, description="Lowest index of a descending packed port. Range is [lsb+width-1:lsb], e.g. width=4, lsb=1 means [4:1]. Default zero. Integer reference values are packed: declared bit k has weight 2**(k-lsb). Do not use this field for ascending ranges.")
     signed: bool = False
     description: str = ""
     role: Literal["clock", "reset", "data", "control", "status", "handshake"] = "data"
@@ -215,12 +216,18 @@ class Contract(BaseModel):
 
     def digest(self) -> str:
         payload = self.model_dump(mode="json")
+        # Preserve identities of existing zero-based contracts and their evidence.
+        for port in payload["ports"]:
+            if port.get("lsb", 0) == 0:
+                port.pop("lsb", None)
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
     def port_table_md(self) -> str:
         rows = ["| Port | Dir | Width | Role | Timing | Description |", "|---|---|---|---|---|---|"]
         for p in self.ports:
             w = p.width_expr or str(p.width)
+            if p.lsb:
+                w += f" [{p.lsb + p.width - 1}:{p.lsb}]"
             timing = (p.timing if p.direction == Direction.output else "-") if not self.combinational else ("combinational" if p.direction == Direction.output else "-")
             rows.append(f"| `{p.name}` | {p.direction.value} | {w}{' (signed)' if p.signed else ''} | {p.role} | {timing} | {p.description} |")
         return "\n".join(rows)

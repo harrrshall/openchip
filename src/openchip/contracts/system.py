@@ -172,7 +172,7 @@ def render_top(system: SystemContract) -> str:
     lines = ["// Structural assembly only; behavioral integration is not verified.", "`default_nettype none"]
 
     def decl(p):
-        return ("signed " if p.signed else "") + (f"[{p.width - 1}:0] " if p.width > 1 else "")
+        return ("signed " if p.signed else "") + (f"[{p.lsb + p.width - 1}:{p.lsb}] " if p.width > 1 or p.lsb else "")
 
     # Top parameters retain their defaults; connection widths are elaborated at
     # those defaults. Do not expose overrides that would silently change wiring.
