@@ -160,3 +160,9 @@ checker. Comments, disabled generate branches and cover-only modules cannot
 produce a formal pass. This presence check does not establish that assertions
 are sufficient or non-vacuous. A required-formal run with an invalid checker
 withholds acceptance; optional formal reports the error without claiming a pass.
+
+The report's `thinking_requested` field (and legacy `thinking` alias) describes
+configuration, not verified provider behavior. Effective reasoning is recorded
+as unknown. Automatic retries with thinking disabled apply only to the
+OpenAI-compatible route that sends `enable_thinking`; hosted routes that do not
+send that toggle no longer repeat an identical request on truncation.

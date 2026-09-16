@@ -201,7 +201,8 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
                                "conditioning_edges": len(contract.clock_reset.conditioning) or 3, "power_up_state_verified": False}
                               if contract and contract.clock_reset and contract.clock_reset.reset is None else None),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
-                  "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
+                  "seed": cfg.model.seed, "thinking": cfg.model.thinking, "thinking_requested": cfg.model.thinking,
+                  "effective_thinking": "unknown", "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
         "budget": budget, "tool_time_s": round(tool_time_s, 1),
         "requirements": req_index,
@@ -294,7 +295,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
            "- No formal properties were proved. No timing, power, or technology-mapped area claims are made. Yosys generic cell counts are a sanity metric only.",
            "- This is a generated RTL deliverable, not a manufacturable chip.", ""]
     md += ["## Reproduction", "", "```bash", f"openchip verify --project {ws.root}", "```", "",
-           f"Model: `{cfg.model.model}` @ `{cfg.model.revision}` (temperature {cfg.model.temperature}, seed {cfg.model.seed}, thinking={cfg.model.thinking}). Tools: " + ", ".join(f"{k}: {v or 'missing'}" for k, v in tools.items()), "",
+           f"Model: `{cfg.model.model}` @ `{cfg.model.revision}` (temperature {cfg.model.temperature}, seed {cfg.model.seed}, requested thinking setting={cfg.model.thinking}; effective provider reasoning is unknown). Tools: " + ", ".join(f"{k}: {v or 'missing'}" for k, v in tools.items()), "",
            f"Budget: {budget}. Tool execution time {tool_time_s:.1f}s.", ""]
     (reports / "report.md").write_text("\n".join(md))
     return outcome

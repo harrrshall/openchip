@@ -277,19 +277,21 @@ class Runner:
                          timeout_s=self.budget.remaining_s())
         tag = "" if adapter is self.adapter else f" [{adapter.cfg.model}]"
         self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
-                                                     "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think, "model": adapter.cfg.model})
+                                                     "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think, "model": adapter.cfg.model,
+                                                     "thinking_requested": think, "thinking_control_sent": adapter.provider == "openai-compatible", "effective_thinking": "unknown"})
         self.log(f"[model:{role}]{tag} {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok)" + (f" ERROR {r.error}" if r.error else ""))
         self.budget.check_time()
-        if think and r.finish_reason == "length" and role != "property_review":
-            # Reasoning consumed the token budget (any answer is truncated): retry without thinking, and stop
-            # using thinking for this role for the rest of the run — this model cannot finish within the cap.
+        if think and adapter.provider == "openai-compatible" and r.finish_reason == "length" and role != "property_review":
+            # Only this route sends enable_thinking. Other providers would receive
+            # an identical request, wasting budget without changing the control.
             self._no_think_roles.add(f"{adapter.cfg.model}:{role}")
             self.budget.check(self.adapter, [e for e in self.store.events(self.run_id) if e["kind"] == "model_call"])
-            self.log(f"[model:{role}]{tag} thinking hit the token cap; retrying without thinking (and for the rest of this run)")
+            self.log(f"[model:{role}]{tag} response hit the token cap; retrying with enable_thinking=false (also requested for later calls in this role)")
             r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False,
                              timeout_s=self.budget.remaining_s())
             self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
-                                                         "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": False, "fallback": True})
+                                                         "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": False, "fallback": True,
+                                                         "model": adapter.cfg.model, "thinking_requested": False, "thinking_control_sent": True, "effective_thinking": "unknown"})
             self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok) [no-thinking fallback]")
             self.budget.check_time()
         return r
