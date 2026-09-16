@@ -2,7 +2,7 @@
 
 The model writes `<module>_props`, a checker module whose ports are the DUT's ports (all
 inputs) plus its own shadow state, containing immediate `assert`/`assume`/`cover` statements
-in `always @(posedge clk)` blocks. OpenChip generates the wrapper that instantiates DUT and
+on the contract's active clock edge. OpenChip generates the wrapper that instantiates DUT and
 checker together and constrains reset to the first cycle. SymbiYosys runs BMC with the open
 toolchain (immediate assertions only; concurrent SVA is not supported without Verific).
 
@@ -38,7 +38,7 @@ def generate_formal_top(contract: Contract) -> str:
     # establishes the reset state and the second is a stable reset cycle. Clocked immediate assertions
     # sample the values just before the edge (i.e. the previous step), so BMC skips steps 0-1 (`skip 2`).
     L.append("  reg [1:0] init = 2'b11;")
-    L.append(f"  always @(posedge {cr.clock}) init <= {{init[0], 1'b0}};")
+    L.append(f"  always @({cr.clock_edge} {cr.clock}) init <= {{init[0], 1'b0}};")
     L.append(f"  always @* {cr.reset} = init[1] ? {rst_on} : ~{rst_on};")
     for p in outs:
         L.append(f"  wire [{p.width - 1}:0] {p.name};")
@@ -76,7 +76,7 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
     normalized = normalize_checker(props_path.read_text())
     props_path.write_text(normalized)
     if re.search(r"\b(assert|assume|cover)\s+property\b", normalized):
-        r = ToolResult("yosys", [yosys], str(cwd), 1, 0.0, "", "", error="concurrent SVA (`assert property`) is not supported by the open toolchain; use immediate assert(...) inside always @(posedge clk)")
+        r = ToolResult("yosys", [yosys], str(cwd), 1, 0.0, "", "", error="concurrent SVA (`assert property`) is not supported by the open toolchain; use immediate assert(...) on the contract's active clock edge")
         return r
     script = f"read_verilog -formal -sv -noautowire {props_path.name}; hierarchy -check -top {checker_name(contract)}; proc"
     r = run_tool("yosys", [yosys, "-q", "-p", script], cwd, timeout_s, version=tool_version(yosys, ("-V",)))
@@ -86,6 +86,12 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
         problems.append(f"checker must be named {checker_name(contract)}")
     if not re.search(r"\bassert\s*\(", text):
         problems.append("checker contains no assert(...)")
+    cr = contract.clock_reset
+    if cr:
+        opposite = "negedge" if cr.clock_edge == "posedge" else "posedge"
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", " ", text, flags=re.S)
+        if re.search(rf"\balways(?:_ff)?\s*@\s*\([^)]*\b{opposite}\s+{re.escape(cr.clock)}\b", code):
+            problems.append(f"checker must sample {cr.clock_edge} {cr.clock}, not {opposite}")
     if problems:
         r.error = (r.error + "; " if r.error else "") + "; ".join(problems)
     return r

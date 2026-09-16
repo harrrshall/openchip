@@ -63,7 +63,7 @@ class Parameter(BaseModel):
 
 class ClockReset(BaseModel):
     clock: str = "clk"
-    clock_edge: Literal["posedge"] = "posedge"
+    clock_edge: Literal["posedge", "negedge"] = "posedge"
     reset: str = "rst"
     reset_active: Literal["high", "low"] = "high"
     reset_kind: Literal["synchronous", "asynchronous"] = "synchronous"

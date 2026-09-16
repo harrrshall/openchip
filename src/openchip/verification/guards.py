@@ -38,12 +38,16 @@ def acceptance_guards(contract: Contract, rtl: str) -> list[Finding]:
         if clocked:
             out.append(Finding("rtl", "clocked_combinational", "The contract is purely combinational (no clock), but the RTL contains a clocked always block. Remove the clock/reset and implement the logic combinationally."))
         return out
+    opposite_edge = "negedge" if cr.clock_edge == "posedge" else "posedge"
+    if any(re.search(rf"\b{opposite_edge}\s+{re.escape(cr.clock)}\b", s) for s in sens):
+        out.append(Finding("rtl", "clock_edge_mismatch",
+                           f"The contract requires {cr.clock_edge} `{cr.clock}`, but the RTL contains an always block triggered by {opposite_edge} `{cr.clock}`."))
     rst = (cr.reset or "").strip()
     if not rst or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", rst):
         return out  # no usable reset name: nothing deterministic to check
     if cr.reset_kind == "asynchronous":
         if not any(re.search(rf"\b(pos|neg)edge\s+{re.escape(rst)}\b", s) for s in sens):
-            out.append(Finding("rtl", "async_reset_missing", f"The contract requires an ASYNCHRONOUS reset on `{rst}`, but no always block lists `{rst}` in its sensitivity list (expected `always @(posedge {cr.clock} or {'negedge' if cr.reset_active == 'low' else 'posedge'} {rst})`)."))
+            out.append(Finding("rtl", "async_reset_missing", f"The contract requires an ASYNCHRONOUS reset on `{rst}`, but no always block lists `{rst}` in its sensitivity list (expected `always @({cr.clock_edge} {cr.clock} or {'negedge' if cr.reset_active == 'low' else 'posedge'} {rst})`)."))
     if cr.reset_active == "low":
         low_test = re.search(rf"(!\s*{re.escape(rst)}\b|~\s*{re.escape(rst)}\b|{re.escape(rst)}\s*[!=]==?\s*1'b[01]\b|{re.escape(rst)}\s*[!=]==?\s*[01]\b|negedge\s+{re.escape(rst)}\b)", code)
         # the inverted form `if (rst_n) normal-path else reset-path` also tests the reset low; it is told apart

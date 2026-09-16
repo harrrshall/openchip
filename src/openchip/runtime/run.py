@@ -690,7 +690,8 @@ class Runner:
             user = P.PROPERTIES_USER.format(request=ctx["request"], contract_json=ctx["contract_json"], skeleton=checker_skeleton(contract))
             if last_err:
                 user += "\n\nYour previous checker was rejected:\n" + last_err[:1500] + "\nFix it."
-            r = self._call("properties", P.PROPERTIES_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt)
+            system = P.PROPERTIES_SYSTEM.replace("posedge", contract.clock_reset.clock_edge)
+            r = self._call("properties", system, user, seed=(self.cfg.model.seed or 0) + attempt)
             code = extract_code(r.text, ("verilog", "systemverilog", "v", "sv")) if r.ok else None
             if not code:
                 last_err = "no verilog block" if r.ok else r.error

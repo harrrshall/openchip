@@ -92,7 +92,8 @@ class SystemContract(BaseModel):
                 raise ValueError(f"conflicting contracts for module definition {name}")
             definitions[name] = m.digest
             cr, top_cr = m.contract.clock_reset, self.top.clock_reset
-            if cr and (not top_cr or cr.reset_active != top_cr.reset_active or cr.reset_kind != top_cr.reset_kind):
+            if cr and (not top_cr or cr.clock_edge != top_cr.clock_edge
+                       or cr.reset_active != top_cr.reset_active or cr.reset_kind != top_cr.reset_kind):
                 raise ValueError(f"{m.name}: clock/reset semantics do not match the top")
         drivers = {}
         used = set()

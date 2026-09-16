@@ -72,7 +72,7 @@ def check_clock(contract: Contract, request: str, rtl: Path, work: Path,
                               8 if k in {"hh", "mm", "ss"} else 1) for k in binding}
     cr = contract.clock_reset
     if ({p.name: (p.direction.value, p.width) for p in contract.ports} != expected or contract.parameters
-            or cr is None or cr.clock != binding["clock"] or cr.reset != binding["reset"]
+            or cr is None or cr.clock != binding["clock"] or cr.clock_edge != "posedge" or cr.reset != binding["reset"]
             or cr.reset_active != "high" or cr.reset_kind != "synchronous"):
         return {**result, "status": "mismatch", "detail": "Contract interface or reset contradicts the explicit standard-clock request."}
     if timeout_s <= 0:

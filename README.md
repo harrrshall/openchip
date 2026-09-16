@@ -53,6 +53,11 @@ references are rejected after preprocessing. Value functions such as `$clog2`
 remain supported. If formal checking is required, missing or failed formal
 evidence blocks acceptance.
 
+Single-clock designs may use a rising or falling active edge, with an explicit
+reset. Simulation and formal reset sequencing follow that edge. Dual-edge logic,
+resetless sequential designs and compositions mixing active clock edges remain
+unsupported. General production readiness is not established.
+
 ## Command line
 ```bash
 openchip doctor                                   # tools, model connectivity, features

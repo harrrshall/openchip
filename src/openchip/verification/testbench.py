@@ -1,6 +1,6 @@
 """Generic self-checking Verilog testbench generated from the contract (not from the model).
 
-Vectors come from the reference model. Each cycle: drive inputs at negedge, settle, compare
+Vectors come from the reference model. Each cycle: drive inputs at the inactive edge, settle, compare
 all outputs to the expected pre-edge values with `!==` (so X/Z is a mismatch), then clock.
 """
 from __future__ import annotations
@@ -65,6 +65,8 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     if contract.clock_reset is None:
         return _generate_comb_testbench(contract, n_cycles, max_report)
     cr = contract.clock_reset
+    inactive_edge = "negedge" if cr.clock_edge == "posedge" else "posedge"
+    initial_clock = "1'b0" if cr.clock_edge == "posedge" else "1'b1"
     din = contract.data_inputs()
     outs = contract.outputs()
     in_w = max(1, sum(p.width for p in din))
@@ -75,10 +77,10 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     L = []
     L.append("`timescale 1ns/1ps")
     L.append(f"module tb_{contract.module_name};")
-    L.append(f"  reg {cr.clock} = 1'b0;")
+    L.append(f"  reg {cr.clock} = {initial_clock};")
     L.append(f"  reg {cr.reset} = {rst_on};")
     for p in din:
-        L.append(f"  reg [{p.width - 1}:0] {p.name};  // starts X; driven at the first negedge so always @* blocks get an event")
+        L.append(f"  reg [{p.width - 1}:0] {p.name};  // starts X; driven at the first inactive edge so always @* blocks get an event")
     for p in outs:
         L.append(f"  wire [{p.width - 1}:0] {p.name};")
     L.append(f"  reg [{in_w - 1}:0] in_vec [0:{n_cycles - 1}];")
@@ -104,12 +106,12 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     L.append("    $readmemh(vin_file, in_vec);")
     L.append("    $readmemh(vexp_file, exp_vec);")
     L.append(f"    {cr.reset} = {rst_on};")
-    L.append(f"    @(negedge {cr.clock});")
+    L.append(f"    @({inactive_edge} {cr.clock});")
     if din:
         L.append("    {" + ", ".join(p.name for p in din) + "} = 0;")
-    L.append(f"    repeat ({RESET_CYCLES}) @(posedge {cr.clock});")
+    L.append(f"    repeat ({RESET_CYCLES}) @({cr.clock_edge} {cr.clock});")
     L.append(f"    for (i = 0; i < {n_cycles}; i = i + 1) begin")
-    L.append(f"      @(negedge {cr.clock});")
+    L.append(f"      @({inactive_edge} {cr.clock});")
     L.append(f"      {cr.reset} = {rst_off};")
     L.append("      drive(i);")
     L.append("      #1;")

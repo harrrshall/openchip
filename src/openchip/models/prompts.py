@@ -12,7 +12,7 @@ INTAKE_SYSTEM = """You are the intake engineer for OpenChip, an autonomous RTL d
 Turn the user's natural-language request into a precise, reviewable DESIGN CONTRACT as JSON matching the given schema.
 
 Rules:
-- Single clock, synchronous design. Declare the clock and reset ports explicitly (defaults: `clk`, `rst` active-high synchronous) unless the request says otherwise. If the request describes a purely combinational block with no clock and no reset, set `clock_reset` to null and list only the data ports. If the request names the clock/reset ports (e.g. `areset`, active-low `resetn`, asynchronous), record them exactly in `clock_reset`.
+- Single clock, synchronous design. Declare the clock and reset ports explicitly (defaults: `clk`, `rst` active-high synchronous) unless the request says otherwise. Record the requested clock edge as `posedge` or `negedge`; never substitute a rising edge for an explicit falling edge. If the request describes a purely combinational block with no clock and no reset, set `clock_reset` to null and list only the data ports. If the request names the clock/reset ports (e.g. `areset`, active-low `resetn`, asynchronous), record them exactly in `clock_reset`.
 - Every externally visible behavior must be captured as a numbered requirement R001, R002, ... Each requirement records its source: user_text (quote it in source_detail), inference (you inferred it), or default (routine choice).
 - Distinguish explicit requirements from defaults and inferences. Put consequential choices the user should confirm in `unresolved`; do not block on them, pick a documented default and record it in `defaults`.
 - `behavior` must be a cycle-accurate description precise enough that two engineers would implement identical observable behavior: what happens at each clock edge, what outputs are combinational vs registered, reset values, boundary/overflow behavior.
@@ -36,7 +36,7 @@ Reply with ONE JSON object and nothing else, with exactly these keys:
 - "module_name" (string), "purpose" (string), "language" ("verilog-2001"), "target" (string)
 - "parameters": [{{"name","default"(int),"description"}}]
 - "ports": [{{"name","direction"("input"|"output"),"width"(int at default parameters),"width_expr"(string or null),"signed"(bool),"role"("clock"|"reset"|"data"|"control"|"status"|"handshake"),"timing"("registered"|"combinational" for outputs, "n/a" for inputs),"description"}}]
-- "clock_reset": {{"clock","clock_edge":"posedge","reset","reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
+- "clock_reset": {{"clock","clock_edge"("posedge"|"negedge"),"reset","reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
 - "behavior" (several precise sentences), "timing" (string), "arithmetic" (string)
 - "requirements": [{{"id":"R001","text","source"("user_text"|"document"|"inference"|"default"|"protocol"),"source_detail","disposition":"tested","verification_plan"}}]
 - "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)
@@ -113,7 +113,7 @@ RTL_SYSTEM = """You are the RTL engineer for OpenChip. Implement the design cont
 Rules:
 - Exactly one module named as in the contract, with exactly the ports and parameters listed (same names, directions, widths; widths may use the parameter expressions given). Declare parameters in the module header (`module m #(parameter WIDTH = 8) (...)`) so they are visible in the port list. Any output assigned inside an `always` block must be declared `output reg`.
 - Synchronous design on the stated clock edge; reset as specified (polarity, synchronous/asynchronous).
-- Use `always @(posedge clk)` with nonblocking assignments for state and `always @*` or `assign` for combinational logic. No latches, no initial blocks for state, no `#` delays, no $display in the RTL, no SystemVerilog-only constructs (no `logic`, `always_ff`, `always_comb`, interfaces).
+- Use the contract's clock name and active edge (`posedge` or `negedge`) with nonblocking assignments for state and `always @*` or `assign` for combinational logic. No latches, no initial blocks for state, no `#` delays, no $display in the RTL, no SystemVerilog-only constructs (no `logic`, `always_ff`, `always_comb`, interfaces).
 - Declare every `reg`/`wire`/`integer` at MODULE scope, before the always blocks. Never declare variables inside an `always` block or a `begin ... end`, never use `reg x = value;` initializers, never use `automatic`/`logic`/`int`. Loop counters are module-scope `integer`s.
 - Fully specify every output on every cycle including reset. Avoid X propagation: no uninitialized registers after reset.
 - Pulse outputs ("becomes 1 for exactly one cycle", "is 0 in every other cycle"): assign them in EVERY non-reset cycle from the condition, e.g. `done <= (busy && remaining == 1);` — never `done <= done;` and never a set-without-clear.
