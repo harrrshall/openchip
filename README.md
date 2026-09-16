@@ -23,6 +23,7 @@ Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
 [saturating event counter](examples/event_counter/README.md),
 [reloadable timer](examples/reloadable_timer/README.md),
 [serial programmable timer](examples/serial_timer/README.md),
+[reloadable countdown timer](examples/countdown_timer/README.md),
 [walking/falling/digging controller](examples/directional_controller/README.md),
 [continuous packet framer](examples/ps2_framer/README.md), and
 [counter with nonzero port indices](examples/range_counter/README.md), and its

@@ -1222,13 +1222,51 @@ class Runner:
     def _repair(self, contract: Contract, rp: Path, res: VerificationResult, attempt: int, request: str = ""):
         ctx = P.contract_context(contract, request)
         user = P.REPAIR_USER.format(request=ctx["request"], contract_json=ctx["contract_json"], rtl=rp.read_text(), evidence=res.evidence_for_model())
-        r = self._call("repair", P.REPAIR_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt)
-        if not r.ok:
+        events = self.store.events(self.run_id)
+        recovery_used = any(e["kind"] == "repair_output_recovery" and e.get("attempt") == attempt
+                            for e in events)
+        previous_repair = next((e for e in reversed(events) if e["kind"] == "repair"), {})
+        previous_call = next((e for e in reversed(events) if e["kind"] == "model_call"
+                              and e.get("role") in {"repair", "repair_output"}), {})
+        pending_length = (previous_repair.get("attempt") == attempt
+                          and previous_repair.get("has_code") is False
+                          and previous_call.get("finish") == "length")
+
+        def artifact(response):
+            code = extract_code(response.text, ("verilog", "systemverilog", "v", "sv")) if response.ok else None
+            if code and (f"module {contract.module_name}" not in code or "endmodule" not in code):
+                code = None
+            return code
+
+        r = None
+        code = None
+        if not (pending_length and not recovery_used):
+            r = self._call("repair", P.REPAIR_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt)
+            code = artifact(r)
+        if not code and not recovery_used and (pending_length or (r and r.ok and r.finish_reason == "length")):
+            saved = None
+            if r is not None:
+                saved = self.ws.dir("verification") / ("repair-truncated-" + uuid.uuid4().hex + ".txt")
+                saved.write_text(r.text)
+            self.store.event(self.run_id, "repair_output_recovery", {
+                "attempt": attempt, "reason": "output_limit_without_complete_module",
+                "recorded_failure": r is None, "response_path": str(saved) if saved else None,
+                "rtl_sha256": hashlib.sha256(rp.read_bytes()).hexdigest(),
+                "contract_digest": contract.digest()})
+            self.log("[repair] output limit left no complete module; requesting one concise artifact within the remaining budget")
+            concise = (P.REPAIR_SYSTEM + "\nThe previous response exhausted its output limit without a complete module. "
+                       "Return only one VERDICT line and the complete corrected Verilog block. "
+                       "Do not include a walkthrough, alternatives, or a restatement of the inputs. "
+                       "A reference dispute is still allowed; cite its requirement in one short line.")
+            r = self._call("repair_output", concise, user, seed=(self.cfg.model.seed or 0) + attempt + 71)
+            response_path = self.ws.dir("verification") / ("repair-recovery-" + uuid.uuid4().hex + ".txt")
+            response_path.write_text(r.text)
+            self.store.event(self.run_id, "repair_output_result", {"attempt": attempt,
+                             "response_path": str(response_path), "finish": r.finish_reason, "ok": r.ok})
+            code = artifact(r)
+        if r is None or not r.ok:
             return None, "rtl"
         verdict = "reference" if "VERDICT: reference" in r.text else "rtl"
-        code = extract_code(r.text, ("verilog", "systemverilog", "v", "sv"))
-        if code and f"module {contract.module_name}" not in code:
-            code = None
         self.store.event(self.run_id, "repair", {"attempt": attempt, "verdict": verdict, "has_code": bool(code)})
         return code, verdict
 
