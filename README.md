@@ -12,10 +12,15 @@ request → contract (JSON, versioned, requirement provenance)
         → reference model (Python, derived and reviewed without candidate RTL)
         → property checker (Verilog immediate assertions, optional)
         → RTL (Verilog-2001)
-        → lint · sim vs reference (3 seeds × 20000 cycles) · generic synth · BMC
+        → lint · sim vs reference (3 seeds × 20000 cycles) · generic synth · netlist replay · BMC
         → repair loop (bounded, every attempt kept) with independent reference cross-check
         → report.md + outcome.json (requirement-to-evidence index, hashes, tool/model manifest)
 ```
+When synthesis is enabled, OpenChip emits a generic netlist and replays the same
+reference vectors against that artifact before acceptance. Source and netlist
+results are recorded separately. This catches sampled behavioral divergence;
+it is not exhaustive equivalence or timing verification.
+
 Each reference is reviewed against the request and contract in its own context, without the candidate RTL or another generated reference. Drafts are retained. Reference disagreement still withholds sign-off; review and model agreement are not proofs.
 
 Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
@@ -25,7 +30,8 @@ Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
 [serial programmable timer](examples/serial_timer/README.md),
 [reloadable countdown timer](examples/countdown_timer/README.md),
 [walking/falling/digging controller](examples/directional_controller/README.md),
-[continuous packet framer](examples/ps2_framer/README.md), and
+[continuous packet framer](examples/ps2_framer/README.md),
+[sticky sequence detector](examples/sequence_detector/README.md), and
 [counter with nonzero port indices](examples/range_counter/README.md), and its
 [browser-revised subtraction variant](examples/range_down_counter/README.md). Each includes actual
 RTL, a separate runnable bench, provenance and the limits of its measurements.

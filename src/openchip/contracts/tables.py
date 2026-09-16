@@ -83,6 +83,42 @@ def parse_request_tables(request: str, *, include_external_mux: bool = False, in
     return out
 
 
+def request_table_port_bounds(request: str) -> dict:
+    """Bounds implied by a complete labelled table and literal input width.
+
+    This validates eligible contracts; it does not rewrite them or infer missing
+    labels. Explicit range declarations and revisions need their own authority.
+    """
+    result = {"ranges": {}, "ambiguities": [], "status": "not_applicable"}
+    if re.search(r"\n\nChange request \(v\d+\):|\[\s*-?\d+\s*:\s*-?\d+\s*\]", request):
+        return result
+    declarations = re.findall(r"(?m)^\s*-\s+input\s+([A-Za-z_]\w*)\s*\(\s*(\d+)\s+bits?\s*\)\s*$", request)
+    candidates: dict[str, set[tuple[int, int]]] = {}
+    for table in parse_request_tables(request):
+        if table.submodule_scope:
+            continue
+        for port, members in _port_groups(table.inputs):
+            widths = [int(width) for name, width in declarations if name == port]
+            if len(widths) != 1:
+                continue
+            bits = {v.bit for _, v in members}
+            if None in bits or len(bits) != len(members) or len(bits) != widths[0] or not bits:
+                continue
+            lower = min(bits)
+            if bits != set(range(lower, lower + widths[0])):
+                continue
+            candidates.setdefault(port, set()).add((lower, widths[0]))
+    for port, bounds in candidates.items():
+        if len(bounds) != 1:
+            result["ambiguities"].append(f"Public tables disagree about the complete input range of {port}.")
+        else:
+            lower, width = next(iter(bounds))
+            result["ranges"][port] = {"lsb": lower, "width": width}
+    if candidates:
+        result["status"] = "ambiguous" if result["ambiguities"] else "applicable"
+    return result
+
+
 def _port_groups(inputs: tuple[TableVar, ...]) -> list[tuple[str, tuple[tuple[int, TableVar], ...]]]:
     """`inputs` regrouped per port, ports in order of first appearance, bits descending.
 
@@ -101,25 +137,27 @@ def _port_groups(inputs: tuple[TableVar, ...]) -> list[tuple[str, tuple[tuple[in
 
 
 def _packed(members: tuple[tuple[int, TableVar], ...], values: tuple[int, ...]) -> int | None:
-    """The integer a port's bits form on a row, or None unless the table pins bits 0..n-1 once each.
+    """Pack a contiguous labelled slice, without inferring the full port bounds.
 
-    Bit k carries weight 2**k, which is how `verification/tablecheck.bind` builds the vector the
-    reference is evaluated on. Rendering and checking must not be able to disagree, so the two
-    decline on the same inputs: a repeated bit would silently OR two cells together here while
-    `bind` rejects it outright.
+    For [H:L], bit k carries weight 2**(k-L). The binder separately requires
+    the slice to cover the actual contract port. Gaps and repeated labels must
+    not silently invent bits or OR distinct cells into the same packed bit.
     """
     bits = {v.bit for _, v in members}
-    if None in bits or len(bits) != len(members) or bits != set(range(len(bits))):
+    if not bits or None in bits or len(bits) != len(members):
+        return None
+    lower = min(bits)
+    if bits != set(range(lower, lower + len(bits))):
         return None
     n = 0
     for i, v in members:
-        n |= (values[i] & 1) << (v.bit or 0)
+        n |= (values[i] & 1) << (v.bit - lower)
     return n
 
 
 def _slice_name(port: str, members: tuple[tuple[int, TableVar], ...]) -> str:
     """`x[3:0]` — the bits the table actually pins, which need not be the whole port."""
-    return f"{port}[{max(v.bit or 0 for _, v in members)}:0]"
+    return f"{port}[{max(v.bit or 0 for _, v in members)}:{min(v.bit or 0 for _, v in members)}]"
 
 
 def render_table(table: RequestTable) -> str:
@@ -163,8 +201,9 @@ def render_table(table: RequestTable) -> str:
                 summary.append(f"  {table.output.name} = {wanted} for {scope} values of {sliced}: "
                                f"{', '.join(str(n) for n in vals)}")
     if summary:
-        out.append("The function, stated as the values the input takes. Use this form; it is the same "
-                   "table as the rows below, already packed:")
+        out.append("The function, stated as packed values of the indicated input slice. Use this form; "
+                   "it is the same table as the rows below, already packed with the slice's lowest "
+                   "label at integer bit zero. This does not infer unlisted port bits:")
         out.extend(summary)
         out.append("The same cells one at a time, as evidence for the lines above — bits most "
                    "significant first, each row followed by the value it packs to:")

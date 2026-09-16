@@ -130,6 +130,17 @@ def check_reference_against_request_tables(
     bound = []
     for table in tables:
         b = bind(table, contract)
+        # A complete combinational table must not vanish from the acceptance
+        # gates merely because the generated contract chose different bit labels.
+        if (b is None and not table.submodule_scope and contract.combinational
+                and table.kind in {"kmap", "truth_table"}):
+            inputs = contract.inputs()
+            complete = ({v.port for v in table.inputs} == {p.name for p in inputs}
+                        and all(len([v for v in table.inputs if v.port == p.name]) == p.width
+                                for p in inputs))
+            if complete:
+                out.update(status="error", detail="The complete public combinational table cannot bind to the contract's input/output ports and bit labels. Correct the contract; this table cannot be skipped.")
+                return out
         if b is None and table.kind == "one_hot_state_table":
             out.update(status="error", detail="Contract ports or timing cannot represent the explicit combinational one-hot state table.")
             return out

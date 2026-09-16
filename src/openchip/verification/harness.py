@@ -260,25 +260,29 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
 
     # 4. simulate per seed
     res.stage = "simulate"
-    all_pass = True
-    for seed in seeds:
-        sim = iverilog.simulate("sim.vvp", work, tcfg.vvp, tcfg.timeout_s,
-                                plusargs=[f"+vin=vectors_in_{seed}.hex", f"+vexp=vectors_exp_{seed}.hex"])
-        sr = parse_sim(sim, seed, cycles, vectors[seed])
-        sr.sampling = ("Sampling: combinational outputs are compared after current inputs settle."
-                       if contract.combinational else
-                       "Sampling: outputs are compared BEFORE the active clock edge, after current inputs settle. "
-                       "State reflects preceding cycles' inputs; current inputs affect the upcoming edge. "
-                       "Combinational outputs may respond immediately to current inputs.")
-        if contract.clock_reset and contract.clock_reset.reset is None:
-            sequence = contract.clock_reset.conditioning
-            startup = f"{len(sequence)} declared input-conditioning edges" if sequence else "three zero-data conditioning edges"
-            sr.sampling += f" No reset: comparison begins after {startup}; DUT startup state is not initialized and X/Z still fails."
-        res.sims.append(asdict(sr))
-        (work / f"sim_{seed}.log").write_text(sim.stdout + sim.stderr)
-        if sr.status != "pass":
-            all_pass = False
-    if not all_pass:
+    sampling = ("Sampling: combinational outputs are compared after current inputs settle."
+                if contract.combinational else
+                "Sampling: outputs are compared BEFORE the active clock edge, after current inputs settle. "
+                "State reflects preceding cycles' inputs; current inputs affect the upcoming edge. "
+                "Combinational outputs may respond immediately to current inputs.")
+    if contract.clock_reset and contract.clock_reset.reset is None:
+        sequence = contract.clock_reset.conditioning
+        startup = f"{len(sequence)} declared input-conditioning edges" if sequence else "three zero-data conditioning edges"
+        sampling += f" No reset: comparison begins after {startup}; DUT startup state is not initialized and X/Z still fails."
+
+    def simulate_seeds(executable: str, log_prefix: str) -> list[dict]:
+        results = []
+        for seed in seeds:
+            sim = iverilog.simulate(executable, work, tcfg.vvp, tcfg.timeout_s,
+                                   plusargs=[f"+vin=vectors_in_{seed}.hex", f"+vexp=vectors_exp_{seed}.hex"])
+            result = parse_sim(sim, seed, cycles, vectors[seed])
+            result.sampling = sampling
+            results.append(asdict(result))
+            (work / f"{log_prefix}_{seed}.log").write_text(sim.stdout + sim.stderr)
+        return results
+
+    res.sims = simulate_seeds("sim.vvp", "sim")
+    if any(s["status"] != "pass" for s in res.sims):
         res.summary = "simulation mismatches against reference model"
         return res
 
@@ -302,13 +306,7 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
             res.summary = "synthesized netlist compile failed"
             return res
         res.stage = "netlist_simulate"
-        for seed in seeds:
-            ns = iverilog.simulate("netlist.vvp", work, tcfg.vvp, tcfg.timeout_s,
-                                  plusargs=[f"+vin=vectors_in_{seed}.hex", f"+vexp=vectors_exp_{seed}.hex"])
-            measured = parse_sim(ns, seed, cycles, vectors[seed])
-            measured.sampling = res.sims[seeds.index(seed)]["sampling"]
-            res.netlist_sims.append(asdict(measured))
-            (work / f"netlist_sim_{seed}.log").write_text(ns.stdout + ns.stderr)
+        res.netlist_sims = simulate_seeds("netlist.vvp", "netlist_sim")
         if any(s["status"] != "pass" for s in res.netlist_sims):
             res.summary = "synthesized netlist mismatches against reference model"
             return res
@@ -322,8 +320,6 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         res.stage = "formal"
         fr = run_formal(contract, rtl_path, props_path, work / "formal", tcfg.sby, cfg.verification.formal_depth, cfg.verification.formal_timeout_s, yosys=tcfg.yosys)
         res.formal = _tr(fr)
-        res.artifacts["properties"] = str(props_path)
-        res.artifacts["properties_sha256"] = sha256_file(props_path)
         st = fr.extra.get("status")
         formal_note = f"; formal BMC depth {cfg.verification.formal_depth}: {st}"
         if st == "counterexample":

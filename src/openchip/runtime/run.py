@@ -31,7 +31,7 @@ from ..verification.clockcheck import check_clock
 from ..verification.cellularformal import cellular_properties
 from ..verification.lfsrcheck import check_lfsr, lfsr_properties, lfsr_contract, lfsr_contract_matches, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
-from ..contracts.tables import parse_request_tables, render_table
+from ..contracts.tables import parse_request_tables, render_table, request_table_port_bounds
 from ..verification.guards import acceptance_guards, contract_guards
 from ..verification.tablecheck import CHECKER_VERSION, check_reference_against_request_tables
 from ..verification.normalize import normalize_rtl
@@ -39,7 +39,6 @@ from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
 from .workspace import Workspace
 
-STEPS = ("intake", "review", "reference", "properties", "rtl", "verify", "report", "done")
 
 
 # Roles for which thinking hit the token cap in this process: shared across runs (an eval suite runs many
@@ -330,11 +329,15 @@ class Runner:
             if errors:
                 user += "\n\nYour previous contract was rejected by the validator:\n" + errors[-1] + "\nFix these problems."
             r = self._call("intake", P.INTAKE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt)
+            response_path = self.ws.dir("spec") / f"intake-response-{uuid.uuid4().hex}.txt"
+            response_path.write_text(r.text)
+            self._save("intake_response", response_path, "intake")
             data = extract_json(r.text) if r.ok else None
             if data is None:
                 errors.append("reply was not a JSON object" if r.ok else r.error)
                 continue
-            data, coerce_notes = coerce_contract(data, request, enforce_module_name=True)
+            data, coerce_notes = coerce_contract(data, request, enforce_module_name=True,
+                                                enforce_table_bounds=not docs.strip())
             if coerce_notes:
                 self.store.event(self.run_id, "contract_coerced", {"attempt": attempt, "notes": coerce_notes})
                 ck["coerce_notes"] = coerce_notes
@@ -354,6 +357,21 @@ class Runner:
                 errors.append(str(e)[:2000])
                 self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": str(e)[:2000]})
                 continue
+            if not docs.strip():
+                bounds = request_table_port_bounds(request)
+                self.store.event(self.run_id, "table_port_bounds", {"attempt": attempt, **bounds})
+                range_errors = list(bounds["ambiguities"])
+                for name, expected in bounds["ranges"].items():
+                    port = next((p for p in contract.ports if p.name == name), None)
+                    if (port is None or port.direction != "input" or
+                            port.width != expected["width"] or port.lsb != expected["lsb"]):
+                        low, width = expected["lsb"], expected["width"]
+                        range_errors.append(f"The public table names every bit of the declared {width}-bit input {name}, from {name}[{low}] through {name}[{low+width-1}]. Preserve input {name}[{low+width-1}:{low}] with width={width}, lsb={low}; do not wrap or relabel these bits. Correct the contract and its behavior consistently.")
+                if range_errors:
+                    msg = " ".join(range_errors)
+                    errors.append(msg)
+                    self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": msg})
+                    continue
             missing = set(_request_parameters(request)) - {p.name for p in contract.parameters}
             if missing:
                 msg = f"the request names parameter(s) {sorted(missing)} but the contract does not declare them; declare each with the requested default and use width_expr for ports that depend on them"

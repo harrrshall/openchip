@@ -10,7 +10,6 @@ false acceptances are visible. Every attempt and failure is counted; denominator
 from __future__ import annotations
 
 import json
-import shutil
 import time
 from pathlib import Path
 from typing import Optional

@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, urlparse, unquote
 from .presentation import result_summary, stage_durations, contract_diff
 
 from ..reporting.integrity import workspace_outcome, integrity_warning
-from ..config import Config, ModelConfig
+from ..config import Config
 from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, resolve_api_key, write_keys_file
 from ..runtime.run import Runner
 from ..runtime.store import RunStore
@@ -65,59 +65,50 @@ class UIState:
     def save_settings(self, data: dict) -> dict:
         # One Settings transaction includes the provider identity and saved key.
         with self.lock:
-            return self._save_settings(data)
-
-    def _save_settings(self, data: dict) -> dict:
-        provider = data.get("provider") or self.settings.get("provider") or "openai-compatible"
-        if provider not in PROVIDER_DEFAULTS:
-            raise ValueError("unknown provider")
-        rate = data.get("usd_per_million_tokens", self.settings.get("usd_per_million_tokens"))
-        rate = None if rate in (None, "") else float(rate)
-        if rate is not None and (not math.isfinite(rate) or rate < 0):
-            raise ValueError("Enter a nonnegative finite token rate.")
-        self.settings = {"provider": provider, "model": (data.get("model") or self.settings.get("model") or "").strip(),
-                         "base_url": (data.get("base_url") or "").strip() or PROVIDER_DEFAULTS[provider]["base_url"]}
-        self.settings["usd_per_million_tokens"] = rate
-        UI_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-        UI_SETTINGS.write_text(json.dumps(self.settings, indent=1))
-        key = (data.get("api_key") or "").strip()
-        if key:
-            write_keys_file({PROVIDER_DEFAULTS[provider]["key_env"]: key})
-        return self.public_settings()
+            provider = data.get("provider") or self.settings.get("provider") or "openai-compatible"
+            if provider not in PROVIDER_DEFAULTS:
+                raise ValueError("unknown provider")
+            rate = data.get("usd_per_million_tokens", self.settings.get("usd_per_million_tokens"))
+            rate = None if rate in (None, "") else float(rate)
+            if rate is not None and (not math.isfinite(rate) or rate < 0):
+                raise ValueError("Enter a nonnegative finite token rate.")
+            self.settings = {"provider": provider, "model": (data.get("model") or self.settings.get("model") or "").strip(),
+                             "base_url": (data.get("base_url") or "").strip() or PROVIDER_DEFAULTS[provider]["base_url"]}
+            self.settings["usd_per_million_tokens"] = rate
+            UI_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+            UI_SETTINGS.write_text(json.dumps(self.settings, indent=1))
+            key = (data.get("api_key") or "").strip()
+            if key:
+                write_keys_file({PROVIDER_DEFAULTS[provider]["key_env"]: key})
+            return self.public_settings()
 
     def public_settings(self) -> dict:
         with self.lock:
-            return self._public_settings()
-
-    def _public_settings(self) -> dict:
-        provider = self.settings.get("provider", "openai-compatible")
-        env = PROVIDER_DEFAULTS[provider]["key_env"]
-        key = resolve_api_key(self.config().model)
-        if key == "EMPTY":
-            key = ""
-        return {**self.settings, "key_env": env, "key_present": bool(key), "key_hint": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("set" if key else ""),
-                "presets": PRESETS.get(provider, [])}
+            provider = self.settings.get("provider", "openai-compatible")
+            env = PROVIDER_DEFAULTS[provider]["key_env"]
+            key = resolve_api_key(self.config().model)
+            if key == "EMPTY":
+                key = ""
+            return {**self.settings, "key_env": env, "key_present": bool(key), "key_hint": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("set" if key else ""),
+                    "presets": PRESETS.get(provider, [])}
 
     def config(self) -> Config:
         with self.lock:
-            return self._config()
-
-    def _config(self) -> Config:
-        cfg = Config.load()
-        m = cfg.model
-        identity = (m.provider, m.model, m.base_url)
-        m.provider = self.settings.get("provider", m.provider)  # type: ignore[assignment]
-        m.model = self.settings.get("model") or m.model
-        m.base_url = self.settings.get("base_url") or PROVIDER_DEFAULTS[m.provider]["base_url"]
-        m.api_key_env = PROVIDER_DEFAULTS[m.provider]["key_env"]
-        if identity != (m.provider, m.model, m.base_url):
-            m.revision = "unknown"
-        if m.provider != "openai-compatible":
-            m.thinking = False
-            m.thinking_roles = []
+            cfg = Config.load()
+            m = cfg.model
+            identity = (m.provider, m.model, m.base_url)
+            m.provider = self.settings.get("provider", m.provider)  # type: ignore[assignment]
+            m.model = self.settings.get("model") or m.model
+            m.base_url = self.settings.get("base_url") or PROVIDER_DEFAULTS[m.provider]["base_url"]
+            m.api_key_env = PROVIDER_DEFAULTS[m.provider]["key_env"]
             if identity != (m.provider, m.model, m.base_url):
-                m.extra_body = {}
-        return cfg
+                m.revision = "unknown"
+            if m.provider != "openai-compatible":
+                m.thinking = False
+                m.thinking_roles = []
+                if identity != (m.provider, m.model, m.base_url):
+                    m.extra_body = {}
+            return cfg
 
     # -- toolchain / connectivity ------------------------------------------------------------
     def doctor(self) -> dict:

@@ -24,7 +24,8 @@ def requested_module_name(request: str) -> str | None:
     return next(iter(names)) if len(names) == 1 else None
 
 
-def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_name: bool = False) -> tuple[dict[str, Any], list[str]]:
+def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_name: bool = False,
+                    enforce_table_bounds: bool = False) -> tuple[dict[str, Any], list[str]]:
     notes: list[str] = []
     d = dict(data)
     named = requested_module_name(request) if enforce_module_name else None
@@ -59,6 +60,12 @@ def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_n
             cr["reset_kind"] = "synchronous"
         d["clock_reset"] = cr
     # ports
+    table_bounds = {}
+    if enforce_table_bounds:
+        from .tables import request_table_port_bounds
+        bounds = request_table_port_bounds(request)
+        if not bounds["ambiguities"]:
+            table_bounds = bounds["ranges"]
     ports = []
     for p in d.get("ports", []) or []:
         if not isinstance(p, dict):
@@ -74,6 +81,13 @@ def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_n
                     q["width_expr"] = w.strip()
                 q["width"] = int(m.group())
         q.setdefault("description", "")
+        bound = table_bounds.get(q.get("name"))
+        if (bound and q["direction"] == "input" and q.get("width") == bound["width"]
+                and not q.get("width_expr") and q.get("lsb", 0) != bound["lsb"]):
+            old = q.get("lsb", 0)
+            q["lsb"] = bound["lsb"]
+            low, width = bound["lsb"], bound["width"]
+            notes.append(f"{q['name']}.lsb restored from {old} to {low}: the literal {width}-bit input and complete public table labels {q['name']}[{low}] through {q['name']}[{low+width-1}] require [{low+width-1}:{low}]. Review all behavior with these labels; no truth rows or equations were changed.")
         if q["direction"] == "input":
             q["timing"] = "n/a"
         elif q.get("timing") not in ("registered", "combinational"):
