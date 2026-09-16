@@ -1,7 +1,7 @@
 """Deterministic acceptance guards derived from the false-acceptance analysis (docs/research).
 
-Each guard is a cheap check of the contract against the RTL text or the request. They fire only on
-contradictions that were observed to have zero false alarms across ten models' agent runs:
+Each guard checks a bounded syntactic condition in a contract or RTL. These
+heuristics are not proofs of contradiction or semantic uncertainty:
   - contract says asynchronous reset but the RTL has no reset in any sensitivity list
   - the request is combinational (contract has no clock) but the RTL is clocked
   - contract says active-low reset but the RTL never tests the reset low
@@ -66,6 +66,23 @@ def acceptance_guards(contract: Contract, rtl: str) -> list[Finding]:
 
 def contract_guards(contract: Contract) -> list[Finding]:
     out: list[Finding] = []
-    if LEAK_RE.search(contract.behavior):
+    # A declared state named WAIT is ordinary design vocabulary, not an aside.
+    # Exempt only an explicit reference to that declared identifier; continue
+    # scanning so "In WAIT, I think ..." still records uncertainty.
+    states = set()
+    for declaration in re.finditer(r"\bstates?\s*:\s*([^.;\n]+)", contract.behavior, re.I):
+        for entry in declaration[1].split(","):
+            name = re.match(r"\s*[`\"']?([A-Za-z_][A-Za-z0-9_]*)", entry)
+            if name:
+                states.add(name[1])
+    leaks = []
+    for match in LEAK_RE.finditer(contract.behavior):
+        identifier = match[0].removesuffix(",")
+        prefix = contract.behavior[max(0, match.start() - 64):match.start()]
+        state_reference = (identifier.lower() == "wait" and identifier in states and
+                           re.search(r"\b(?:in|from|to|state)\s+[`\"']?$", prefix, re.I))
+        if not state_reference:
+            leaks.append(match)
+    if leaks:
         out.append(Finding("contract", "behavior_leak", "The behavior text contains reasoning fragments (e.g. 'Wait,' / '???'); the intake was unsure — the contract needs the user's confirmation."))
     return out
