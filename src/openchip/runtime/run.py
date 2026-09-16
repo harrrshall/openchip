@@ -61,9 +61,15 @@ class Budget:
     max_repair_iterations: int
     started: float = field(default_factory=time.time)
 
-    def check(self, adapter: ModelAdapter) -> None:
-        if time.time() - self.started > self.wall_time_s:
+    def remaining_s(self) -> float:
+        return max(0.0, self.wall_time_s - (time.time() - self.started))
+
+    def check_time(self) -> None:
+        if self.remaining_s() <= 0:
             raise BudgetExhausted(f"wall time {self.wall_time_s:.0f}s exceeded")
+
+    def check(self, adapter: ModelAdapter) -> None:
+        self.check_time()
         if adapter.usage.calls >= self.max_model_calls:
             raise BudgetExhausted(f"model call limit {self.max_model_calls} reached")
         if adapter.usage.total_tokens >= self.max_total_tokens:
@@ -261,21 +267,25 @@ class Runner:
         tr = mcfg.thinking_roles
         think = (mcfg.thinking if tr is None else (role in tr)) and f"{adapter.cfg.model}:{role}" not in self._no_think_roles
         msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=think)
+        r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=think,
+                         timeout_s=self.budget.remaining_s())
         tag = "" if adapter is self.adapter else f" [{adapter.cfg.model}]"
         self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
                                                      "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think, "model": adapter.cfg.model})
         self.log(f"[model:{role}]{tag} {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok)" + (f" ERROR {r.error}" if r.error else ""))
+        self.budget.check_time()
         if think and r.finish_reason == "length":
             # Reasoning consumed the token budget (any answer is truncated): retry without thinking, and stop
             # using thinking for this role for the rest of the run — this model cannot finish within the cap.
             self._no_think_roles.add(f"{adapter.cfg.model}:{role}")
             self.budget.check(self.adapter)
             self.log(f"[model:{role}]{tag} thinking hit the token cap; retrying without thinking (and for the rest of this run)")
-            r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False)
+            r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False,
+                             timeout_s=self.budget.remaining_s())
             self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
                                                          "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": False, "fallback": True})
             self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok) [no-thinking fallback]")
+            self.budget.check_time()
         return r
 
     def _normalize(self, code: str, step: str) -> str:

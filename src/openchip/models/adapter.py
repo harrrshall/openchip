@@ -14,6 +14,7 @@ Keys are never logged. Resolution order: the configured env var, the provider's 
 from __future__ import annotations
 
 import json
+import asyncio
 import os
 import re
 import shlex
@@ -198,13 +199,14 @@ class ModelAdapter:
     # -- generation ----------------------------------------------------------------------
     def chat(self, messages: list[dict], role: str = "generic", json_schema: Optional[dict] = None,
              max_tokens: Optional[int] = None, temperature: Optional[float] = None, seed: Optional[int] = None,
-             thinking: Optional[bool] = None) -> ModelResponse:
+             thinking: Optional[bool] = None, timeout_s: Optional[float] = None) -> ModelResponse:
         t0 = time.monotonic()
+        deadline = None if timeout_s is None else t0 + max(0.0, timeout_s)
         try:
             if self.provider == "anthropic":
-                resp = self._chat_anthropic(messages, json_schema, max_tokens, temperature)
+                resp = self._chat_anthropic(messages, json_schema, max_tokens, temperature, deadline)
             else:
-                resp = self._chat_openai(messages, json_schema, max_tokens, temperature, seed, thinking)
+                resp = self._chat_openai(messages, json_schema, max_tokens, temperature, seed, thinking, deadline)
             resp.latency_s = time.monotonic() - t0
         except Exception as e:  # noqa: BLE001
             detail = f"{type(e).__name__}: {e}"
@@ -222,7 +224,26 @@ class ModelAdapter:
         self.usage.add(role, resp)
         return resp
 
-    def _chat_openai(self, messages, json_schema, max_tokens, temperature, seed, thinking) -> ModelResponse:
+    def _post(self, path: str, body: dict, deadline: Optional[float]) -> httpx.Response:
+        if deadline is None:
+            return self.client.post(path, json=body)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Model request exhausted its remaining run budget")
+
+        async def request():
+            # Cancel the entire transfer, including a trickling body. Per-read
+            # socket timeouts alone do not bound elapsed request time.
+            async with httpx.AsyncClient(base_url=self.base_url, headers=self.client.headers,
+                                         timeout=self.cfg.timeout_s) as client:
+                return await client.post(path, json=body)
+
+        async def bounded():
+            return await asyncio.wait_for(request(), timeout=remaining)
+
+        return asyncio.run(bounded())
+
+    def _chat_openai(self, messages, json_schema, max_tokens, temperature, seed, thinking, deadline=None) -> ModelResponse:
         body: dict[str, Any] = {
             "model": self.cfg.model,
             "messages": messages,
@@ -244,12 +265,12 @@ class ModelAdapter:
             body.update({k: v for k, v in self.cfg.extra_body.items() if k in ("reasoning_effort",)})
         if json_schema is not None:
             body["response_format"] = {"type": "json_schema", "json_schema": {"name": "out", "schema": json_schema}}
-        r = self.client.post("/chat/completions", json=body)
+        r = self._post("/chat/completions", body, deadline)
         if r.status_code >= 400 and json_schema is not None and self.provider in ("openrouter", "openai"):
             # Some routed models reject json_schema: retry without it and let the caller parse JSON from text.
             body.pop("response_format", None)
             body["messages"] = messages[:-1] + [{**messages[-1], "content": messages[-1]["content"] + "\n\nReply with a single JSON object only."}]
-            r = self.client.post("/chat/completions", json=body)
+            r = self._post("/chat/completions", body, deadline)
         r.raise_for_status()
         data = r.json()
         choice = data["choices"][0]
@@ -266,7 +287,7 @@ class ModelAdapter:
                              prompt_tokens=usage.get("prompt_tokens", 0) or 0, completion_tokens=usage.get("completion_tokens", 0) or 0,
                              latency_s=0.0, model=data.get("model", self.cfg.model), raw_id=data.get("id", ""))
 
-    def _chat_anthropic(self, messages, json_schema, max_tokens, temperature) -> ModelResponse:
+    def _chat_anthropic(self, messages, json_schema, max_tokens, temperature, deadline=None) -> ModelResponse:
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
         convo = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
         body: dict[str, Any] = {
@@ -280,7 +301,7 @@ class ModelAdapter:
         if json_schema is not None:
             body["tools"] = [{"name": "emit", "description": "Return the requested object.", "input_schema": json_schema}]
             body["tool_choice"] = {"type": "tool", "name": "emit"}
-        r = self.client.post("/v1/messages", json=body)
+        r = self._post("/v1/messages", body, deadline)
         r.raise_for_status()
         data = r.json()
         text_parts, tool_json, reasoning = [], None, ""
