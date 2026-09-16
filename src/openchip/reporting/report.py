@@ -45,7 +45,7 @@ def consensus_confidence(ck: dict) -> str:
 NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority_alt1"})
 
 
-def sign_off_withheld(ck: dict) -> str:
+def sign_off_withheld(ck: dict, evidence: dict | None = None) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
     Independent acceptance gates beyond agreement between generated RTL and references:
@@ -53,6 +53,7 @@ def sign_off_withheld(ck: dict) -> str:
       - the reference contradicts a table printed in the request, which is ground truth that
         never passed through the model (docs/decisions/0010-request-tables.md).
       - a recognized standard-clock request lacks a passing independent RTL check.
+      - a formal counterexample leaves a contradiction requiring review.
     """
     reasons: list[str] = []
     c = ck.get("consensus") or {}
@@ -71,6 +72,8 @@ def sign_off_withheld(ck: dict) -> str:
     clock = ck.get("clock_check") or {}
     if requires_clock_check(ck.get("request", "")) and clock.get("status") != "ok":
         reasons.append("the independent standard-clock check did not pass: " + (clock.get("detail") or "check not completed"))
+    if ((evidence or {}).get("formal") or {}).get("status") == "counterexample":
+        reasons.append("formal checking found a counterexample; the RTL or property checker requires review")
     return "; ".join(reasons)
 
 
@@ -80,7 +83,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     contract = Contract.model_validate_json(Path(ck["contract_path"]).read_text()) if ck.get("contract_path") else None
     evidence = json.loads(Path(ck["last_evidence"]).read_text()) if ck.get("last_evidence") and Path(ck["last_evidence"]).is_file() else None
     accepted = bool(evidence and evidence.get("accepted"))
-    withheld = sign_off_withheld(ck) if accepted else ""
+    withheld = sign_off_withheld(ck, evidence) if accepted else ""
     if withheld:
         accepted = False
     history = ck.get("history", [])

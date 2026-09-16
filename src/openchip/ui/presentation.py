@@ -14,7 +14,8 @@ def result_summary(outcome: dict, state: str | None) -> dict:
     clock = outcome.get("clock_check") or {}
     clock_failed = clock.get("status") in {"mismatch", "error"}
     table_failed = (outcome.get("request_table_check") or {}).get("status") in {"mismatch", "error"}
-    if (provisional or withheld) and not questions and not clock_failed and not table_failed:
+    formal_failed = formal.get("status") == "counterexample"
+    if (provisional or withheld) and not questions and not clock_failed and not table_failed and not formal_failed:
         questions = ["The independent references disagree or lack corroboration. Please clarify the intended behavior, including timing and priority when inputs coincide."]
     if state in {"running", "planned", "created"}:
         sentence = "Building and checking your design"
@@ -22,6 +23,8 @@ def result_summary(outcome: dict, state: str | None) -> dict:
         sentence = "Independent clock verification failed; sign-off withheld"
     elif table_failed:
         sentence = "Request-table verification failed; sign-off withheld"
+    elif formal_failed:
+        sentence = "Formal counterexample needs review; sign-off withheld"
     elif questions:
         sentence = f"Needs your answer on {len(questions)} question{'s' if len(questions) != 1 else ''}"
     elif state == "completed" and outcome.get("accepted") and not provisional and not withheld:
@@ -38,7 +41,7 @@ def result_summary(outcome: dict, state: str | None) -> dict:
     return {"sentence": sentence, "questions": questions,
             "formal": {"status": formal.get("status", "not_run"),
                        "required": required,
-                       "informational": required is False}}
+                       "informational": required is False and not formal_failed}}
 
 
 def stage_durations(events: list[dict], end: float) -> list[dict]:

@@ -273,6 +273,9 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         res.artifacts["properties_sha256"] = sha256_file(props_path)
         st = fr.extra.get("status")
         formal_note = f"; formal BMC depth {cfg.verification.formal_depth}: {st}"
+        if st == "counterexample":
+            res.summary = "formal counterexample requires review of the RTL or property checker"
+            return res
         if cfg.verification.require_formal and (st != "bounded_pass" or not fr.ok):
             res.summary = f"required formal verification failed: {st}"
             return res

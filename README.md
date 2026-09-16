@@ -51,7 +51,9 @@ Generated RTL is restricted to clocked reset logic and synthesizable data-path
 constructs. Simulator control, file/system tasks, initial blocks and cross-hierarchy
 references are rejected after preprocessing. Value functions such as `$clog2`
 remain supported. If formal checking is required, missing or failed formal
-evidence blocks acceptance.
+evidence blocks acceptance. A recorded formal counterexample always withholds
+sign-off pending review of the RTL or property checker, even for optional formal
+checking. Timeouts and skipped checks are never described as formal passes.
 
 Single-clock designs may use a rising or falling active edge, with an explicit
 reset. Simulation and formal reset sequencing follow that edge. Dual-edge logic,
