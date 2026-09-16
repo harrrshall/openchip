@@ -279,7 +279,7 @@ class UIState:
 
     def deliverable_files(self, name: str) -> list[str]:
         root = self.workspace_path(name)
-        return sorted(str(p.relative_to(root)) for folder in ("rtl", "spec", "reports", "verification", "reference", "properties")
+        return sorted(str(p.relative_to(root)) for folder in ("rtl", "spec", "reports", "verification", "reference", "properties", "retained")
                       for p in (root / folder).rglob("*")
                       if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)
                       and p.suffix in {".v", ".sv", ".md", ".json", ".txt", ".log", ".py", ".sby", ".ys", ".vcd"})
