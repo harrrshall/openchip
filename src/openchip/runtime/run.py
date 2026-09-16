@@ -28,8 +28,8 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.clockcheck import check_clock
-from ..verification.cellularformal import cellular_properties
-from ..verification.lfsrcheck import check_lfsr, lfsr_properties, lfsr_contract, lfsr_contract_matches, VERSION as LFSR_CHECK_VERSION
+from ..verification.request_properties import request_properties
+from ..verification.lfsrcheck import check_lfsr, lfsr_contract, lfsr_contract_matches, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table, request_table_port_bounds
 from ..verification.guards import acceptance_guards, contract_guards
@@ -832,31 +832,7 @@ class Runner:
         """Use a full transition checker when the request specifies its semantics."""
         if not self.cfg.verification.run_formal:
             return None
-        code = lfsr_properties(contract, ck.get("request", ""))
-        origin = "request-derived Galois transitions"
-        if code is None:
-            code = cellular_properties(contract, ck.get("request", ""))
-            origin = "request-derived cell-transition table"
-        if code is None:
-            from ..verification.directionalformal import directional_properties
-            code = directional_properties(contract, ck.get("request", ""))
-            if code:
-                origin = "request-derived directional transitions"
-        if code is None:
-            from ..verification.packetformal import packet_properties
-            code = packet_properties(contract, ck.get("request", ""))
-            if code:
-                origin = "request-derived packet framing"
-        if code is None:
-            from ..verification.mooreformal import moore_properties
-            code = moore_properties(contract, ck.get("request", ""))
-            if code:
-                origin = "request-derived Moore transition table"
-        if code is None:
-            from ..verification.hdlcformal import hdlc_properties
-            code = hdlc_properties(contract, ck.get("request", ""))
-            if code:
-                origin = "request-derived HDLC framing"
+        code, origin = request_properties(contract, ck.get("request", ""))
         if code is None:
             return None
         vdir = self.ws.dir("verification")

@@ -219,7 +219,8 @@ def cmd_verify(args) -> int:
     from ..verification.harness import verify
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
-    from ..verification.lfsrcheck import check_lfsr, lfsr_properties
+    from ..verification.lfsrcheck import check_lfsr
+    from ..verification.request_properties import request_properties
     from ..verification.history import prior_simulation_failures, prior_formal_failures
     from ..reporting.report import sign_off_withheld
 
@@ -248,33 +249,8 @@ def cmd_verify(args) -> int:
         finally:
             db.close()
     props = ws.dir("verification") / f"{contract.module_name}_props.v"
-    from ..verification.cellularformal import cellular_properties
-    trusted_props = lfsr_properties(contract, ck["request"]) if cfg.verification.run_formal else None
-    properties_origin = "request-derived Galois transitions" if trusted_props else "existing checker"
-    if trusted_props is None and cfg.verification.run_formal:
-        trusted_props = cellular_properties(contract, ck["request"])
-        if trusted_props:
-            properties_origin = "request-derived cell-transition table"
-    if trusted_props is None and cfg.verification.run_formal:
-        from ..verification.directionalformal import directional_properties
-        trusted_props = directional_properties(contract, ck["request"])
-        if trusted_props:
-            properties_origin = "request-derived directional transitions"
-    if trusted_props is None and cfg.verification.run_formal:
-        from ..verification.packetformal import packet_properties
-        trusted_props = packet_properties(contract, ck["request"])
-        if trusted_props:
-            properties_origin = "request-derived packet framing"
-    if trusted_props is None and cfg.verification.run_formal:
-        from ..verification.mooreformal import moore_properties
-        trusted_props = moore_properties(contract, ck["request"])
-        if trusted_props:
-            properties_origin = "request-derived Moore transition table"
-    if trusted_props is None and cfg.verification.run_formal:
-        from ..verification.hdlcformal import hdlc_properties
-        trusted_props = hdlc_properties(contract, ck["request"])
-        if trusted_props:
-            properties_origin = "request-derived HDLC framing"
+    trusted_props, properties_origin = (request_properties(contract, ck["request"])
+                                        if cfg.verification.run_formal else (None, "existing checker"))
     if trusted_props is not None:
         props = work / f"{contract.module_name}_props.v"
         props.write_text(trusted_props)
