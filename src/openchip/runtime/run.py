@@ -856,6 +856,11 @@ class Runner:
             if code:
                 origin = "request-derived Moore transition table"
         if code is None:
+            from ..verification.hdlcformal import hdlc_properties
+            code = hdlc_properties(contract, ck.get("request", ""))
+            if code:
+                origin = "request-derived HDLC framing"
+        if code is None:
             return None
         vdir = self.ws.dir("verification")
         pp = vdir / f"{contract.module_name}_props.v"

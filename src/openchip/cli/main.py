@@ -270,6 +270,11 @@ def cmd_verify(args) -> int:
         trusted_props = moore_properties(contract, ck["request"])
         if trusted_props:
             properties_origin = "request-derived Moore transition table"
+    if trusted_props is None and cfg.verification.run_formal:
+        from ..verification.hdlcformal import hdlc_properties
+        trusted_props = hdlc_properties(contract, ck["request"])
+        if trusted_props:
+            properties_origin = "request-derived HDLC framing"
     if trusted_props is not None:
         props = work / f"{contract.module_name}_props.v"
         props.write_text(trusted_props)

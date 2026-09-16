@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-moore"
+CHECKER_VERSION = "request-tables-20260916-hdlc"
 
 
 @dataclass
@@ -115,6 +115,10 @@ def check_reference_against_request_tables(
         moore = check_moore(contract, request, reference_py, work, timeout_s, python)
         if moore is not None:
             return {**out, **moore}
+        from .hdlccheck import check_hdlc
+        hdlc = check_hdlc(contract, request, reference_py, work, timeout_s, python)
+        if hdlc is not None:
+            return {**out, **hdlc}
         tables = parse_request_tables(request, include_external_mux=True, include_state_graphs=True)
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
