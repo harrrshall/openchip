@@ -669,7 +669,7 @@ class Runner:
         self.store.checkpoint(self.run_id, "properties" if not ck.get("properties_done") else "rtl", ck)
         return ck
 
-    def _reference_consensus(self, ck: dict, contract: Contract, rp: Path, ref: Path, res: VerificationResult) -> tuple[dict, Path, bool]:
+    def _reference_consensus(self, ck: dict, contract: Contract, rp: Path, ref: Path) -> tuple[dict, Path, bool]:
         """On the first RTL-vs-reference disagreement, derive a second independent reference and arbitrate.
 
         Returns (ck, adopted_reference_path, rtl_corroborated). Three outcomes:
@@ -1150,15 +1150,13 @@ class Runner:
                     raise Stalled("reference model failed twice; cannot verify")
                 self.log("[verify] reference model failed at full length; regenerating reference once")
                 ck["reference_feedback"] = "The previous reference model crashed during simulation: " + res.reference_error[:800]
-                ck["reference_regenerated"] = True
                 ref_regenerated = True
-                ck = self._step_reference(ck)
-                ref = Path(ck["reference_path"])
+                ck, ref = self._regenerate_reference(ck)
                 self.store.checkpoint(self.run_id, "verify", ck)
                 continue
             sim_failed = res.stage == "simulate" and any(s_["status"] == "fail" for s_ in res.sims)
             if sim_failed and not ck.get("consensus_done"):
-                ck, ref, corroborated = self._reference_consensus(ck, contract, rp, ref, res)
+                ck, ref, corroborated = self._reference_consensus(ck, contract, rp, ref)
                 ref_regenerated = True
                 self.store.checkpoint(self.run_id, "verify", ck)
                 if corroborated or ck.get("consensus", {}).get("outcome") == "majority_alt1":
@@ -1175,10 +1173,8 @@ class Runner:
                 self.log("[repair] RTL role disputes the reference model; regenerating reference once (independently)")
                 ck["reference_feedback"] = ("A reviewer believes an earlier reference model misread the contract. Re-derive the behavior strictly from the contract text; "
                                             "pay special attention to reset values, registered vs combinational outputs, and boundary conditions.")
-                ck["reference_regenerated"] = True
                 ref_regenerated = True
-                ck = self._step_reference(ck)
-                ref = Path(ck["reference_path"])
+                ck, ref = self._regenerate_reference(ck)
             if new_rtl is None:
                 self.store.event(self.run_id, "repair_failed", {"attempt": attempt})
                 if verdict != "reference":
@@ -1192,15 +1188,19 @@ class Runner:
                     self.log("[repair] RTL unchanged after repair; re-deriving the reference model independently before continuing")
                     ck["reference_feedback"] = ("An earlier reference model for this contract was disputed. Re-derive the behavior strictly from the request and contract. "
                                                 "Check especially: registered outputs must be returned BEFORE the state update; registered pulses appear one step after their cause; reset values; priorities.")
-                    ck["reference_regenerated"] = True
                     ref_regenerated = True
-                    ck = self._step_reference(ck)
-                    ref = Path(ck["reference_path"])
+                    ck, ref = self._regenerate_reference(ck)
                 else:
                     rp.write_text(self._normalize(new_rtl, f"repair_{attempt}"))
                     self._save("rtl_candidate", rp, f"repair_{attempt}")
             ck.update({"rtl_attempt": attempt, "history": history})
             self.store.checkpoint(self.run_id, "verify", ck)
+
+    def _regenerate_reference(self, ck: dict) -> tuple[dict, Path]:
+        """Regenerate once after the caller records the independent feedback."""
+        ck["reference_regenerated"] = True
+        ck = self._step_reference(ck)
+        return ck, Path(ck["reference_path"])
 
     def _repair(self, contract: Contract, rp: Path, res: VerificationResult, attempt: int, request: str = ""):
         ctx = P.contract_context(contract, request)

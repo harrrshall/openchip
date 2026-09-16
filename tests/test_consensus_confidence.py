@@ -57,7 +57,7 @@ def _drive_consensus(tmp_path, monkeypatch, generated, comparisons, rtl_accepts)
     runner._reference_comparison_config = lambda: run_mod.Runner._reference_comparison_config(runner)
     ck: dict = {}
     run_mod.Runner._reference_consensus(
-        runner, ck, None, tmp_path / "rtl.v", tmp_path / "reference.py", None)
+        runner, ck, None, tmp_path / "rtl.v", tmp_path / "reference.py")
     return ck["consensus"]
 
 
