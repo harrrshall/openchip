@@ -248,7 +248,13 @@ def cmd_verify(args) -> int:
         finally:
             db.close()
     props = ws.dir("verification") / f"{contract.module_name}_props.v"
+    from ..verification.cellularformal import cellular_properties
     trusted_props = lfsr_properties(contract, ck["request"]) if cfg.verification.run_formal else None
+    properties_origin = "request-derived Galois transitions" if trusted_props else "existing checker"
+    if trusted_props is None and cfg.verification.run_formal:
+        trusted_props = cellular_properties(contract, ck["request"])
+        if trusted_props:
+            properties_origin = "request-derived cell-transition table"
     if trusted_props is not None:
         props = work / f"{contract.module_name}_props.v"
         props.write_text(trusted_props)
@@ -270,7 +276,7 @@ def cmd_verify(args) -> int:
                     prior_simulation_failures=prior_failures,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
                     lfsr_check=ck["lfsr_check"],
-                    properties_origin="request-derived Galois transitions" if trusted_props else "existing checker",
+                    properties_origin=properties_origin,
                     contract_path=str(contracts[-1]), contract_version=contract.version)
     (work / "evidence.json").write_text(json.dumps(evidence, indent=2))
     print(json.dumps({"accepted": accepted, "stage": res.stage,

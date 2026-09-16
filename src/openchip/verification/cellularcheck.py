@@ -24,12 +24,8 @@ def check_cellular(contract: Contract, request: str, reference: Path, work: Path
         return fail('Provide the complete updated cell-transition specification before checking this revision.')
     if not b['label_consistent']:
         return fail('The printed rule number and explicit transition table conflict.')
-    cr = contract.clock_reset
-    ports = {p.name: (p.direction.value, p.width) for p in contract.ports}
-    if (contract.parameters or contract.module_name != b['module'] or cr is None
-            or cr.clock != 'clk' or cr.clock_edge != 'posedge' or cr.reset is not None
-            or ports != {'clk': ('input', 1), 'load': ('input', 1), 'data': ('input', b['width']), 'q': ('output', b['width'])}
-            or next(p for p in contract.ports if p.name == 'q').timing != 'registered'):
+    from .cellularformal import cellular_contract_matches
+    if not cellular_contract_matches(contract, b):
         return fail('Contract ports/timing cannot represent the explicit sequential cell table.')
     if timeout_s <= 0:
         return fail('No remaining budget for the sequential cell-table check.')

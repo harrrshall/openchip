@@ -77,6 +77,7 @@ Semantics of step(inputs):
 
 Optionally define a MODULE-LEVEL function (not a method):
     def stimulus(rng, cycle: int, params: dict, prev_outputs: dict) -> dict | None
+The three-argument form stimulus(rng, cycle, params) is also supported when previous outputs are unused.
 which returns a directed input vector for this cycle (or None to use uniform random inputs). Use it to bias toward interesting scenarios (e.g. bursts of pushes then pops, boundary values). It receives a `random.Random` instance.
 
 Worked example — an 8-bit counter with enable. `count` is a REGISTERED output, `is_max` is COMBINATIONAL, and `wrapped` is a REGISTERED one-cycle pulse that is set at the edge where the counter wraps:
@@ -273,6 +274,16 @@ Required checker module skeleton (use these exact ports):
 ```
 
 Write the property checker now."""
+
+
+PACKED_NEIGHBOR_AUDIT = """
+For vector-neighbor logic, derive the expression for each output bit from the explicitly named input indices before using whole-vector shifts. With matching descending ranges [W-1:0], (x >> 1)[i] is x[i+1], while (x << 1)[i] is x[i-1]. A variable named 'left' or 'right' is not evidence of the correct direction. To bring x[i+1] to position i with wraparound, use (x >> 1) | ((x & 1) << (W-1)); in Verilog this is {x[0], x[W-1:1]}. Audit asymmetric one-hot patterns so reversed neighbors cannot accidentally agree. Apply declared lower-index offsets when converting labels to packed integer positions.
+If the request forces a boundary OUTPUT bit to zero, clear that output bit AFTER the Boolean operation. Padding an absent input neighbor with zero is insufficient for OR or XOR: x[i] OR 0 still equals x[i]. Trace each forced boundary separately from interior and wrapping rules, and verify executable shifts/concatenations rather than trusting their comments.
+"""
+REFERENCE_SYSTEM += PACKED_NEIGHBOR_AUDIT
+REFERENCE_REVIEW_SYSTEM += PACKED_NEIGHBOR_AUDIT
+RTL_SYSTEM += PACKED_NEIGHBOR_AUDIT
+REPAIR_SYSTEM += PACKED_NEIGHBOR_AUDIT
 
 
 REFERENCE_ALT_SYSTEM = REFERENCE_SYSTEM + """

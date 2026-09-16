@@ -78,13 +78,16 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
             reasons.append(f"the independently derived references never agreed unanimously (arbitration outcome `{outcome}`)")
     t = ck.get("request_table_check") or {}
     if t.get("status") == "mismatch":
-        reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
+        reasons.append("the reference model contradicts the independently checked request: " + (t.get("detail") or ""))
     elif t.get("status") == "error":
         reasons.append("the request-table check could not complete: " + (t.get("detail") or "checker error"))
     if t.get("status") not in {"mismatch", "error"}:
         from ..contracts.cellular import cellular_scope
         if cellular_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "cellular_transition_table" not in t.get("checked_kinds", [])):
             reasons.append("the independent sequential cell-table check has not completed")
+        from ..contracts.neighbors import neighbor_scope
+        if neighbor_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "neighbor_vector_equations" not in t.get("checked_kinds", [])):
+            reasons.append("the independent vector-neighbor check has not completed")
         from ..contracts.state_tables import parse_state_tables
         try:
             state_tables = parse_state_tables(ck.get("request", ""))

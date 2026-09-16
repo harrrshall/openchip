@@ -8,6 +8,7 @@ so the runtime can distinguish a broken reference from a broken RTL.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import random
 import resource
@@ -57,13 +58,24 @@ def main() -> int:
         if stim is None and callable(getattr(ref, "stimulus", None)):
             stim = ref.stimulus
         rng = random.Random(seed)
+        stimulus_uses_previous = True
+        if stim is not None:
+            signature = inspect.signature(stim)
+            try:
+                signature.bind(rng, 0, params, {})
+            except TypeError:
+                # Bind only; never interpret an exception inside stimulus() as
+                # an arity mismatch or call the function a second time.
+                signature.bind(rng, 0, params)
+                stimulus_uses_previous = False
         prev = {o["name"]: 0 for o in outs}
         for cyc in range(cycles):
             vec = None
             if replay is not None:
                 vec = dict(replay[cyc])
             elif stim is not None:
-                vec = stim(rng, cyc, params, dict(prev))
+                vec = (stim(rng, cyc, params, dict(prev)) if stimulus_uses_previous
+                       else stim(rng, cyc, params))
             if vec is None:
                 vec = {p["name"]: rng.getrandbits(p["width"]) for p in data_in}
             clean = {}

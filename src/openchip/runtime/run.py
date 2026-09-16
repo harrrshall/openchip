@@ -28,6 +28,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.clockcheck import check_clock
+from ..verification.cellularformal import cellular_properties
 from ..verification.lfsrcheck import check_lfsr, lfsr_properties, lfsr_contract, lfsr_contract_matches, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
@@ -500,7 +501,7 @@ class Runner:
                 user += "\n\nAdditional note from review:\n" + feedback
             if last_err:
                 user += ("\n\nYour previous reference model failed when executed:\n" + last_err + "\nFix it. Reminder: `inputs` is a dict of non-negative ints keyed by the exact port name "
-                         "(e.g. inputs['in']); bit k of a port is (inputs['name'] >> k) & 1; every output must be returned as a non-negative int (never a list or bool).")
+                         "(e.g. inputs['in']); declared bit k of a descending port is (inputs['name'] >> (k-lsb)) & 1, with lsb defaulting to zero; every output must be returned as a non-negative int (never a list or bool).")
             system = P.REFERENCE_SYSTEM if seed_offset == 0 else P.REFERENCE_ALT_SYSTEM  # alternates use a different structure to decorrelate errors
             alt = self.alt_adapter if (seed_offset != 0 and self.alt_adapter is not None) else None  # cross-family second voice
             r = self._call("reference", system, user, seed=(self.cfg.model.seed or 0) + seed_offset + attempt,
@@ -538,16 +539,22 @@ class Runner:
             t0 = time.time()
             cellular = check_cellular(contract, ck.get("request", ""), out_path, work / "cellular",
                                       min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.neighborcheck import check_neighbors
+                cellular = check_neighbors(contract, ck.get("request", ""), out_path, work / "neighbors",
+                                           min(60, self.budget.remaining_s()), sys.executable)
             self.tool_time_s += time.time() - t0
             if cellular is not None:
                 self.store.event(self.run_id, "reference_request_check", {"path": str(out_path), **cellular})
                 if cellular["status"] != "ok":
-                    last_err = cellular["detail"] + "\n" + self._request_tables_text(ck.get("request", ""))
+                    last_err = (cellular["detail"] + "\nObserved request-derived counterexamples:\n" +
+                                json.dumps(cellular.get("mismatches", [])[:3]) + "\n" +
+                                self._request_tables_text(ck.get("request", "")))
                     saved = out_path.with_suffix(".request-rejected-" + uuid.uuid4().hex[:12] + ".py")
                     shutil.copyfile(out_path, saved)
                     self.store.event(self.run_id, "reference_rejected", {"attempt": attempt,
                                      "request_check": cellular, "retained": str(saved)})
-                    self.log(f"[reference] failed explicit cell-transition check: {cellular['status']}")
+                    self.log(f"[reference] failed independent request check: {cellular['status']}")
                     if cellular["status"] == "error":
                         return None, last_err
                     continue
@@ -821,12 +828,16 @@ class Runner:
         if not self.cfg.verification.run_formal:
             return None
         code = lfsr_properties(contract, ck.get("request", ""))
+        origin = "request-derived Galois transitions"
+        if code is None:
+            code = cellular_properties(contract, ck.get("request", ""))
+            origin = "request-derived cell-transition table"
         if code is None:
             return None
         vdir = self.ws.dir("verification")
         pp = vdir / f"{contract.module_name}_props.v"
         same = pp.is_file() and pp.read_text() == code
-        if same and ck.get("properties_origin") == "request-derived Galois transitions":
+        if same and ck.get("properties_origin") == origin:
             return pp
         retained = None
         if pp.is_file() and not same:
@@ -837,7 +848,7 @@ class Runner:
         if not chk.ok:
             raise Stalled("Request-derived formal checker failed to parse: " + chk.tail(8))
         self._save("properties", pp, "properties")
-        ck.update(properties_path=str(pp), properties_origin="request-derived Galois transitions")
+        ck.update(properties_path=str(pp), properties_origin=origin)
         self.store.event(self.run_id, "request_properties", {"path": str(pp), "retained": str(retained) if retained else None})
         return pp
 
@@ -1224,10 +1235,10 @@ class Runner:
             return ck
         self.store.event(self.run_id, "request_table_check", res)
         if res["status"] == "mismatch":
-            self.log(f"[tables] the reference contradicts the request's own table: {res['detail'][:300]}")
+            self.log(f"[tables] the reference contradicts the independently checked request: {res['detail'][:300]}")
         elif res["status"] == "ok":
-            unit = "observed cycles" if "checked_cycles" in res else "rows"
-            self.log(f"[tables] reference agrees with the request's printed table on all {res['rows']} {unit}")
+            unit = "observed cycles" if "checked_cycles" in res else "vectors" if "neighbor_vector_equations" in res.get("checked_kinds", []) else "rows"
+            self.log(f"[tables] reference agrees with the independent request check on all {res['rows']} {unit}")
         else:
             self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
         return ck

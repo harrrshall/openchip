@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-packed-lsb"
+CHECKER_VERSION = "request-tables-20260916-neighbors"
 
 
 @dataclass
@@ -99,6 +99,10 @@ def check_reference_against_request_tables(
         cellular = check_cellular(contract, request, reference_py, work, timeout_s, python)
         if cellular is not None:
             return {**out, **cellular}
+        from .neighborcheck import check_neighbors
+        neighbors = check_neighbors(contract, request, reference_py, work, timeout_s, python)
+        if neighbors is not None:
+            return {**out, **neighbors}
         tables = parse_request_tables(request, include_external_mux=True, include_state_graphs=True)
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
