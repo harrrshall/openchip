@@ -50,6 +50,7 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
     """Why the design must not be signed off, or "" when it may be.
 
     Independent acceptance gates beyond agreement between generated RTL and references:
+      - the contract still records decisions requiring user clarification;
       - the delivered name contradicts an explicit initial module-name request;
       - the model's own independent reference derivations never agreed unanimously;
       - the reference contradicts a table printed in the request, which is ground truth that
@@ -58,6 +59,8 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
       - a formal counterexample leaves a contradiction requiring review.
     """
     reasons: list[str] = []
+    if contract is not None and contract.unresolved:
+        reasons.append(f"{len(contract.unresolved)} unresolved contract decision(s) require clarification before sign-off")
     named = requested_module_name(ck.get("request", ""))
     if named and contract is not None and contract.module_name != named:
         reasons.append(f"the request names module `{named}`, but the contract delivers `{contract.module_name}`")
