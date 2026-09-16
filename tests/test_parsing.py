@@ -17,15 +17,6 @@ def test_extract_json_variants():
     assert extract_json("nothing") is None
 
 
-def test_extract_json_survives_reasoning_and_a_truncated_tail():
-    """A reasoning model's reply: thinking first, the object, then a second attempt cut off by the cap."""
-    txt = ('We need a module. Consider {this} and {that}.\n'
-           '{"module_name": "dff", "ports": [{"name": "clk"}]}\n'
-           'Wait, let me redo it:\n{"module_name": "dff", "ports": [{"name":')
-    assert extract_json(txt) == {"module_name": "dff", "ports": [{"name": "clk"}]}
-    assert extract_json('reasoning...\n{"a": {"b": 1}}\nthat is my answer.') == {"a": {"b": 1}}
-
-
 def test_split_think():
     body, think = split_think("<think>reasoning</think>\nanswer")
     assert body == "answer" and think == "reasoning"

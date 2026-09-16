@@ -21,16 +21,13 @@ from pydantic import ValidationError
 from ..config import Config
 from ..contracts.coerce import coerce_contract
 from ..contracts.schema import Contract, contract_json_schema
-from ..contracts.triage import triage_unresolved
 from ..models import prompts as P
-from ..models.adapter import ModelAdapter, ProviderStatus, extract_code, extract_json
+from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
-from ..contracts.tables import expand_printed_tables
-from ..contracts.interface import interface_violations, parse_interface, requested_module_name
+from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
-from ..verification.fsmcheck import check_reference_against_fsm, input_blind_message, input_blind_states
 from ..verification.tablecheck import check_reference_against_request_tables
 from ..verification.normalize import normalize_rtl
 from ..verification.testbench import dump_contract_json
@@ -38,10 +35,6 @@ from .store import RunStore, lock_owner_id
 from .workspace import Workspace
 
 STEPS = ("intake", "review", "reference", "properties", "rtl", "verify", "report", "done")
-
-# Roles whose reply is only usable if a structured payload can be parsed out of it. A call that ends at
-# the token cap without one is escalated once instead of being repeated identically (see Runner._call).
-PAYLOAD_LANGS = {"python": ("python", "py"), "verilog": ("verilog", "systemverilog", "v", "sv")}
 
 
 # Roles for which thinking hit the token cap in this process: shared across runs (an eval suite runs many
@@ -98,40 +91,6 @@ class Runner:
         self.budget: Optional[Budget] = None
         self.tool_time_s = 0.0
         self._no_think_roles = _PROCESS_NO_THINK_ROLES
-        self.escalations: list[dict] = []
-        for ad in (self.adapter, self.alt_adapter, self.review_adapter):
-            if ad is not None and hasattr(ad, "on_event"):
-                ad.on_event = self._provider_event
-
-
-    # -- provider feed ----------------------------------------------------------------------
-    _PROVIDER_PHRASE = {"rate_limited": "rate limited by", "quota": "usage limit reached on",
-                        "server_error": "server error from", "unreachable": "cannot reach",
-                        "invalid_key": "key rejected by", "no_key": "no API key for"}
-
-    def _provider_event(self, ev: dict) -> None:
-        """Called by an adapter on every classified provider answer worth showing (retries, failures)."""
-        st = ev.get("status") or {}
-        kind = st.get("kind") or "unknown"
-        phrase = self._PROVIDER_PHRASE.get(kind, f"{kind} from")
-        line = f"[provider] {phrase} {st.get('provider') or 'the provider'}"
-        if ev.get("sleep_s"):
-            line += f": retrying in {float(ev['sleep_s']):.0f} s (attempt {ev.get('attempt')} of {ev.get('attempts')})"
-        elif st.get("message"):
-            line += f": {st['message']}"
-        try:
-            self.log(line)
-        except Exception:  # noqa: BLE001
-            pass
-        if self.run_id:
-            self.store.event(self.run_id, "provider", {"status": st, "attempt": ev.get("attempt"),
-                                                       "attempts": ev.get("attempts"), "sleep_s": ev.get("sleep_s"), "line": line})
-
-    def provider_status(self) -> Optional[dict]:
-        st = getattr(self.adapter, "last_status", None)
-        if isinstance(st, ProviderStatus):
-            return st.as_dict()
-        return st if isinstance(st, dict) else None
 
     # ---------------------------------------------------------------------------------------
     def start(self, request: str, budget_s: Optional[float] = None) -> str:
@@ -168,7 +127,7 @@ class Runner:
             user = P.REVISE_USER.format(request=request, version=base.version, contract_json=base.model_dump_json(indent=1), change=change)
             if errors:
                 user += "\n\nYour previous revision was rejected by the validator:\n" + errors[-1] + "\nFix these problems."
-            r = self._call("revise", P.REVISE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt, payload="json")
+            r = self._call("revise", P.REVISE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt)
             data = extract_json(r.text) if r.ok else None
             if data is None:
                 errors.append("reply was not a JSON object" if r.ok else r.error)
@@ -236,36 +195,22 @@ class Runner:
                 ck = self._step_verify(ck)
                 step = "report"
             if step == "report":
-                ck["provider_status"] = self.provider_status()
                 ck, outcome = self._step_report(ck, final_state="completed")
             self.store.set_state(self.run_id, "completed", accepted=outcome.get("accepted"))
         except BudgetExhausted as e:
             self.log(f"[budget] {e}")
-            ck["provider_status"] = self.provider_status()
             ck, outcome = self._step_report(ck, final_state="budget_exhausted", reason=str(e))
             self.store.set_state(self.run_id, "budget_exhausted", reason=str(e))
         except Stalled as e:
             self.log(f"[stalled] {e}")
-            ck["provider_status"] = self.provider_status()
             ck, outcome = self._step_report(ck, final_state="stalled", reason=str(e))
             self.store.set_state(self.run_id, "stalled", reason=str(e))
         except KeyboardInterrupt:
             self.store.set_state(self.run_id, "paused", reason="interrupted")
             raise
         except Exception as e:  # noqa: BLE001
-            blocked = self.provider_status() or {}
-            if blocked.get("kind") in ("rate_limited", "quota", "invalid_key", "no_key", "unreachable"):
-                # The model provider, not the design, stopped the run: park it at its checkpoint so it can be
-                # resumed once the key, quota or connection is fixed, and say so in the feed.
-                ck["provider_status"] = blocked
-                self.store.checkpoint(self.run_id, step, ck)
-                self.store.event(self.run_id, "provider", {"status": blocked, "paused": True})
-                self.log(f"[provider] run paused at {step}: {blocked.get('kind')} ({str(blocked.get('message'))[:160]})")
-                self.store.set_state(self.run_id, "paused", reason=f"provider {blocked.get('kind')}: {str(blocked.get('message'))[:200]}")
-                return {"state": "paused", "provider_status": blocked}
             self.store.event(self.run_id, "error", {"error": f"{type(e).__name__}: {e}"})
             try:
-                ck["provider_status"] = self.provider_status()
                 ck, outcome = self._step_report(ck, final_state="failed", reason=f"{type(e).__name__}: {e}")
             finally:
                 self.store.set_state(self.run_id, "failed", reason=f"{type(e).__name__}: {e}")
@@ -275,31 +220,8 @@ class Runner:
         return outcome
 
     # -- helpers ------------------------------------------------------------------------------
-    def _payload_ok(self, r, payload: Optional[str], json_schema: Optional[dict] = None) -> bool:
-        """Did this reply carry the structured payload the role needs?
-
-        A reply truncated at the token cap usually still contains a complete `{...}` somewhere — the
-        first port object of an unfinished contract, say. Taking that for the payload skips the
-        escalation and spends all three intake attempts on the same truncation, so when the role
-        declared a schema the object must also carry that schema's required keys.
-        """
-        if not payload or not r.ok:
-            return bool(r.ok)
-        if payload == "json":
-            data = extract_json(r.text)
-            if data is None:
-                return False
-            required = (json_schema or {}).get("required") or []
-            return all(k in data for k in required)
-        return extract_code(r.text, PAYLOAD_LANGS.get(payload, ())) is not None
-
-    def _escalated_max_tokens(self, mcfg, prompt_tokens: int) -> int:
-        """Deterministic single step up: 4x the configured cap, capped by what the context window leaves."""
-        room = mcfg.context_window - max(prompt_tokens, 0) - 256
-        return max(mcfg.max_tokens, min(4 * mcfg.max_tokens, room))
-
     def _call(self, role: str, system: str, user: str, json_schema: Optional[dict] = None, temperature: Optional[float] = None, seed: Optional[int] = None,
-              adapter: Optional[ModelAdapter] = None, payload: Optional[str] = None):
+              adapter: Optional[ModelAdapter] = None):
         assert self.budget
         self.budget.check(self.adapter)
         self.store.touch_lock(self.run_id)
@@ -323,27 +245,6 @@ class Runner:
             self.store.event(self.run_id, "model_call", {"role": role, "ok": r.ok, "finish": r.finish_reason, "prompt_tokens": r.prompt_tokens,
                                                          "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": False, "fallback": True})
             self.log(f"[model:{role}] {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok) [no-thinking fallback]")
-        if r.finish_reason == "length" and payload and not self._payload_ok(r, payload, json_schema):
-            # The reply hit the token cap with no usable payload: the reasoning ate the budget. Repeating the
-            # identical request just burns it again (three intake calls, three truncations, no contract), so
-            # escalate once — a larger cap and the provider's reasoning effort turned down — and record it.
-            mt = self._escalated_max_tokens(mcfg, r.prompt_tokens)
-            self.budget.check(self.adapter)
-            self.log(f"[model:{role}]{tag} finished at the {mcfg.max_tokens}-token cap with no {payload} payload; "
-                     f"escalating once: max_tokens={mt}, reasoning turned down")
-            r2 = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed,
-                              thinking=False, max_tokens=mt, reasoning_off=True)
-            esc = {"role": role, "model": adapter.cfg.model, "from_max_tokens": mcfg.max_tokens, "to_max_tokens": mt,
-                   "reasoning_off": True, "finish": r2.finish_reason, "completion_tokens": r2.completion_tokens,
-                   "recovered": self._payload_ok(r2, payload, json_schema)}
-            self.escalations.append(esc)
-            self.store.event(self.run_id, "model_escalation", esc)
-            self.store.event(self.run_id, "model_call", {"role": role, "ok": r2.ok, "finish": r2.finish_reason, "prompt_tokens": r2.prompt_tokens,
-                                                         "completion_tokens": r2.completion_tokens, "latency_s": round(r2.latency_s, 2), "error": r2.error,
-                                                         "thinking": False, "escalated": True, "model": adapter.cfg.model})
-            self.log(f"[model:{role}]{tag} {r2.finish_reason} in {r2.latency_s:.1f}s ({r2.prompt_tokens}+{r2.completion_tokens} tok) [escalated]")
-            if self._payload_ok(r2, payload, json_schema) or r2.ok:
-                r = r2
         return r
 
     def _normalize(self, code: str, step: str) -> str:
@@ -365,18 +266,13 @@ class Runner:
         schema = contract_json_schema()
         errors: list[str] = []
         for attempt in range(3):
-            user = P.INTAKE_USER.format(request=request, documents=docs) + self._interface_text(request) + tables
+            user = P.INTAKE_USER.format(request=request, documents=docs) + tables
             if errors:
                 user += "\n\nYour previous contract was rejected by the validator:\n" + errors[-1] + "\nFix these problems."
-            r = self._call("intake", P.INTAKE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt, payload="json")
+            r = self._call("intake", P.INTAKE_SYSTEM, user, json_schema=schema, seed=(self.cfg.model.seed or 0) + attempt)
             data = extract_json(r.text) if r.ok else None
             if data is None:
-                if r.ok and r.finish_reason == "length":
-                    errors.append("your previous reply ran out of tokens before the JSON object was complete. "
-                                  "Answer with the JSON object FIRST and nothing else \u2014 no reasoning, no commentary, "
-                                  "no second attempt \u2014 and keep `behavior` to a few precise sentences")
-                else:
-                    errors.append("reply was not a JSON object" if r.ok else r.error)
+                errors.append("reply was not a JSON object" if r.ok else r.error)
                 continue
             data, coerce_notes = coerce_contract(data, request)
             if coerce_notes:
@@ -385,9 +281,6 @@ class Runner:
             data.setdefault("version", 1)
             data["version"] = 1
             data["parent_version"] = None
-            for note in _drop_invented_reset(data, request) + _lock_module_name(data, request):
-                self.store.event(self.run_id, "interface_locked", {"attempt": attempt, "note": note})
-                self.log(f"[intake] {note}")
             # Deterministic fill-in: parameters the request names with a default but the model omitted.
             wanted = _request_parameters(request)
             declared = {p.get("name") for p in data.get("parameters", []) or []}
@@ -401,62 +294,6 @@ class Runner:
                 errors.append(str(e)[:2000])
                 self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": str(e)[:2000]})
                 continue
-            iface = parse_interface(request)
-            if iface:
-                viol = interface_violations(iface, [(p.name, p.direction.value, p.width) for p in contract.ports])
-                if viol:
-                    msg = ("the request prints its own interface list and the contract's ports must be exactly that "
-                           "list: " + "; ".join(viol) + ". Use the request's port names, directions and widths "
-                           "verbatim; never add a reset or a clock the list does not contain, and never drop one it "
-                           "does. If the list has no reset port, set clock_reset.reset to null.")
-                    errors.append(msg)
-                    self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": msg})
-                    continue
-            if not contract.outputs():
-                # A module with no output cannot be built, simulated or delivered. `Prob031_dff`
-                # prints "- input q" where its own reference declares `output q`: copying that list
-                # literally cost the whole run. Say what is wrong and ask again.
-                msg = ("the contract declares no output port, so the module would produce nothing and could not be "
-                       "verified. Re-read the request: the signal it describes as the module's result is an OUTPUT, "
-                       "even if the request's own interface list mislabels it as an input. Declare it as an output "
-                       "and keep every other port as the request lists it.")
-                errors.append(msg)
-                self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": msg, "code": "no_output_port"})
-                self.log("[intake] contract rejected: no output port")
-                continue
-            why_fsm = request_requires_fsm(request)
-            if why_fsm and contract.fsm is None and attempt < 2:
-                # Not on the last attempt: a missing table is worth two more asks, but losing the
-                # whole run over it would deliver nothing at all. The last attempt continues and the
-                # omission is recorded instead.
-                msg = ("this request needs the `fsm` section and you left it null: " + why_fsm + ". Fill `fsm` "
-                       "with the reset state, one named state per state of the machine, `output_style` for every "
-                       "output (moore or mealy), and one `transitions` row per (state, condition) pair so every "
-                       "input case of every state is covered. The table is the specification: a row's `outputs` "
-                       "are the values driven DURING that cycle, and a Moore output must carry the same value in "
-                       "every row of the same state. Read the request's diagram or table row by row and copy it.")
-                errors.append(msg)
-                self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": msg, "code": "fsm_missing"})
-                self.log(f"[intake] contract rejected: {why_fsm} but `fsm` is null; asking again")
-                continue
-            if why_fsm and contract.fsm is None:
-                self.store.event(self.run_id, "fsm_section_missing", {"reason": why_fsm, "attempts": attempt + 1})
-                self.log("[intake] no `fsm` section after 3 attempts; continuing without the FSM table check")
-            # State completeness: a state that never samples an input the rest of the table samples
-            # throws that cycle's bit away. `seq_detect` lost overlapping detection exactly this way
-            # (evals/results/final-2026-09-14/.../seq_detect), and because the reference is written
-            # from the same table neither the table check nor simulation can see it.
-            blind = input_blind_states(contract, contract.fsm) if contract.fsm else []
-            if blind and attempt < 2:
-                msg = input_blind_message(blind)
-                errors.append(msg)
-                self.store.event(self.run_id, "contract_rejected",
-                                 {"attempt": attempt, "error": msg, "code": "fsm_input_blind", "states": blind})
-                self.log("[intake] contract rejected: " + ", ".join(f"state `{b['state']}` ignores `{b['input']}`" for b in blind))
-                continue
-            if blind:
-                self.store.event(self.run_id, "fsm_input_blind_unresolved", {"states": blind, "attempts": attempt + 1})
-                self.log("[intake] transition table still ignores an input after 3 attempts; recorded and continuing")
             missing = set(_request_parameters(request)) - {p.name for p in contract.parameters}
             if missing:
                 msg = f"the request names parameter(s) {sorted(missing)} but the contract does not declare them; declare each with the requested default and use width_expr for ports that depend on them"
@@ -480,22 +317,20 @@ class Runner:
         """A separate context (optionally a different model) compares request and contract and proposes
         corrections; safe corrections are applied as a recorded contract revision before any code is written."""
         if not self.cfg.review.enabled:
-            self._apply_contract_guards(ck, self._triage_contract(ck, self._load_contract(ck)))
+            self._apply_contract_guards(ck, self._load_contract(ck))
             self.store.checkpoint(self.run_id, "reference", ck)
             return ck
         contract = self._load_contract(ck)
         request = ck.get("request", "")
-        user = (P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1))
-                + self._interface_text(request) + self._request_tables_text(request))
+        user = P.REVIEW_USER.format(request=request, contract_json=contract.model_dump_json(indent=1)) + self._request_tables_text(request)
         if ck.get("coerce_notes"):
             user += "\n\nNote: these fields were DEFAULTED mechanically because the intake omitted them — verify each: " + "; ".join(ck["coerce_notes"])
         adapter = self.review_adapter or self.adapter
-        r = self._call("review", P.REVIEW_SYSTEM, user, json_schema=REVIEW_SCHEMA, adapter=adapter, payload="json")
+        r = self._call("review", P.REVIEW_SYSTEM, user, json_schema=REVIEW_SCHEMA, adapter=adapter)
         data = extract_json(r.text) if r.ok else None
         if not data:
             self.store.event(self.run_id, "review_skipped", {"error": r.error or "no JSON"})
             self.log("[review] no usable review; continuing with the intake contract")
-            self._triage_contract(ck, self._load_contract(ck))
             self.store.checkpoint(self.run_id, "reference", ck)
             return ck
         corrections = [c for c in (data.get("corrections") or []) if isinstance(c, dict)][: self.cfg.review.max_corrections]
@@ -529,12 +364,9 @@ class Runner:
         elif unresolved:
             contract.unresolved.extend(u for u in unresolved if u not in contract.unresolved)
             Path(ck["contract_path"]).write_text(contract.model_dump_json(indent=1))
-        self._apply_contract_guards(ck, self._triage_contract(ck, self._load_contract(ck)))
-        uncovered = [u for u in (data.get("uncovered") or []) if isinstance(u, str) and u.strip()][:12]
+        self._apply_contract_guards(ck, self._load_contract(ck))
         ck["review"] = {"verdict": data.get("verdict"), "applied": applied, "rejected": rejected, "unresolved": unresolved,
-                        "uncovered": uncovered, "notes": str(data.get("notes", ""))[:300], "reviewer_model": adapter.cfg.model}
-        if uncovered:
-            self.log(f"[review] {len(uncovered)} request sentence(s) not represented in the contract: " + "; ".join(uncovered)[:300])
+                        "notes": str(data.get("notes", ""))[:300], "reviewer_model": adapter.cfg.model}
         self.store.event(self.run_id, "review", {"verdict": data.get("verdict"), "applied": len(applied), "rejected": len(rejected), "unresolved": len(unresolved)})
         self.log(f"[review] {data.get('verdict')}: {len(applied)} correction(s) applied, {len(rejected)} rejected, {len(unresolved)} unresolved" + (f" -> contract v{ck['contract_version']}" if applied else ""))
         self.store.checkpoint(self.run_id, "reference", ck)
@@ -549,40 +381,28 @@ class Runner:
             docs.append(f"--- Supporting document: {p.name} ---\n{p.read_text()[:12000]}\n")
         return ("\nSupporting documents:\n" + "\n".join(docs)) if docs else ""
 
-    def _interface_text(self, request: str) -> str:
-        """The request's own interface list, restated as the authoritative port set.
-
-        Measured: an invented `rst`/`reset` is behind 7 of 57 false acceptances, and two recorded runs
-        on `Prob117_circuit9` failed at intake outright because the model wrote a reset the request
-        does not have (`docs/decisions/0016-live-0014-0015.md` L2).
-        """
-        ports = parse_interface(request)
-        if not ports:
-            return ""
-        lines = "\n".join(f"  - {p.direction} {p.name}" + (f" ({p.width} bits)" if p.width else " (1 bit)")
-                          for p in ports)
-        return ("\n\nThe request prints its interface. It is the complete and authoritative port list; the "
-                "contract's `ports` must be exactly these, with these directions and widths, and nothing else:\n"
-                + lines + "\nThere is no reset port unless it appears above. If none appears, set "
-                "`clock_reset.reset` to null and state each register's power-up value in `behavior`.")
-
     def _request_tables_text(self, request: str) -> str:
-        """Any table or clocked dump printed in the request, expanded mechanically, for intake and review.
+        """Any table printed in the request, expanded mechanically, for the intake and review prompts.
 
-        Combinational grids go wrong when the model applies MSB-first instead of the printed axis
-        labels (ADR 0010). Clocked dumps go unread entirely (ADR 0013 detection-only). Both expansions
-        are produced by a parser so the model is not asked to read the grid or the dump itself.
+        Reading a printed grid is where intake most often goes wrong: models apply the textbook
+        MSB-first convention instead of the axis labels actually printed. The expansion below is
+        produced by a parser, so the model is never asked to read the grid at all.
         """
-        rendered = expand_printed_tables(request)
-        if not rendered:
+        try:
+            tables = parse_request_tables(request)
+        except Exception as e:  # noqa: BLE001 — a parser fault must never block a build
+            self.store.event(self.run_id, "request_table_parse_error", {"error": f"{type(e).__name__}: {e}"})
             return ""
+        if not tables:
+            return ""
+        rendered = "\n\n".join(render_table(t) for t in tables)
         try:
             (self.ws.dir("spec") / "request_tables.md").write_text(rendered + "\n")
         except Exception:  # noqa: BLE001
             pass
-        return ("\n\nThe request contains a table or clocked waveform, expanded below by a parser. "
-                "It is authoritative: state the behavior so that it reproduces exactly these "
-                "observations, and do not re-derive them from the grid or dump yourself.\n\n" + rendered)
+        return ("\n\nThe request contains a table, expanded below by a parser that read the printed axis "
+                "labels literally and in the printed order. It is authoritative: state the behavior so that "
+                "it reproduces exactly these rows, and do not re-derive them from the grid yourself.\n\n" + rendered)
 
     def _load_contract(self, ck: dict) -> Contract:
         return Contract.model_validate_json(Path(ck["contract_path"]).read_text())
@@ -609,7 +429,7 @@ class Runner:
             system = P.REFERENCE_SYSTEM if seed_offset == 0 else P.REFERENCE_ALT_SYSTEM  # alternates use a different structure to decorrelate errors
             alt = self.alt_adapter if (seed_offset != 0 and self.alt_adapter is not None) else None  # cross-family second voice
             r = self._call("reference", system, user, seed=(self.cfg.model.seed or 0) + seed_offset + attempt,
-                           temperature=(self.cfg.model.temperature if seed_offset == 0 else max(self.cfg.model.temperature, 0.7)), adapter=alt, payload="python")
+                           temperature=(self.cfg.model.temperature if seed_offset == 0 else max(self.cfg.model.temperature, 0.7)), adapter=alt)
             code = extract_code(r.text, ("python", "py")) if r.ok else None
             if not code or "class Reference" not in code:
                 last_err = "no ```python block defining class Reference was found" if r.ok else r.error
@@ -648,43 +468,8 @@ class Runner:
                 self.store.event(self.run_id, "reference_rejected", {"attempt": attempt, "error": last_err[:2000], "timing_violations": v})
                 self.log(f"[reference] attempt {attempt + 1} rejected by timing lint: registered output(s) {names} depend on same-cycle inputs")
                 continue
-            tab = check_reference_against_request_tables(
-                contract, ck.get("request", ""), out_path, work / f"tables_{attempt}")
-            if tab.get("status") == "mismatch":
-                last_err = ("TABLE ERROR: the reference contradicts a table printed in the request "
-                            f"on {len(tab.get('mismatches') or [])} row(s): {tab.get('detail') or ''}")
-                if attempt + 1 < attempts or seed_offset != 0:
-                    out_path.with_suffix(f".rejected{attempt}.py").write_text(code)
-                    self.store.event(self.run_id, "reference_rejected", {
-                        "attempt": attempt, "error": last_err[:2000], "table_check": tab})
-                    self.log(f"[reference] attempt {attempt + 1} rejected by request-table check: {last_err[:180]}")
-                    continue
-                # Last attempt of the primary derivation: an unresolved disagreement with the request's own table is a reason to
-                # withhold sign-off, not to end the run with nothing. The reference is kept, the run
-                # goes on to the RTL, and the mismatch is recorded as an unresolved item, so the
-                # design is delivered as provisional with the disagreement named.
-                ck["reference_table_mismatch"] = tab
-                self.store.event(self.run_id, "reference_table_mismatch_unresolved", {"attempt": attempt, "table_check": tab})
-                self._record_unresolved(
-                    ck, "the reference model disagrees with a table printed in the request on "
-                    f"{len(tab.get('mismatches') or [])} row(s) and three independent derivations did not "
-                    f"resolve it: {(tab.get('detail') or '')[:400]}. Sign-off is withheld until the user says "
-                    "which is right.")
-                self.log(f"[reference] request-table mismatch unresolved after {attempts} attempt(s); "
-                         "keeping the last reference and continuing as provisional")
-                return out_path, ""
             return out_path, ""
         return None, last_err
-
-    def _record_unresolved(self, ck: dict, item: str) -> None:
-        """Add an unresolved question to the contract on disk, so the sign-off gate sees it."""
-        path = ck.get("contract_path")
-        if not path:
-            return
-        contract = Contract.model_validate_json(Path(path).read_text())
-        if item not in contract.unresolved:
-            contract.unresolved.append(item)
-            Path(path).write_text(contract.model_dump_json(indent=1))
 
     def _step_reference(self, ck: dict) -> dict:
         contract = self._load_contract(ck)
@@ -842,30 +627,6 @@ class Runner:
         ck["reference_path"] = str(canonical)
         ck["reference_disputed"] = str(disputed)
 
-    def _triage_contract(self, ck: dict, contract: Contract) -> Contract:
-        """Demote `unresolved` items that answer themselves before the sign-off gate reads the list.
-
-        A question the request already settles, or that does not change the ports, is a default and
-        not a question; it moves to `assumptions` with the rule that demoted it, so nothing is lost
-        and `reports/outcome.json` records every demotion. See `contracts/triage.py`.
-        """
-        if not contract.unresolved:
-            return contract
-        t = triage_unresolved(contract.unresolved)
-        if not t.demoted:
-            return contract
-        contract.unresolved = t.kept
-        for v in t.demoted:
-            if v.assumption() not in contract.assumptions:
-                contract.assumptions.append(v.assumption())
-        Path(ck["contract_path"]).write_text(contract.model_dump_json(indent=1))
-        ck["unresolved_triage"] = t.records()
-        self.store.event(self.run_id, "unresolved_triage",
-                         {"demoted": len(t.demoted), "kept": len(t.kept), "rules": sorted({v.rule for v in t.demoted})})
-        self.log(f"[triage] {len(t.demoted)} unresolved item(s) answer themselves and became assumptions; "
-                 f"{len(t.kept)} left for the user")
-        return contract
-
     def _apply_contract_guards(self, ck: dict, contract: Contract) -> Contract:
         finds = contract_guards(contract)
         if finds:
@@ -881,11 +642,7 @@ class Runner:
         """Optional formal layer: a property checker written independently of the RTL. Failure is recorded, not fatal."""
         contract = self._load_contract(ck)
         ck["properties_done"] = True
-        if not self.cfg.verification.run_formal or not contract.has_reset:
-            # No reset: BMC would start from an unconstrained state, so every reset-value assertion
-            # would be a spurious counterexample. The formal layer is optional evidence; skip it.
-            if not contract.combinational and not contract.has_reset:
-                self.store.event(self.run_id, "properties_skipped", {"reason": "contract has no reset"})
+        if not self.cfg.verification.run_formal or contract.combinational:
             self.store.checkpoint(self.run_id, "rtl", ck)
             return ck
         ctx = self._ctx(ck, contract)
@@ -895,7 +652,7 @@ class Runner:
             user = P.PROPERTIES_USER.format(request=ctx["request"], contract_json=ctx["contract_json"], skeleton=checker_skeleton(contract))
             if last_err:
                 user += "\n\nYour previous checker was rejected:\n" + last_err[:1500] + "\nFix it."
-            r = self._call("properties", P.PROPERTIES_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt, payload="verilog")
+            r = self._call("properties", P.PROPERTIES_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt)
             code = extract_code(r.text, ("verilog", "systemverilog", "v", "sv")) if r.ok else None
             if not code:
                 last_err = "no verilog block" if r.ok else r.error
@@ -925,7 +682,7 @@ class Runner:
         ctx = self._ctx(ck, contract)
         rtldir = self.ws.dir("rtl")
         for attempt in range(3):
-            r = self._call("rtl", P.RTL_SYSTEM, P.RTL_USER.format(**ctx), seed=(self.cfg.model.seed or 0) + attempt, payload="verilog")
+            r = self._call("rtl", P.RTL_SYSTEM, P.RTL_USER.format(**ctx), seed=(self.cfg.model.seed or 0) + attempt)
             code = extract_code(r.text, ("verilog", "systemverilog", "v", "sv")) if r.ok else None
             if not code or f"module {contract.module_name}" not in code:
                 self.store.event(self.run_id, "rtl_rejected", {"attempt": attempt, "reason": "no verilog block with the contract module"})
@@ -957,7 +714,7 @@ class Runner:
                 shutil.rmtree(work)
             t0 = time.time()
             props = Path(ck["properties_path"]) if ck.get("properties_path") else None
-            res = verify(contract, rp, ref, work, self.cfg, props_path=props, request=ck.get("request", ""))
+            res = verify(contract, rp, ref, work, self.cfg, props_path=props)
             self.tool_time_s += time.time() - t0
             (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=1))
             shutil.copy(rp, work / rp.name)
@@ -1000,7 +757,6 @@ class Runner:
                     if not ok:
                         continue  # a majority of references disagrees with the RTL: re-verify against the adopted one, then repair
                 ck = self._check_request_tables(ck, contract, ref)
-                ck = self._check_fsm_table(ck, contract, ref)
                 ck["final_evidence"] = str(work / "evidence.json")
                 self.store.checkpoint(self.run_id, "report", ck)
                 return ck
@@ -1065,7 +821,7 @@ class Runner:
     def _repair(self, contract: Contract, rp: Path, res: VerificationResult, attempt: int, request: str = ""):
         ctx = P.contract_context(contract, request)
         user = P.REPAIR_USER.format(request=ctx["request"], contract_json=ctx["contract_json"], rtl=rp.read_text(), evidence=res.evidence_for_model())
-        r = self._call("repair", P.REPAIR_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt, payload="verilog")
+        r = self._call("repair", P.REPAIR_SYSTEM, user, seed=(self.cfg.model.seed or 0) + attempt)
         if not r.ok:
             return None, "rtl"
         verdict = "reference" if "VERDICT: reference" in r.text else "rtl"
@@ -1095,35 +851,8 @@ class Runner:
             self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
         return ck
 
-    def _check_fsm_table(self, ck: dict, contract: Contract, ref: Path) -> dict:
-        """Replay the contract's own transition table through the reference. No model call.
-
-        The reference and the RTL are written from the same contract, so they fail the same way and
-        simulation cannot tell. This asks one thing simulation cannot: does the reference behave like
-        the table the RTL was built from?
-        """
-        if ck.get("fsm_table_check"):
-            return ck
-        t0 = time.time()
-        res = check_reference_against_fsm(contract, ref, self.ws.dir("verification") / "fsm_table")
-        self.tool_time_s += time.time() - t0
-        ck["fsm_table_check"] = res
-        if res["status"] == "not_applicable":
-            return ck
-        self.store.event(self.run_id, "fsm_table_check", res)
-        if res["status"] == "mismatch":
-            self.log(f"[fsm] the reference contradicts the contract's own transition table: {res['detail'][:300]}")
-        elif res["status"] == "ok":
-            self.log(f"[fsm] reference agrees with the contract's transition table on all {res['checks']} checked output(s) "
-                     f"over {res['probes']} directed sequence(s)")
-        else:
-            self.log(f"[fsm] check inconclusive: {res['detail'][:200]}")
-        return ck
-
     def _step_report(self, ck: dict, final_state: str, reason: str = "") -> tuple[dict, dict]:
         assert self.budget
-        if self.escalations:
-            ck["model_escalations"] = self.escalations
         outcome = write_report(self.ws, self.store, self.run_id, ck, self.cfg, final_state=final_state, reason=reason,
                                budget=self.budget.snapshot(self.adapter, (self.alt_adapter, self.review_adapter)), tool_time_s=self.tool_time_s)
         self.store.set_outcome(self.run_id, outcome)
@@ -1142,10 +871,9 @@ REVIEW_SCHEMA = {
             "target": {"type": "string"}, "value": {"type": "string"}, "reason": {"type": "string"}},
             "required": ["kind", "target", "value", "reason"]}},
         "unresolved": {"type": "array", "items": {"type": "string"}},
-        "uncovered": {"type": "array", "items": {"type": "string"}},
         "notes": {"type": "string"},
     },
-    "required": ["verdict", "corrections", "unresolved", "uncovered", "notes"],
+    "required": ["verdict", "corrections", "unresolved", "notes"],
 }
 
 
@@ -1224,83 +952,7 @@ def _request_parameters(request: str) -> dict[str, Optional[int]]:
     return names
 
 
-def _drop_invented_reset(data: dict, request: str) -> list[str]:
-    """Remove a reset the request's interface list does not contain, in place. Returns what changed.
-
-    ADR 0016 L2: intake on `Prob117_circuit9` wrote `clock_reset.reset = "null"` and then a reset port
-    that is not in the request, the contract failed validation three times, and the run ended with no
-    RTL at all. The request's port list settles it deterministically, so the run is not spent on it.
-    """
-    ports = parse_interface(request)
-    if not ports:
-        return []
-    allowed = {p.name for p in ports}
-    cr = data.get("clock_reset")
-    if not isinstance(cr, dict):
-        return []
-    rst = cr.get("reset")
-    if not isinstance(rst, str) or not rst.strip() or rst in allowed:
-        return []
-    cr["reset"] = None
-    declared = [p for p in (data.get("ports") or []) if isinstance(p, dict)]
-    data["ports"] = [p for p in declared if p.get("name") != rst]
-    return [f"the request's interface list has no reset port; dropped the invented reset `{rst}` "
-            f"and set clock_reset.reset to null"]
-
-
-_FSM_WORD_RE = re.compile(
-    r"\b(?:state\s+machine|state-machine|finite[\s-]state\s+machine|fsm|moore|mealy"
-    r"|state\s+diagram|state[\s-]assigned\s+table|state\s+transition\s+table)\b", re.I)
-# a drawn transition: "B (out=1) --in=0--> A"
-_FSM_ARROW_RE = re.compile(r"^\s*\S+.*-+\s*\S*\s*-+>\s*\S+", re.M)
-# the header of a state-assigned table: "Present state y[2:0] | Next state ..."
-_FSM_TABLE_RE = re.compile(r"\bpresent\s+state\b", re.I)
-_FSM_NAMED_STATES_RE = re.compile(r"\bstates?\b[^.\n]{0,60}\b(?:called|named|labelled|labeled)\b", re.I)
-
-
-def request_requires_fsm(request: str) -> str:
-    """Why the request needs the contract's `fsm` section, or "" when it does not.
-
-    Deterministic, because the model does not decide it reliably: with the section merely optional
-    every one of the 2,412 contracts of `evals/results/final-2026-09-14` left `fsm` null, so the
-    FSM table check never ran once. A request only counts as a state machine when it says so (state
-    machine / FSM / Moore / Mealy / state diagram), draws transitions, prints a state-assigned
-    table, or names its states. The bare words "state"/"states" are deliberately NOT a signal: that
-    is the counter and datapath exclusion the intake prompt states, where the state is a number
-    (`Prob144_conwaylife` says "the current state of the game" and has no state machine).
-    """
-    if _FSM_WORD_RE.search(request):
-        return "it describes a state machine (state machine / FSM / Moore / Mealy / state diagram)"
-    if _FSM_ARROW_RE.search(request):
-        return "it draws a state transition diagram"
-    if _FSM_TABLE_RE.search(request):
-        return "it prints a state-assigned transition table"
-    if _FSM_NAMED_STATES_RE.search(request):
-        return "it names the states of the machine"
-    return ""
-
-
-def _lock_module_name(data: dict, request: str) -> list[str]:
-    """Rename the contract's module to the name the request asks for, in place. Returns what changed.
-
-    A rename is mechanical and never a judgement, so it is coerced rather than rejected: the request
-    names the module, everything downstream (the RTL file, the testbench instantiation, the eval's
-    `rtl/TopModule.v`) is written from the contract, and a contract that renames `TopModule` to
-    `top_module` delivers work nobody can find.
-    """
-    want = requested_module_name(request)
-    if not want:
-        return []
-    have = data.get("module_name")
-    if not isinstance(have, str) or have == want:
-        return []
-    data["module_name"] = want
-    return [f"the request asks for a module named `{want}`; renamed the contract's module from `{have}`"]
-
-
 def _signature(res: VerificationResult) -> str:
-    if res.guard_findings:
-        return "guard:" + ",".join(f.get("code", "") for f in res.guard_findings)
     if res.reference_error:
         return "ref:" + res.reference_error.splitlines()[0][:80]
     if res.lint and not res.lint.get("ok"):
@@ -1311,8 +963,6 @@ def _signature(res: VerificationResult) -> str:
         if s["status"] != "pass":
             fm = s["first_mismatches"][:3]
             return f"sim:{s['status']}:" + ";".join(f"{m['cycle']}/{m['port']}" for m in fm)
-    if res.waveform and res.waveform.get("status") == "fail":
-        return "wave:" + ";".join(f"{m['time']}/{m['port']}" for m in res.waveform.get("mismatches", [])[:3])
     if res.synth and not res.synth.get("ok"):
         return "synth:" + (res.synth.get("tail", "")[-80:])
     return ""

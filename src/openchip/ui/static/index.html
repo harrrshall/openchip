@@ -3,2416 +3,340 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>openchip</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http://www.w3.org/2000/svg'%20viewBox%3D'0%200%2032%2032'%3E%3Cg%20fill%3D'none'%20stroke%3D'%23b4541a'%20stroke-width%3D'2.4'%3E%3Crect%20x%3D'9'%20y%3D'9'%20width%3D'14'%20height%3D'14'%20rx%3D'1'/%3E%3Crect%20x%3D'14'%20y%3D'14'%20width%3D'4'%20height%3D'4'/%3E%3Cpath%20d%3D'M13%209V4M19%209V4M13%2023v5M19%2023v5M9%2013H4M9%2019H4M23%2013h5M23%2019h5'/%3E%3C/g%3E%3C/svg%3E">
+<title>OpenChip</title>
 <style>
-/* ---------- tokens: datasheet (light) and board (dark) ---------- */
-:root {
-  --paper: #f6f5f1; --surface: #fbfaf7; --ink: #111110; --ink2: #3a3936; --muted: #77746c;
-  --rule: #dcd8cf; --rule2: #bdb8ac; --accent: #b4541a; --pass: #1f6b3a; --fail: #b3261e; --hold: #8a6300;
-  --overlay: rgba(17, 17, 16, .28);
-  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0f0f0e; --surface: #161614; --ink: #ecebe6; --ink2: #c9c7c0; --muted: #8f8c83;
-    --rule: #2a2926; --rule2: #3d3b37; --accent: #e07a3c; --pass: #5fae7b; --fail: #e36a5f; --hold: #d6a84a;
-    --overlay: rgba(0, 0, 0, .6); color-scheme: dark;
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #6b7280; --line: #e5e7eb; --accent: #1d4ed8; --accent-ink: #ffffff;
+    --ok: #0e6e30; --warn: #a24a06; --bad: #b91c1c; --chip: #eef2ff; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   }
-}
-:root[data-theme="dark"] {
-  --paper: #0f0f0e; --surface: #161614; --ink: #ecebe6; --ink2: #c9c7c0; --muted: #8f8c83;
-  --rule: #2a2926; --rule2: #3d3b37; --accent: #e07a3c; --pass: #5fae7b; --fail: #e36a5f; --hold: #d6a84a;
-  --overlay: rgba(0, 0, 0, .6); color-scheme: dark;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-[hidden] { display: none !important; }
-body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-button, input, select, textarea { font: inherit; color: inherit; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.mono, code, pre, .label, .btn { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.muted { color: var(--muted); }
-.p { color: var(--pass); } .f { color: var(--fail); } .h { color: var(--hold); } .i { color: var(--muted); } .a { color: var(--accent); }
-
-/* ---------- status glyphs ---------- */
-.sq { width: 8px; height: 8px; display: inline-block; flex: none; vertical-align: baseline; transform: translateY(-1px); }
-.sq.pass { background: var(--pass); } .sq.fail { background: var(--fail); } .sq.hold { background: var(--hold); }
-.sq.run { background: var(--accent); } .sq.stop { border: 1.5px solid var(--muted); }
-.st { font-family: var(--mono); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.st.pass { color: var(--pass); } .st.fail { color: var(--fail); } .st.hold { color: var(--hold); } .st.run { color: var(--accent); } .st.stop { color: var(--muted); }
-.pulse { animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
-
-/* ---------- shell ---------- */
-.shell { display: flex; flex-direction: column; min-height: 100vh; min-width: 0; }
-.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); flex: 1 1 auto; min-height: 0; min-width: 0; }
-.topbar { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 16px; border-bottom: 1px solid var(--rule);
-  font: 12px var(--mono); color: var(--muted); background: var(--paper); position: sticky; top: 0; z-index: 6; }
-.topbar .brand { font-size: 13px; }
-.topbar .crumb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topbar .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.stepper { display: flex; align-items: center; gap: 8px; margin: 0 auto; }
-.stepper .stp { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.stepper .sep { color: var(--rule2); }
-.stepper .on { color: var(--ink); }
-.statusbar { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 16px; border-top: 1px solid var(--rule);
-  font: 11.5px var(--mono); color: var(--muted); background: var(--paper); flex-wrap: nowrap; overflow: hidden; }
-.statusbar .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.statusbar button.linkbtn, .topbar button.linkbtn { font: inherit; }
-.kbd { font: 10.5px var(--mono); border: 1px solid var(--rule2); border-radius: 2px; padding: 0 4px; color: var(--muted); }
-.ed { border: 1px solid var(--rule2); border-radius: 2px; background: var(--surface); }
-.ed-head, .ed-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font: 11.5px var(--mono); color: var(--muted); flex-wrap: wrap; }
-.ed-head { border-bottom: 1px solid var(--rule); }
-.ed-foot { border-top: 1px solid var(--rule); }
-.ed-head .sp, .ed-foot .sp { margin-left: auto; }
-.chip { border: 1px solid var(--rule2); border-radius: 2px; padding: 0 6px; font: 11px var(--mono); color: var(--ink2); }
-.ed-main { display: grid; grid-template-columns: auto minmax(0, 1fr); }
-.gutter { padding: 12px 8px; text-align: right; border-right: 1px solid var(--rule); color: var(--rule2);
-  font: 13.5px/1.7 var(--mono); user-select: none; overflow: hidden; }
-.ta-wrap { position: relative; }
-.hl, #request { font: 13.5px/1.7 var(--mono); padding: 12px 14px; white-space: pre-wrap; overflow-wrap: break-word; border: 0; margin: 0; }
-.hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: var(--ink); }
-#request { position: relative; display: block; width: 100%; min-height: 190px; resize: none; overflow: hidden; background: transparent;
-  color: transparent; caret-color: var(--ink); outline: none; }
-#request::placeholder { color: var(--muted); }
-#request::selection { background: var(--accent-soft, var(--rule)); color: transparent; }
-.hl .k { color: var(--accent); } .hl .c { color: var(--muted); } .hl .b { color: var(--ink2); }
-
-.rail { border-right: 1px solid var(--rule); padding: 20px 18px; display: flex; flex-direction: column; gap: 18px;
-  position: sticky; top: 0; height: 100vh; min-height: 0; background: var(--paper); }
-.rail-head { display: flex; align-items: center; gap: 10px; }
-.brand { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; font: 600 15px/1 var(--mono); letter-spacing: .2px; color: var(--ink); padding: 2px 0; }
-.brand:hover { text-decoration: none; }
-.brand svg { color: var(--accent); flex: none; }
-.brand small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 11px; }
-.rail-toggle { display: none !important; }
-.rail-body { display: flex; flex-direction: column; gap: 18px; flex: 1 1 auto; min-height: 0; }
-.rail-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
-.rail-foot { border-top: 1px solid var(--rule); padding-top: 12px; font: 12px/1.6 var(--mono); color: var(--muted); }
-.rail-foot .k { color: var(--ink2); }
-.rail-foot .ln { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rail-foot .wrapln { overflow-wrap: anywhere; }
-main { min-width: 0; padding: 40px 56px 80px; }
-.wrap { max-width: 1080px; }
-
-/* ---------- controls ---------- */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 500; font-size: 13px; line-height: 1;
-  color: var(--ink); background: transparent; border: 1px solid var(--rule2); border-radius: 2px; padding: 9px 12px;
-  cursor: pointer; letter-spacing: .2px; text-decoration: none; white-space: nowrap; }
-.btn:hover:not(:disabled) { border-color: var(--ink); text-decoration: none; }
-.btn.fill { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.btn.fill:hover:not(:disabled) { background: var(--ink2); }
-.btn.fill:focus-visible { background: var(--accent); border-color: var(--accent); }
-.btn.block { width: 100%; }
-.btn.small { padding: 6px 9px; font-size: 12px; }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
-.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font: inherit; text-align: left; }
-.linkbtn:hover { text-decoration: underline; }
-.under { width: 100%; background: transparent; color: var(--ink); border: 0; border-bottom: 1px solid var(--rule2); border-radius: 0;
-  padding: 6px 0; font: 13px var(--mono); }
-.under:focus { border-bottom-color: var(--accent); outline: none; }
-.under:focus-visible { outline: none; }
-select.under { appearance: none; -webkit-appearance: none; cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position: calc(100% - 9px) 55%, calc(100% - 5px) 55%; background-size: 4px 4px; background-repeat: no-repeat; }
-select.under option { background: var(--paper); color: var(--ink); }
-input[type=search]::-webkit-search-cancel-button { filter: grayscale(1); }
-.field { display: block; font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .8px; }
-.field .under { margin-top: 6px; letter-spacing: 0; }
-textarea.box { width: 100%; resize: vertical; border: 1px solid var(--rule2); border-radius: 2px; background: var(--surface); color: var(--ink);
-  font: 13.5px/1.7 var(--mono); padding: 14px 16px; }
-textarea.box:focus { border-color: var(--accent); outline: none; }
-textarea.box::placeholder, .under::placeholder { color: var(--muted); opacity: .85; }
-.label { font-weight: 500; font-size: 11px; line-height: 1.2; color: var(--muted); letter-spacing: .8px; text-transform: lowercase; }
-.label b { color: var(--ink2); font-weight: 500; margin-right: 8px; }
-.sub { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-.sub .label:last-child:not(:first-child) { text-align: right; }
-.hint { font-size: 12.5px; color: var(--muted); }
-p { margin: 0 0 8px; }
-h1, h2, h3 { margin: 0; }
-.display { font: 600 30px/1.1 var(--mono); letter-spacing: -.3px; margin: 10px 0 0; overflow-wrap: anywhere; }
-.display .kw { color: var(--muted); font-weight: 400; }
-.crumb { font: 12px var(--mono); color: var(--muted); }
-.crumb a { color: var(--muted); }
-.crumb a:hover { color: var(--ink); }
-
-/* ---------- session index (rail) ---------- */
-.row-s { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 2px; align-items: baseline;
-  width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--rule); padding: 9px 0; cursor: pointer; }
-.row-s .nm { font: 500 13px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.row-s .age { font: 11px var(--mono); color: var(--muted); }
-.row-s .intent { grid-column: 2 / 4; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-s:hover .nm { color: var(--accent); }
-.row-s[aria-current="true"] .nm { color: var(--accent); }
-.empty-line { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
-
-/* ---------- home ---------- */
-.lead { color: var(--ink2); max-width: 620px; margin: 8px 0 28px; font-size: 15px; }
-.sect-top { border-top: 1px solid var(--ink); padding-top: 18px; }
-.composer { position: relative; }
-.form-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; gap: 12px; align-items: end; margin-top: 12px; }
-.facts { margin-top: 16px; font: 12px/1.6 var(--mono); color: var(--muted); display: flex; gap: 6px 18px; flex-wrap: wrap; }
-.facts > span { display: inline-flex; align-items: baseline; gap: 8px; }
-.sect { margin-top: 48px; }
-.palette { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--paper);
-  border: 1px solid var(--rule2); border-radius: 2px; padding: 4px 0; max-height: 260px; overflow: auto; }
-.pal-item { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: baseline; width: 100%; text-align: left;
-  background: transparent; border: 0; padding: 8px 14px; cursor: pointer; }
-.pal-item[aria-selected="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
-.pal-item .cmd { font: 500 13px var(--mono); color: var(--ink); }
-.pal-item .ds { color: var(--muted); font-size: 12.5px; }
-
-/* ---------- datasheet tables ---------- */
-table.dt { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
-table.dt th { text-align: left; font: 500 11px var(--mono); color: var(--muted); letter-spacing: .8px; padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule2); }
-table.dt td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
-table.dt td:last-child, table.dt th:last-child { padding-right: 0; }
-table.dt td.r, table.dt th.r { text-align: right; white-space: nowrap; }
-table.dt td.prose { font-family: var(--sans); color: var(--muted); }
-table.dt tr.click { cursor: pointer; }
-table.dt tr.click:hover td.nm { color: var(--accent); }
-table.dt tr.click:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-table.dt td.nm { white-space: nowrap; }
-table.dt td.g { width: 16px; padding-right: 8px; }
-.tbl-scroll { overflow-x: auto; }
-table.so td:first-child { color: var(--ink2); width: 34%; }
-table.so td.d { color: var(--ink2); overflow-wrap: anywhere; }
-table.so tr.hold td { color: var(--hold); }
-table.so tr.failrow td { color: var(--fail); }
-
-/* ---------- session header ---------- */
-.head { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
-.head .display { flex: 1 1 320px; min-width: 0; }
-.acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-.verdict { font: 14px var(--mono); color: var(--ink2); margin: 10px 0 0; display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; }
-.verdict .word { font-weight: 600; }
-.verdict .sep { color: var(--rule2); }
-.meta { font: 12px/1.6 var(--mono); color: var(--muted); margin: 6px 0 0; overflow-wrap: anywhere; }
-.answer { margin-top: 20px; border-top: 1px solid var(--hold); padding: 14px 0 4px; }
-.answer .q { font-size: 14px; color: var(--ink); margin: 12px 0 6px; max-width: 72ch; }
-.answer textarea { min-height: 64px; padding: 10px 12px; font-size: 13px; }
-.banner { margin-top: 20px; border-top: 1px solid var(--hold); padding: 10px 0 0;
-  display: flex; gap: 8px 24px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; font: 13px/1.6 var(--mono); }
-.banner.bad { border-color: var(--fail); }
-.banner .t { font-weight: 600; }
-.banner .b-acts { display: flex; gap: 16px; }
-.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; padding: 24px 0; margin-top: 28px;
-  border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
-.sym text { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
-.sym .w { fill: var(--muted); font-size: 10px; }
-.sym .body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
-.sym .pin { stroke: var(--ink); stroke-width: 1.5; }
-.sym .bus { stroke: var(--ink); stroke-width: 3; }
-.sym .thin { stroke: var(--ink); stroke-width: 1; fill: none; }
-.sym .title { font-weight: 600; font-size: 13px; }
-.pipe { padding: 24px 0; border-bottom: 1px solid var(--rule); }
-.pipe-scroll { overflow-x: auto; }
-.lanes { display: block; }
-.lanes text { font-family: var(--mono); font-size: 11.5px; fill: var(--ink2); }
-.lanes .t { fill: var(--muted); font-size: 10.5px; }
-.lanes .axis { fill: var(--muted); font-size: 10px; }
-.lanes .grid { stroke: var(--rule); stroke-width: 1; }
-.lanes .sig { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
-.lanes .fillp { stroke: none; fill-opacity: .1; }
-.lanes .pass { stroke: var(--pass); fill: var(--pass); color: var(--pass); }
-.lanes .fail { stroke: var(--fail); fill: var(--fail); }
-.lanes .hold { stroke: var(--hold); fill: var(--hold); }
-.lanes .run { stroke: var(--accent); fill: var(--accent); }
-.lanes .pend { stroke: var(--rule2); stroke-dasharray: 4 4; }
-.lanes .x { stroke: var(--fail); stroke-width: 1.8; }
-
-/* ---------- tabs and panes ---------- */
-.tabs { display: flex; gap: 28px; margin-top: 28px; border-bottom: 1px solid var(--rule); overflow-x: auto; }
-.tabs [role=tab] { font: 500 12.5px var(--mono); color: var(--muted); padding: 10px 0; border: 0; border-bottom: 2px solid transparent;
-  background: transparent; cursor: pointer; white-space: nowrap; }
-.tabs [role=tab]:hover { color: var(--ink); }
-.tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); }
-.tabs [role=tab] b { font-weight: 400; color: var(--rule2); margin-right: 6px; }
-.tabs [role=tab] small { color: var(--muted); font-size: 11px; margin-left: 6px; }
-.pane { padding-top: 20px; min-height: 120px; }
-.pane:focus-visible { outline-offset: 4px; }
-pre.code { font: 12.5px/1.65 var(--mono); color: var(--ink2); margin: 0 0 24px; padding: 0; overflow: auto; tab-size: 4; }
-pre.code .kw { color: var(--accent); } pre.code .cm { color: var(--muted); }
-pre.code .ln { color: var(--rule2); user-select: none; -webkit-user-select: none; display: inline-block; width: 4ch; margin-right: 14px; text-align: right; }
-pre.code .add { color: var(--pass); } pre.code .del { color: var(--fail); } pre.code .hunk { color: var(--muted); }
-.file-h { font: 500 12px var(--mono); color: var(--muted); margin: 0 0 10px; }
-.log { font: 12px/1.65 var(--mono); color: var(--ink2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 560px; overflow: auto; }
-.log .ts { color: var(--muted); }
-.log .role { color: var(--accent); }
-.log .l-error, .log .l-error .role { color: var(--fail); }
-.log .l-provider .role { color: var(--hold); }
-.log .rep { color: var(--muted); }
-.md { max-width: 80ch; }
-.md > :first-child { margin-top: 0; }
-.md h1 { font: 600 17px var(--mono); margin: 24px 0 8px; }
-.md h2 { font: 600 13px var(--mono); margin: 24px 0 8px; letter-spacing: .3px; }
-.md h3 { font: 600 13px var(--mono); margin: 16px 0 4px; }
-.md p { margin: 6px 0; }
-.md ul, .md ol { padding-left: 22px; margin: 6px 0; }
-.md code { font-size: 12.5px; color: var(--ink2); }
-.md pre { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 10px 0; overflow-x: auto; }
-.md table { border-collapse: collapse; width: 100%; font: 12.5px var(--mono); margin: 8px 0; display: block; overflow-x: auto; }
-.md th, .md td { border-bottom: 1px solid var(--rule); padding: 6px 12px 6px 0; text-align: left; vertical-align: top; }
-.md th { color: var(--muted); font-weight: 500; border-bottom-color: var(--rule2); }
-.md hr { border: 0; border-top: 1px solid var(--rule); }
-.ev-sect { margin-top: 28px; }
-.ev-sect ul { margin: 0; padding-left: 18px; }
-.ev-sect li { margin: 4px 0; }
-.empty { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 20px 0; color: var(--muted); }
-.empty .t { color: var(--ink); font: 500 13px var(--mono); margin-bottom: 4px; }
-.empty .acts { margin: 12px 0 0; justify-content: flex-start; }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; font-size: 13px; margin: 0; }
-.kv dt { color: var(--ink2); font-family: var(--mono); }
-.kv dd { margin: 0; color: var(--ink2); }
-
-/* ---------- modals ---------- */
-.scrim { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center;
-  padding: 48px 16px; overflow: auto; z-index: 40; }
-.modal { background: var(--paper); border: 1px solid var(--rule2); width: min(620px, 100%); padding: 24px 28px 28px; margin: 0 auto; }
-.modal.wide { width: min(820px, 100%); }
-.modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--ink); }
-.modal-head h2 { font: 600 16px var(--mono); }
-.modal-sect { margin-top: 28px; }
-.modal .stack { display: grid; gap: 18px; }
-.modal .btns { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-.prov { border-top: 1px solid var(--rule2); }
-.prov-row { display: grid; grid-template-columns: 16px 130px minmax(0, 1fr); gap: 12px; align-items: baseline; width: 100%; text-align: left;
-  background: transparent; border: 0; border-bottom: 1px solid var(--rule); padding: 9px 0; cursor: pointer; }
-.prov-row .rd { width: 10px; height: 10px; border: 1.5px solid var(--rule2); border-radius: 50%; display: inline-block; transform: translateY(1px); }
-.prov-row[aria-checked=true] .rd { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 45%, transparent 50%); }
-.prov-row .nm { font: 500 13px var(--mono); color: var(--ink); }
-.prov-row[aria-checked=true] .nm { color: var(--accent); }
-.prov-row .ds { color: var(--muted); font-size: 12.5px; }
-.prov-row:focus-visible { outline-offset: -2px; }
-.test-line { font: 12.5px/1.6 var(--mono); color: var(--ink2); margin-top: 14px; min-height: 20px; overflow-wrap: anywhere; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-
-/* ---------- toasts ---------- */
-.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
-.toast { background: var(--paper); border: 1px solid var(--rule2); border-left: 2px solid var(--accent); padding: 10px 14px; font-size: 13px; }
-.toast .t { font: 500 13px var(--mono); }
-
-/* ---------- narrow ---------- */
-@media (max-width: 1023px) { .stepper { display: none; } }
-@media (max-width: 1100px) {
-  main { padding: 32px 32px 64px; }
-  .pair { grid-template-columns: minmax(0, 1fr); gap: 32px; }
-}
-@media (max-width: 900px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
-  .topbar { padding: 0 12px; gap: 8px; }
-  .statusbar { padding: 0 12px; gap: 10px; }
-  .ed-head, .ed-foot { padding: 6px 8px; }
-  .gutter { padding: 12px 4px; }
-  .rail { position: sticky; top: 0; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 12px 16px; gap: 10px; z-index: 30; }
-  .rail-toggle { display: inline-flex !important; }
-  .brand small { margin-left: 4px; }
-  .rail.collapsed .rail-body { display: none; }
-  .rail-body { gap: 12px; }
-  .rail-scroll { max-height: 42vh; }
-  main { padding: 20px 16px 48px; }
-  .form-row { grid-template-columns: minmax(0, 1fr) 120px; }
-  .form-row .go { grid-column: 1 / -1; }
-  .form-row .go .btn { width: 100%; }
-  .display { font-size: 24px; }
-  .head .acts { margin-left: 0; }
-  .lanes { min-width: 640px; }
-  .two { grid-template-columns: 1fr; }
-  .prov-row { grid-template-columns: 16px minmax(0, 1fr); }
-  .prov-row .ds { grid-column: 2; }
-}
-@media (max-width: 760px) { .statusbar .hide-s { display: none; } .topbar .hide-s { display: none; } }
-@media (max-width: 600px) {
-  table.dt .hide-narrow { display: none; }
-  .tabs { gap: 20px; }
-  .modal { padding: 20px 16px; }
-}
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --panel: #161a21; --ink: #e8eaee; --muted: #9aa3b2; --line: #262c36; --accent: #6b9bff; --accent-ink: #0b1020; --chip: #1c2433; --ok: #15803d; --warn: #b45309; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+  a { color: var(--accent); text-decoration: none; }
+  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  aside { border-right: 1px solid var(--line); background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; font-weight: 650; letter-spacing: .2px; }
+  .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #8b5cf6); }
+  .brand small { color: var(--muted); font-weight: 400; margin-left: auto; }
+  .nav button, .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .projects { display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+  .projects .item { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .projects .item:hover { background: var(--chip); }
+  .projects .item.active { border-color: var(--line); background: var(--chip); }
+  .projects .item .name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .projects .item .sub { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .foot { margin-top: auto; color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+  main { padding: 26px 34px; max-width: 1100px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 22px 0 8px; } .lead { color: var(--muted); margin: 0 0 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  textarea, input, select { width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 9px 11px; font: inherit; }
+  textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1; } .row .fix { flex: 0 0 auto; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--chip); font-size: 12px; font-weight: 600; }
+  .chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); } .chip.warn { color: var(--warn); } .chip.run { color: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse 1.2s infinite; } @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  .feed { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; }
+  .feed .l { color: var(--muted); } .feed .k { color: var(--accent); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .tabs button { border: 0; background: none; padding: 8px 12px; color: var(--muted); cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .md table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; } .md th, .md td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+  .md th { background: var(--chip); } .md code { font-family: var(--mono); font-size: 12.5px; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+  .md pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font-family: var(--mono); font-size: 12.5px; }
+  .md h1 { font-size: 17px; } .md h2 { font-size: 14px; margin-top: 18px; } .md h3 { font-size: 13px; }
+  .md ul { padding-left: 20px; } .md p { margin: 6px 0; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; } .kv div:nth-child(odd) { color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .app { grid-template-columns: 1fr; } aside { display: none; } .topbar { display: flex; } }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal-bg.open { display: flex; } .modal { width: min(560px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .status-line { font-size: 13px; }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .toast { position: fixed; bottom: 18px; right: 18px; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 13px; display: none; }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .projects .item:focus-visible, [role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .topbar { display: none; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 6; }
+  .topbar .brand { padding: 0; }
+  main, .row > *, .card { min-width: 0; }
+  .md a, .feed a { overflow-wrap: anywhere; }
+  .tabs { overflow-x: auto; }
+  .tabs button { flex: 0 0 auto; }
+  #technical-status { white-space: pre-wrap; overflow-wrap: anywhere; }
+  #stage-times { margin-top: 10px; }
+  #stage-times > * { flex: 0 0 auto; }
+  @media (max-width: 900px) {
+    .topbar { display: flex; }
+    main { padding: 18px 14px; width: 100%; }
+    .topbar .brand { display: none; }
+  }
 </style>
 </head>
 <body>
-<div class="shell">
-<header class="topbar" id="topbar">
-  <a class="brand" href="#/" id="brandTop" title="openchip home: all sessions"><svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="9" width="14" height="14" rx="1"/><rect x="14" y="14" width="4" height="4"/><path d="M13 9V4M19 9V4M13 23v5M19 23v5M9 13H4M9 19H4M23 13h5M23 19h5"/></g></svg>openchip<small id="topVersion"></small></a>
-  <span class="crumb" id="topCrumb"></span>
-  <nav class="stepper" id="stepper" aria-label="pipeline"></nav>
-  <span class="right"><span id="topTools" class="hide-s"></span><button class="btn small" id="cmdkBtn" title="command palette">commands <span class="kbd">⌘K</span></button></span>
-</header>
+<div class="topbar" id="topbar">
+  <div class="brand"><div class="logo"></div>OpenChip</div>
+  <div class="row" style="gap:8px;flex-wrap:nowrap">
+    <button class="btn primary" onclick="showHome()">+ New design</button>
+    <button class="btn" onclick="openSettings()">Settings &amp; API key</button>
+  </div>
+</div>
 <div class="app">
-  <!-- ================= rail ================= -->
-  <aside class="rail collapsed" id="rail" aria-label="sessions">
-    <div class="rail-head">
-      <a class="brand" href="#/" id="brandHome" title="openchip home: all sessions"><svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="9" width="14" height="14" rx="1"/><rect x="14" y="14" width="4" height="4"/><path d="M13 9V4M19 9V4M13 23v5M19 23v5M9 13H4M9 19H4M23 13h5M23 19h5"/></g></svg><span class="vh">openchip home</span><small id="version" class="vh"></small></a>
-      <span class="label" style="flex:1">sessions</span>
-      <button class="btn small rail-toggle" id="railToggle" aria-expanded="false" aria-controls="railBody">menu</button>
-    </div>
-    <div class="rail-body" id="railBody">
-      <button class="btn fill block" id="newBtn">new design</button>
-      <div>
-        <label class="vh" for="search">filter sessions</label>
-        <input type="search" class="under" id="search" placeholder="search modules" autocomplete="off">
-      </div>
-      <div class="label"><b>00</b>sessions</div>
-      <div class="rail-scroll" id="sessionList"></div>
-      <div class="rail-foot" id="railFoot"></div>
+  <aside>
+    <div class="brand"><div class="logo"></div>OpenChip <small id="ver"></small></div>
+    <div class="nav"><button class="btn primary" style="width:100%" onclick="showHome()">+ New design</button></div>
+    <div class="projects" id="projects"></div>
+    <div class="foot">
+      <div id="modelline">—</div>
+      <button class="btn" onclick="openSettings()">Settings &amp; API key</button>
     </div>
   </aside>
-
-  <!-- ================= main ================= -->
   <main>
-    <!-- home / composer -->
-    <section class="wrap" id="homeView">
-      <div class="crumb">new design</div>
-      <h1 class="display">describe the module.</h1>
-      <p class="lead">openchip writes a contract, an independent reference model and verilog, then proves the rtl against the reference with real tools. name the ports, the reset and what changes on each clock.</p>
-      <div class="sect-top">
-        <div class="sub"><label class="label" for="request"><b>01</b>request</label><span class="label">type / for commands</span></div>
-        <div class="composer">
-          <div class="ed" id="editor">
-            <div class="ed-head"><span id="edName">spec</span><span class="sp"></span><span id="edParams"></span><button class="linkbtn" id="edCopy">copy</button></div>
-            <div class="ed-main"><div class="gutter" id="edGutter" aria-hidden="true">1</div><div class="ta-wrap"><div class="hl" id="edHl" aria-hidden="true"></div>
-          <textarea class="box" id="request" rows="8" spellcheck="false" placeholder="module sync_fifo #(parameter WIDTH = 8, DEPTH = 16)
-
-ports      clk, rst (sync, active high), push, din[WIDTH-1:0], pop,
-           dout[WIDTH-1:0], full, empty, count
-behaviour  push is accepted when push = 1 and full = 0 ..." aria-describedby="composerHelp" aria-autocomplete="list" aria-controls="palette" aria-expanded="false"></textarea>
-          </div></div>
-            <div class="ed-foot"><span id="edSignals">signals appear as you name ports</span><span class="sp"></span><span>verilog-2001</span></div>
-          </div>
-          <div class="palette" id="palette" role="listbox" aria-label="commands" hidden></div>
+    <section id="home">
+      <h1>Describe the module you need</h1>
+      <p class="lead">OpenChip turns the description into a reviewable contract, an independent reference model, Verilog RTL and tool-backed evidence. Be precise about ports, reset and what happens each clock.</p>
+      <div class="card">
+        <textarea id="req" aria-label="Module description" placeholder="Example: Create a synchronous FIFO module named sync_fifo with parameters WIDTH (default 8) and DEPTH (default 16). Ports: clk, rst (active-high synchronous), push, din[WIDTH], pop, dout[WIDTH], full, empty, count. A push is accepted when push=1 and full=0 …"></textarea>
+        <div class="row" style="margin-top:10px">
+          <div><label for="name">Project name</label><input id="name" placeholder="sync_fifo"></div>
+          <div class="fix"><label for="budget">Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
+          <div class="fix" style="align-self:flex-end"><button class="btn primary" id="go" onclick="startRun()">Build &amp; verify</button></div>
         </div>
-        <p class="vh" id="composerHelp">type / at the start of the box for commands: /resume, /settings, /help. ctrl or cmd plus enter starts the run.</p>
-        <div class="form-row">
-          <label class="field" for="projname">name<input type="text" class="under" id="projname" placeholder="sync_fifo" autocomplete="off"></label>
-          <label class="field" for="budget">budget
-            <select class="under" id="budget">
-              <option value="300">5 min, quick check</option>
-              <option value="1200" selected>20 min, standard</option>
-              <option value="3600">60 min, thorough</option>
-              <option value="14400">4 h, long</option>
-            </select>
-          </label>
-          <div class="go"><button class="btn fill" id="startBtn" style="padding:11px 22px">build and verify <span class="kbd">⌘↵</span></button></div>
-        </div>
-        <div class="facts" id="readiness"></div>
+        <p class="hint">Typically 1 to 3 minutes; complex designs and repairs can take longer.</p><div class="hint" style="margin-top:10px" id="readiness"></div>
       </div>
-      <div class="sect">
-        <div class="sub"><span class="label"><b>02</b>sessions</span><span class="label" id="homeCount"></span></div>
-        <div id="homeSessions"></div>
-      </div>
+      <div class="card" id="recent"><h2 style="margin-top:0">Recent designs</h2><div id="recentlist" class="empty">No designs yet.</div></div>
     </section>
 
-    <!-- session view -->
-    <section class="wrap" id="sessionView" hidden>
-      <div class="crumb"><a href="#/" id="backBtn">sessions</a> / <span id="crumbWs"></span><span id="crumbRun"></span></div>
-      <div class="head">
-        <h1 class="display" id="sessTitle"><span class="kw">module </span><span id="sessModule"></span></h1>
-        <div class="acts" id="sessActions"></div>
+    <section id="run" style="display:none">
+      <div class="row" style="align-items:flex-start">
+        <div><h1 id="runtitle">design</h1><div class="status-line" id="runstatus"></div></div>
+        <div class="fix row" style="gap:8px"><button class="btn" onclick="openRevise()">Request a change</button><button class="btn" onclick="showHome()">Back</button></div>
       </div>
-      <div class="verdict" id="sessVerdict"></div>
-      <div class="meta" id="sessMeta"></div>
-      <div id="answerCard" class="answer" hidden></div>
-      <div id="blocker"></div>
-      <section class="pair" id="pair">
-        <div id="iface"></div>
-        <div id="signoff"></div>
-      </section>
-      <section class="pipe" id="pipe"></section>
-      <div class="tabs" role="tablist" aria-label="session detail" id="tabs"></div>
-      <div class="pane md-host" id="pane" role="tabpanel" tabindex="0"></div>
-      <div class="pane" id="logPane" role="tabpanel" tabindex="0" hidden>
-        <div class="sub"><button class="linkbtn mono" id="showEarlier" hidden>show earlier</button><span class="label" id="feedNote"></span></div>
-        <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <div class="card" style="margin-top:14px">
+        <div class="row" style="justify-content:space-between"><div id="chips" class="row" style="gap:8px"></div><div class="hint" id="elapsed"></div></div>
+        <div id="stage-times" class="row"></div><p id="formal-info" class="hint"></p><details><summary>Engineering details</summary><div id="counters" class="hint"></div><pre id="technical-status"></pre></details><div class="feed" id="feed" style="margin-top:10px"></div>
       </div>
+      <div id="questions" class="card" hidden></div><div class="row" style="margin-bottom:12px"><button id="copy-rtl" class="btn" onclick="copyRTL()">Copy RTL</button><a id="bundle" class="btn" download>Download RTL + report + evidence</a></div>
+      <div class="tabs">
+        <button class="active" onclick="tab('contract',this)">Contract</button><button onclick="tab('rtl',this)">RTL</button><button onclick="tab('report',this)">Report</button><button onclick="tab('request',this)">Request</button><button onclick="tab('diff',this)">Contract changes</button><button onclick="tab('evidence',this)">Evidence</button>
+      </div>
+      <div class="card md" id="pane"></div>
     </section>
   </main>
 </div>
 
-<!-- ================= settings modal ================= -->
-<div class="scrim" id="settingsScrim" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" id="settingsModal">
-    <div class="modal-head">
-      <h2 id="settingsTitle">settings</h2>
-      <button class="btn small" data-close="settingsScrim">close</button>
+<div class="modal-bg" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="modal">
+    <h2 id="settings-title" style="margin-top:0">Model &amp; API key</h2>
+    <p class="hint">Bring your own key. Paste a key from OpenRouter, OpenAI or Anthropic, or point at a local/hosted OpenAI-compatible server (vLLM). Keys are stored only in <code>~/.config/openchip/keys.env</code>.</p>
+    <label for="provider">Provider</label>
+    <select id="provider" onchange="providerChanged()">
+      <option value="openrouter">OpenRouter (any model, one key)</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="openai-compatible">OpenAI-compatible server (vLLM, local)</option>
+    </select>
+    <label for="model">Model</label>
+    <input id="model" list="presets" placeholder="model id"><datalist id="presets"></datalist>
+    <label for="baseurl">Base URL <span class="hint">(leave empty for the provider default)</span></label>
+    <input id="baseurl" placeholder="https://…">
+    <label for="tokenrate">Estimated blended cost (USD per million tokens, optional)</label><input id="tokenrate" type="number" min="0" step="any" placeholder="Your provider rate"><p class="hint">Used for an approximate model cost; excludes hosting and tool costs.</p>
+    <label for="apikey">API key <span class="hint" id="keyhint"></span></label>
+    <input id="apikey" type="password" placeholder="paste key — leave empty to keep the saved one" autocomplete="off">
+    <div class="row" style="margin-top:14px">
+      <button class="btn" onclick="testConnection()">Test connection</button>
+      <button class="btn primary" onclick="saveSettings()">Save</button>
+      <button class="btn fix" onclick="closeSettings()">Close</button>
     </div>
-    <p class="hint">bring your own key. keys are stored only in <code>~/.config/openchip/keys.env</code> on this machine.</p>
-    <div class="modal-sect">
-      <div class="sub"><span class="label"><b>01</b>provider</span></div>
-      <div class="prov" id="provCards" role="radiogroup" aria-label="provider"></div>
-    </div>
-    <div class="modal-sect stack">
-      <div class="sub" style="margin-bottom:0"><span class="label"><b>02</b>model and key</span></div>
-      <div class="two">
-        <label class="field" for="model">model
-          <input type="text" class="under" id="model" list="modelPresets" autocomplete="off" placeholder="model id">
-        </label>
-        <datalist id="modelPresets"></datalist>
-        <label class="field" for="baseurl" id="baseUrlWrap">base url (optional)
-          <input type="text" class="under" id="baseurl" autocomplete="off" placeholder="https://">
-        </label>
-      </div>
-      <label class="field" for="apikey">api key <span id="keyHint" style="letter-spacing:0"></span>
-        <input type="password" class="under" id="apikey" autocomplete="off" placeholder="paste a key, or leave empty to keep the saved one">
-      </label>
-      <label class="field" for="tokenrate">blended cost, usd per million tokens (optional)
-        <input id="tokenrate" class="under" type="number" min="0" step="any">
-        <span class="hint" style="display:block;margin-top:6px;font-family:var(--sans);letter-spacing:0">approximate model cost at your rate; excludes hosting and tools.</span>
-      </label>
-    </div>
-    <div class="btns">
-      <button class="btn" id="testBtn">test connection</button>
-      <button class="btn fill" id="saveBtn">save</button>
-    </div>
-    <div class="test-line" id="testResult" aria-live="polite"></div>
-    <div class="modal-sect">
-      <div class="sub"><span class="label"><b>03</b>toolchain</span></div>
-      <div id="toolchain"></div>
-    </div>
+    <div class="hint" id="testresult" style="margin-top:10px"></div>
+    <h2>Toolchain</h2>
+    <div class="kv" id="tools"></div>
   </div>
 </div>
 
-<!-- ================= resume modal ================= -->
-<div class="scrim" id="resumeScrim" hidden>
-  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="resumeTitle" id="resumeModal">
-    <div class="modal-head">
-      <h2 id="resumeTitle">/resume</h2>
-      <button class="btn small" data-close="resumeScrim">close</button>
-    </div>
-    <p class="hint">newest first. enter opens a session. a run that stopped before finishing resumes from its last checkpoint; a run that finished without sign-off is re-verified.</p>
-    <div id="resumeList" style="margin-top:16px"></div>
+<div class="modal-bg" id="revise" role="dialog" aria-modal="true" aria-labelledby="revise-title">
+  <div class="modal">
+    <h2 id="revise-title" style="margin-top:0">Request a change</h2>
+    <p class="hint">A change creates a new contract version, invalidates the previous evidence and re-verifies.</p>
+    <textarea id="change" aria-label="Requested change" placeholder="e.g. make dout registered; add an almost_full flag when count >= DEPTH-2"></textarea>
+    <div class="row" style="margin-top:12px"><button class="btn primary" onclick="submitRevise()">Apply change</button><button class="btn fix" onclick="document.getElementById('revise').classList.remove('open')">Cancel</button></div>
   </div>
 </div>
-
-<!-- ================= help modal ================= -->
-<div class="scrim" id="helpScrim" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" id="helpModal">
-    <div class="modal-head">
-      <h2 id="helpTitle">help</h2>
-      <button class="btn small" data-close="helpScrim">close</button>
-    </div>
-    <dl class="kv">
-      <dt>/resume</dt><dd>list every session, open one, or restart a run that stopped before finishing.</dd>
-      <dt>/settings</dt><dd>provider, model, api key and the local toolchain check.</dd>
-      <dt>/help</dt><dd>this list.</dd>
-      <dt>keyboard</dt><dd>arrow keys and enter drive the command palette, escape closes it. tab reaches every control, escape closes any dialog, arrow keys move between tabs.</dd>
-      <dt>a run</dt><dd>intake, review, an independent reference, rtl, verification against the reference, then sign-off. every claim in the report is tied to a tool result.</dd>
-      <dt>withheld</dt><dd>openchip refuses to sign off a design it could not verify, and says which check was missing.</dd>
-    </dl>
-  </div>
-</div>
-
-<!-- ================= revise modal ================= -->
-<div class="scrim" id="reviseScrim" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reviseTitle" id="reviseModal">
-    <div class="modal-head">
-      <h2 id="reviseTitle">request a change</h2>
-      <button class="btn small" data-close="reviseScrim">close</button>
-    </div>
-    <p class="hint">a change creates a new contract version, invalidates the previous evidence and verifies again.</p>
-    <label class="label" for="change" style="display:block;margin:16px 0 8px"><b>01</b>change</label>
-    <textarea class="box" id="change" rows="5" placeholder="register dout, and add almost_full when count is at least DEPTH-2."></textarea>
-    <div class="btns">
-      <button class="btn fill" id="reviseBtn">apply change</button>
-      <button class="btn" data-close="reviseScrim">cancel</button>
-    </div>
-  </div>
-</div>
-<footer class="statusbar" id="statusbar">
-  <span id="stProvider"></span>
-  <span id="stKey" class="hide-s"></span>
-  <span class="right"><span id="stRun" class="hide-s"></span><button class="linkbtn" id="stDocs">docs</button></span>
-</footer>
-</div>
-
-<div class="toasts" id="toasts" aria-live="assertive" aria-atomic="false"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-"use strict";
-/* =======================================================================
-   openchip ui. single page, no dependencies, no build step.
-   backend contract: docs/product/ui-redesign-2026-09-15.md section 3.
-   visual contract: docs/product/ui-visual-direction-2026-09-15.md.
-   every field is optional on the wire: anything missing is hidden, never
-   rendered as "undefined". user and model text is only ever inserted as
-   text nodes, or escaped before any markup is added.
-   ======================================================================= */
+let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0, feedText = '';
+const $ = id => document.getElementById(id);
+const api = async (path, body) => { const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
+const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 3200); };
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-const $ = (id) => document.getElementById(id);
-const el = (tag, attrs, kids) => {
-  const n = document.createElement(tag);
-  if (attrs) for (const k in attrs) {
-    const v = attrs[k];
-    if (v === null || v === undefined || v === false) continue;
-    if (k === "class") n.className = v;
-    else if (k === "text") n.textContent = v;
-    else if (k === "html") n.innerHTML = v;
-    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else n.setAttribute(k, v === true ? "" : String(v));
-  }
-  (kids || []).forEach((c) => { if (c === null || c === undefined || c === false) return; n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
-  return n;
-};
-const SVGNS = "http://www.w3.org/2000/svg";
-const sv = (tag, attrs, text) => {
-  const n = document.createElementNS(SVGNS, tag);
-  if (attrs) for (const k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, String(attrs[k]));
-  if (text !== undefined && text !== null) n.textContent = text;
-  return n;
-};
-const esc = (s) => String(s === null || s === undefined ? "" : s)
-  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const clear = (n) => { while (n.firstChild) n.removeChild(n.firstChild); return n; };
-const lower1 = (s) => String(s || "").charAt(0).toLowerCase() + String(s || "").slice(1);
-const clip = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s; };
-
-const STAGE_NAMES = ["Intake", "Review", "Reference", "RTL", "Verify", "Sign-off"];
-const FEED_CAP = 500;
-const BLOCKING = ["rate_limited", "quota", "invalid_key", "no_key", "unreachable"];
-const PROVIDERS = [
-  { id: "opencode-go", name: "opencode go", desc: "opencode gateway, one key for the hosted models.",
-    base: "https://opencode.ai/zen/go/v1", env: "OPENCODE_GO_API_KEY", baseEditable: true,
-    presets: ["kimi-k3", "glm-5.3", "qwen3.8-max", "minimax-m3", "muse-spark-1.3-contributor", "gpt-5.6-luna", "grok-4.6", "deepseek-v4-flash"] },
-  { id: "openrouter", name: "openrouter", desc: "many providers behind one key.",
-    base: "https://openrouter.ai/api/v1", env: "OPENROUTER_API_KEY", baseEditable: true,
-    presets: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "anthropic/claude-sonnet-5", "openai/gpt-5-codex"] },
-  { id: "openai", name: "openai", desc: "direct openai api key.",
-    base: "https://api.openai.com/v1", env: "OPENAI_API_KEY", baseEditable: false,
-    presets: ["gpt-5-codex", "gpt-5", "gpt-oss-120b"] },
-  { id: "anthropic", name: "anthropic", desc: "direct anthropic api key.",
-    base: "https://api.anthropic.com", env: "ANTHROPIC_API_KEY", baseEditable: false,
-    presets: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"] },
-  { id: "openai-compatible", name: "self-hosted", desc: "your own vllm or openai-compatible server",
-    base: "http://127.0.0.1:8000/v1", env: "OPENCHIP_MODEL_API_KEY", baseEditable: true,
-    presets: ["openai/gpt-oss-120b", "Qwen/Qwen3.8-27B", "Qwen/Qwen3-8B"] },
-];
-const providerMeta = (id) => PROVIDERS.find((p) => p.id === id) ||
-  { id: id || "unknown", name: id || "unknown", desc: "", base: "", env: "", baseEditable: true, presets: [] };
-
-/* ---------------- state ---------------- */
-const S = {
-  status: null,          // GET /api/status
-  sessions: [],          // GET /api/sessions (or derived from status.runs)
-  sessionsOk: false,     // true when the real endpoint answered
-  detail: null,          // GET /api/runs/<ws>
-  current: null,         // open workspace
-  tab: null,             // null until the user picks a tab: then the page picks a sensible one
-  filter: "",
-  logSeen: 0,
-  feed: [],              // {t, text, kind}
-  feedExpanded: false,
-  provider: null,        // last known ProviderStatus
-  settingsDraft: null,   // {provider, model, base_url}
-  timer: null,
-  inFlight: false,
-  lastFocus: null,
-};
-
-/* ---------------- opencode session id (stable per browser) ---------------- */
-function opencodeSession() {
-  let id = null;
-  try { id = localStorage.getItem("openchip.opencode.session"); } catch (e) { id = null; }
-  if (!id) {
-    id = (self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID()
-      : "s-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-    try { localStorage.setItem("openchip.opencode.session", id); } catch (e) { /* private window */ }
-  }
-  return id;
-}
-const OC_SESSION = opencodeSession();
-
-/* ---------------- fetch ---------------- */
-async function api(path, body) {
-  const init = { headers: { "x-opencode-session": OC_SESSION } };
-  if (body !== undefined) {
-    init.method = "POST";
-    init.headers["Content-Type"] = "application/json";
-    init.body = JSON.stringify(body);
-  }
-  let r;
-  try { r = await fetch(path, init); }
-  catch (e) { const err = new Error("cannot reach the openchip server"); err.offline = true; throw err; }
-  let j = null;
-  const txt = await r.text();
-  if (txt) { try { j = JSON.parse(txt); } catch (e) { j = null; } }
-  if (!r.ok) {
-    const err = new Error((j && (j.error || j.message)) || (r.status + " " + r.statusText));
-    err.status = r.status; err.payload = j;
-    throw err;
-  }
-  return j === null ? {} : j;
-}
-
-/* ---------------- toasts ---------------- */
-function toast(title, detail) {
-  const t = el("div", { class: "toast", role: "status" }, [
-    el("div", { class: "t", text: title }),
-    detail ? el("div", { class: "hint", text: detail }) : null,
-  ]);
-  $("toasts").appendChild(t);
-  setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 7000);
-}
-
-/* ---------------- time ---------------- */
-function parseTime(v) {
-  if (v === null || v === undefined || v === "") return null;
-  if (typeof v === "number") return new Date(v < 1e11 ? v * 1000 : v);
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d;
-}
-function ago(v) {
-  const d = parseTime(v);
-  if (!d) return "";
-  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
-  if (s < 60) return "now";
-  if (s < 3600) return Math.round(s / 60) + "m";
-  if (s < 86400) return Math.round(s / 3600) + "h";
-  if (s < 86400 * 60) return Math.round(s / 86400) + "d";
-  return Math.round(s / (86400 * 7)) + "w";
-}
-function absTime(v) {
-  const d = parseTime(v);
-  if (!d) return "";
-  const p = (n) => String(n).padStart(2, "0");
-  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
-}
-function clock(v) {
-  const d = parseTime(v);
-  if (!d) return "";
-  const p = (n) => String(n).padStart(2, "0");
-  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
-}
-function dur(s) {
-  if (typeof s !== "number" || !isFinite(s)) return "";
-  if (s < 60) return (s < 10 ? s.toFixed(1) : Math.round(s)) + " s";
-  const t = Math.round(s);
-  const m = Math.floor(t / 60), r = t % 60;
-  if (m < 60) return m + " min " + r + " s";
-  return Math.floor(m / 60) + " h " + (m % 60) + " min";
-}
-function countdownText(ps) {
-  const until = parseTime(ps && ps.until);
-  if (until) {
-    const left = Math.max(0, Math.round((until.getTime() - Date.now()) / 1000));
-    return left > 0 ? "retry in " + dur(left) + " (at " + clock(until) + ")" : "retry now (was " + clock(until) + ")";
-  }
-  if (ps && typeof ps.retry_after_s === "number") return "retry in " + dur(ps.retry_after_s);
-  return "";
-}
-
-/* ---------------- markdown (headings, fences, tables, lists, inline) ---------------- */
-function mdInline(s) {
-  let out = esc(s);
-  out = out.replace(/`([^`]+)`/g, (m, c) => "<code>" + c + "</code>");
-  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
-  out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" rel="noreferrer noopener" target="_blank">$1</a>');
-  return out;
-}
+// -- minimal markdown (headings, tables, lists, code fences, inline code/bold) ---------------------
 function md(src) {
-  const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
-  const out = [];
-  let i = 0, list = null;
-  const closeList = () => { if (list) { out.push("</" + list + ">"); list = null; } };
-  const openList = (kind) => { if (list !== kind) { closeList(); out.push("<" + kind + ">"); list = kind; } };
-  const isDivider = (r) => /^\|?[\s:|-]+\|[\s:|-]*$/.test(r) && r.indexOf("-") >= 0;
-  const cells = (r) => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+  const lines = (src || '').split('\n'); let out = [], i = 0, inList = false;
+  const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
   while (i < lines.length) {
     const l = lines[i];
-    if (/^\s*```/.test(l)) {
-      closeList();
-      const body = [];
-      i++;
-      while (i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i++]);
-      i++;
-      out.push("<pre><code>" + esc(body.join("\n")) + "</code></pre>");
-      continue;
-    }
-    if (/^\s*\|/.test(l)) {
-      closeList();
-      const rows = [];
-      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
-      const head = cells(rows[0]);
-      const body = rows.slice(1).filter((r) => !isDivider(r));
-      out.push("<table><thead><tr>" + head.map((c) => "<th>" + mdInline(c) + "</th>").join("") + "</tr></thead><tbody>" +
-        body.map((r) => "<tr>" + cells(r).map((c) => "<td>" + mdInline(c) + "</td>").join("") + "</tr>").join("") +
-        "</tbody></table>");
-      continue;
-    }
-    const h = /^(#{1,6})\s+(.*)$/.exec(l);
-    if (h) { closeList(); const n = Math.min(h[1].length, 6); out.push("<h" + n + ">" + mdInline(h[2]) + "</h" + n + ">"); i++; continue; }
-    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(l)) { closeList(); out.push("<hr>"); i++; continue; }
-    if (/^\s*[-*+]\s+/.test(l)) { openList("ul"); out.push("<li>" + mdInline(l.replace(/^\s*[-*+]\s+/, "")) + "</li>"); i++; continue; }
-    if (/^\s*\d+[.)]\s+/.test(l)) { openList("ol"); out.push("<li>" + mdInline(l.replace(/^\s*\d+[.)]\s+/, "")) + "</li>"); i++; continue; }
-    if (!l.trim()) { closeList(); i++; continue; }
-    closeList();
-    const para = [l];
-    i++;
-    while (i < lines.length && lines[i].trim() && !/^\s*(```|\||#{1,6}\s|[-*+]\s|\d+[.)]\s)/.test(lines[i])) para.push(lines[i++]);
-    out.push("<p>" + mdInline(para.join("\n")) + "</p>");
+    if (l.startsWith('```')) { closeList(); let b=[]; i++; while (i < lines.length && !lines[i].startsWith('```')) b.push(lines[i++]); i++; out.push('<pre>'+esc(b.join('\n'))+'</pre>'); continue; }
+    if (/^\|/.test(l)) { closeList(); let rows=[]; while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      let h = cells(rows[0]); let body = rows.slice(1).filter(r => !/^\|[\s\-:|]+\|$/.test(r));
+      out.push('<table><thead><tr>'+h.map(c=>'<th>'+inline(c)+'</th>').join('')+'</tr></thead><tbody>'+body.map(r=>'<tr>'+cells(r).map(c=>'<td>'+inline(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'); continue; }
+    const hm = /^(#{1,3})\s+(.*)/.exec(l); if (hm) { closeList(); out.push(`<h${hm[1].length}>${inline(hm[2])}</h${hm[1].length}>`); i++; continue; }
+    if (/^\s*[-*]\s+/.test(l)) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>'+inline(l.replace(/^\s*[-*]\s+/,''))+'</li>'); i++; continue; }
+    closeList(); if (l.trim()) out.push('<p>'+inline(l)+'</p>'); i++;
   }
-  closeList();
-  return out.join("\n");
+  closeList(); return out.join('\n');
 }
 
-/* ---------------- verilog: line numbers and light keyword colouring ---------------- */
-const VKW = new Set(["module", "input", "output", "inout", "reg", "wire", "always", "begin", "end", "if", "else", "assign", "case",
-  "endcase", "parameter", "localparam", "posedge", "negedge", "endmodule"]);
-function hlLine(line) {
-  /* escape first, then wrap whole-word keywords; entities such as &lt; never match a keyword */
-  let code = line, cm = "";
-  const at = line.indexOf("//");
-  if (at >= 0) { code = line.slice(0, at); cm = line.slice(at); }
-  const body = esc(code).replace(/\b[a-z]+\b/g, (w) => VKW.has(w) ? '<span class="kw">' + w + "</span>" : w);
-  return body + (cm ? '<span class="cm">' + esc(cm) + "</span>" : "");
+// -- status / projects -------------------------------------------------------------------------------
+async function refreshStatus() {
+  status = await api('/api/status');
+  const s = status.settings;
+  $('modelline').innerHTML = `<b>${esc(s.provider)}</b> · ${esc(s.model || 'no model')}<br><span class="${s.key_present||s.provider==='openai-compatible'?'':'chip warn'}">${s.key_present ? 'key ' + esc(s.key_hint) : (s.provider==='openai-compatible' ? 'no key needed' : 'no API key')}</span>`;
+  const d = status.doctor; const missing = Object.entries(d.tools).filter(([k,v]) => !v.ok && k !== 'sby').map(([k])=>k);
+  $('readiness').innerHTML = (missing.length ? `<span class="chip warn">toolchain missing: ${missing.join(', ')}</span> install Icarus, Verilator and Yosys (OSS CAD Suite) to run verification locally.` : `<span class="chip ok">toolchain ok</span>`) + ' ' + (s.key_present || s.provider==='openai-compatible' ? `<span class="chip ok">model configured</span>` : `<span class="chip warn">add an API key in Settings</span>`);
+  renderProjects(status.runs);
 }
-function codeBlock(src, verilog) {
-  const lines = String(src || "").replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
-  const pre = el("pre", { class: "code" });
-  pre.innerHTML = lines.map((l, i) => '<span class="ln">' + (i + 1) + "</span>" + (verilog ? hlLine(l) : esc(l))).join("\n");
-  return pre;
-}
-function diffBlock(src) {
-  const pre = el("pre", { class: "code" });
-  String(src || "").split("\n").forEach((l, i) => {
-    if (i) pre.appendChild(document.createTextNode("\n"));
-    const cls = /^(\+\+\+|---)/.test(l) ? "hunk" : (/^\+/.test(l) ? "add" : (/^-/.test(l) ? "del" : (/^@@/.test(l) ? "hunk" : "")));
-    pre.appendChild(cls ? el("span", { class: cls, text: l }) : document.createTextNode(l));
-  });
-  return pre;
+function stateChip(r) { const st = r.state || 'created'; const cls = st==='completed' ? (r.accepted ? 'ok' : 'warn') : (st==='running'||st==='planned') ? 'run' : (st==='failed'||st==='stalled'||st==='budget_exhausted') ? 'bad' : ''; const lbl = st==='completed' ? (r.accepted ? 'accepted' : 'not accepted') : st; return `<span class="chip ${cls}"><span class="dot ${cls==='run'?'pulse':''}"></span>${lbl}</span>`; }
+const kbdActivate = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"`;
+function renderProjects(runs) {
+  $('projects').innerHTML = runs.map(r => `<div class="item ${current===r.workspace?'active':''}" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div class="name">${esc(r.workspace)}</div><div class="sub">${stateChip(r)}</div></div>`).join('') || '<div class="hint" style="padding:8px">No designs yet.</div>';
+  $('recentlist').className = runs.length ? '' : 'empty';
+  $('recentlist').innerHTML = runs.length ? runs.slice(0,8).map(r => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" tabindex="0" role="button" ${kbdActivate} onclick="openRun('${r.workspace}')"><div><b>${esc(r.workspace)}</b><div class="hint">${esc(r.request||'')}</div></div><div class="fix">${stateChip(r)}</div></div>`).join('') : '<div class="empty">No designs yet.</div>';
 }
 
-/* ---------------- state and result labels ---------------- */
-function resultOf(s) {
-  if (!s) return "created";
-  if (s.result) return s.result;
-  const st = s.state || "created";
-  /* `planned` is a run that has started but not reached its first step: it reads as running, and so
-     does a freshly created run while its thread is alive (the first second of a revision). */
-  if (s.alive || st === "running" || st === "planned") return "running";
-  if (st === "created" && s.previous_result) return "running";
-  if (st === "completed") return s.accepted === true ? "accepted" : (s.withheld_reason ? "withheld" : "not_accepted");
-  if (st === "failed") return "failed";
-  if (st === "paused" || st === "stalled" || st === "budget_exhausted" || st === "interrupted") return "interrupted";
-  return st;
-}
-/* status is text with a square glyph: pass, fail, needs input, running, stopped */
-function statusOf(s) {
-  const r = resultOf(s);
-  const prev = s && s.previous_result;
-  if (prev && (r === "running" || r === "created")) return { cls: "run", word: "revising", pulse: true };
-  if (r === "running") return { cls: "run", word: "running", pulse: true };
-  /* needs input only when the user is actually being asked something */
-  if (s && s.needs_input && r !== "interrupted" && r !== "created") return { cls: "hold", word: "needs input" };
-  if (r === "accepted") return { cls: "pass", word: "pass" };
-  if (r === "withheld" || r === "not_accepted") return { cls: "fail", word: "fail" };
-  if (r === "failed") return { cls: "fail", word: "fail" };
-  if (r === "interrupted") return { cls: "stop", word: "stopped" };
-  if (r === "created") return { cls: "stop", word: "created" };
-  return { cls: "stop", word: String(r).replace(/_/g, " ") };
-}
-const ST_TEXT = { pass: "p", fail: "f", hold: "h", run: "a", stop: "i" };
-function glyph(cls, pulse) { return el("span", { class: "sq " + cls + (pulse ? " pulse" : ""), "aria-hidden": "true" }); }
-function statusNode(st, title) {
-  return el("span", { class: "st " + st.cls, title: title || null }, [glyph(st.cls, st.pulse), el("span", { class: "word", text: st.word })]);
-}
-const RESULT_LABEL = {
-  accepted: "accepted", withheld: "withheld", not_accepted: "not accepted",
-  interrupted: "interrupted", failed: "failed", running: "running", created: "created",
-};
-/* a run that stopped part-way through is resumed; a run that completed without acceptance (not
-   accepted, or sign-off withheld) is re-verified, which POST /resume also accepts. an accepted run
-   has no action: request a change instead. */
-function isReverify(s) {
-  const r = resultOf(s);
-  return r === "not_accepted" || r === "withheld";
-}
-function isResumable(s) {
-  if (!s) return false;
-  if (s.alive) return false;
-  const r = resultOf(s);
-  if (r === "accepted") return false;
-  if (isReverify(s)) return true;
-  if (typeof s.resumable === "boolean") return s.resumable;
-  const st = s.state || "";
-  return ["planned", "running", "paused", "stalled", "budget_exhausted", "interrupted", "failed"].indexOf(st) >= 0;
-}
-function resumeLabel(s) { return isReverify(s) ? "re-verify" : "resume run"; }
-function moduleOf(s) { return (s && (s.module || s.name || s.workspace)) || ""; }
-/* when two sessions share a module name, the workspace tells them apart */
-function dupModules() {
-  const n = {};
-  S.sessions.forEach((x) => { const m = moduleOf(x); n[m] = (n[m] || 0) + 1; });
-  return n;
-}
-function moduleNode(s, counts, tag, cls) {
-  const node = el(tag || "span", { class: cls || null }, [moduleOf(s)]);
-  if ((counts || dupModules())[moduleOf(s)] > 1 && s.workspace && s.workspace !== moduleOf(s)) {
-    node.appendChild(el("span", { class: "i", style: "font-weight:400", text: " \u00b7 " + s.workspace }));
-  }
-  return node;
-}
-
-/* ---------------- provider view: rail footer and blocker banner share it (section 4) ---------------- */
-/* the gateway puts its own page in the error body (a 429 GoUsageLimitError names it). any kind of
-   status may carry one, so the first http(s) url in the message becomes the "open the gateway" link. */
-function firstUrl(text) {
-  const m = /https?:\/\/[^\s"'<>)\]},]+/.exec(String(text || ""));
-  return m ? m[0].replace(/[.,;:]+$/, "") : "";
-}
-function providerView(ps, settings) {
-  const set = settings || (S.status && S.status.settings) || {};
-  const kind = (ps && ps.kind) || (set.key_present === false ? "no_key" : "unknown");
-  const meta = providerMeta((ps && ps.provider) || set.provider);
-  const model = (ps && ps.model) || set.model || "";
-  const cd = countdownText(ps);
-  const msg = (ps && ps.message) || "";
-  const map = {
-    ok: { tone: "p", short: "connected", title: "provider connected", body: "" },
-    no_key: { tone: "h", short: "add an api key", title: "no api key", body: "add a key for " + meta.name + " in settings before starting a run." },
-    invalid_key: { tone: "f", short: "key rejected", title: "the key was rejected", body: msg || (meta.name + " rejected the key. paste a new one in settings.") },
-    rate_limited: { tone: "h", short: "rate limited", second: cd, title: "rate limited by " + meta.name,
-      body: msg || (meta.name + " is throttling requests. the run waits and retries.") },
-    quota: { tone: "f", short: "usage limit reached", second: cd ? "resets " + cd.replace(/^retry (in|now) ?/, "") : "",
-      title: "usage limit reached on " + meta.name, body: msg || "the gateway reports the allowance is spent." },
-    unreachable: { tone: "f", short: "cannot reach " + meta.name, title: "cannot reach " + meta.name, body: msg || "the network or the endpoint is down. the run waits until it answers." },
-    server_error: { tone: "f", short: meta.name + " error", title: meta.name + " returned a server error", body: msg || "retrying with backoff." },
-    unknown: { tone: "i", short: "not checked", title: "provider not checked yet", body: "open settings and use test connection." },
-  };
-  const info = map[kind] || map.unknown;
-  const link = (ps && ps.link) || firstUrl(msg) || (kind === "quota" && meta.id === "opencode-go" ? "https://opencode.ai/" : "");
-  return { kind: kind, tone: info.tone, short: info.short, second: info.second || "", title: info.title,
-           body: info.body, link: link, meta: meta, model: model, ps: ps || null };
-}
-const TONE_GLYPH = { p: "pass", h: "hold", f: "fail", i: "stop" };
-function renderRailFoot() {
-  const host = clear($("railFoot"));
-  host.appendChild(el("div", { class: "wrapln" }, [el("span", { class: "k", text: "keys " }), "n new · / search · ⌘k commands"]));
-  host.appendChild(el("div", { style: "margin-top:8px" }, [el("button", { class: "linkbtn", text: "settings", onclick: () => openSettings() })]));
-  if (host) return;
-  const v = providerView(S.provider, S.status && S.status.settings);
-  host.appendChild(el("div", { class: "ln", title: v.model }, [el("span", { class: "k", text: "model " }), v.model || "not set"]));
-  host.appendChild(el("div", { class: "wrapln" }, [
-    el("button", { class: "linkbtn", style: "color:inherit", title: v.title + (v.body ? ": " + v.body : ""), onclick: () => openSettings() }, [
-      el("span", { class: "k", text: "provider " }), v.meta.name + " · ", el("span", { class: v.tone, text: v.short })]),
-  ]));
-  if (v.second) host.appendChild(el("div", { class: "wrapln " + v.tone, text: v.second }));
-  const tools = (S.status && S.status.doctor && S.status.doctor.tools) || {};
-  const names = Object.keys(tools).filter((n) => n !== "vvp");
-  if (names.length) {
-    const line = el("div", {}, [el("span", { class: "k", text: "tools " })]);
-    names.forEach((n, i) => {
-      if (i) line.appendChild(document.createTextNode(" "));
-      line.appendChild(el("span", { class: tools[n].ok ? "" : (n === "sby" ? "i" : "f"), title: tools[n].ok ? (tools[n].version || "") : "not on PATH",
-        text: n + (tools[n].ok ? "" : (n === "sby" ? " (absent)" : " (missing)")) }));
-    });
-    host.appendChild(line);
-  }
-  host.appendChild(el("div", { style: "margin-top:8px" }, [el("button", { class: "linkbtn", id: "settingsBtn", text: "settings", onclick: () => openSettings() })]));
-}
-function blockerApplies() {
-  const d = S.detail;
-  if (!d || d.missing) return false;
-  const ps = S.provider;
-  if (!ps || BLOCKING.indexOf(ps.kind) < 0) return false;
-  /* only when it blocks this session: the run is live, or it stopped because of the provider.
-     an old failed or stalled run is not blocked by a key; the rail footer and home readiness say that. */
-  if (d.alive) return true;
-  return d.state !== "completed" && BLOCKING.indexOf(d.stopped_by_provider || "") >= 0;
-}
-function renderBlocker() {
-  const host = clear($("blocker"));
-  if (!blockerApplies()) return;
-  const v = providerView(S.provider, S.status && S.status.settings);
-  const left = el("div", {}, [
-    glyph(v.tone === "f" ? "fail" : "hold"), " ",
-    el("span", { class: "t " + v.tone, text: v.title }),
-    el("span", { class: "muted", text: " · " + [v.body, v.second, v.model ? "model " + v.model : ""].filter(Boolean).join(" · ") }),
-  ]);
-  const acts = el("div", { class: "b-acts" });
-  if (v.link) acts.appendChild(el("a", { href: v.link, target: "_blank", rel: "noreferrer noopener", text: "open the gateway page" }));
-  acts.appendChild(el("button", { class: "linkbtn", text: "settings", onclick: () => openSettings() }));
-  host.appendChild(el("div", { class: "banner" + (v.tone === "f" ? " bad" : ""), role: "status" }, [left, acts]));
-}
-
-/* ---------------- app shell: top bar, status bar, editor ---------------- */
-const SPEC_KW = /\b(module|ports?|behaviour|behavior|parameter|localparam|input|output|inout|reg|wire|clk|clock|rst|reset|posedge|negedge|always|assign|signed|unsigned)\b/g;
-function hlSpec(src) {
-  let out = esc(src);
-  out = out.replace(/\[[^\]\n]{1,40}\]/g, (m) => '<span class="b">' + m + "</span>");
-  out = out.replace(SPEC_KW, (m) => '<span class="k">' + m + "</span>");
-  out = out.replace(/(^|\n)(\s*(?:\/\/|#)[^\n]*)/g, (m, a, b) => a + '<span class="c">' + b + "</span>");
-  return out;
-}
-function specParams(v) {
-  const out = [];
-  const re = /\b([A-Z][A-Z0-9_]{1,20})\s*(?:=|\(default\s*)\s*(\d+)/g;
-  let m;
-  while ((m = re.exec(v)) && out.length < 6) out.push(m[1] + " " + m[2]);
-  return out;
-}
-function specSignals(v) {
-  const names = new Set();
-  const line = /(^|\n)\s*(?:ports?|signals?)\s*[:\s]([^\n]*(?:\n\s{2,}[^\n]*)*)/i.exec(v);
-  if (!line) return [];                       /* no ports line yet: prose is not a signal list */
-  const src = line[2];
-  const re = /\b([a-z_][a-z0-9_]{1,24})\b(\s*\[[^\]]*\])?/gi;
-  let m;
-  while ((m = re.exec(src)) && names.size < 12) {
-    const w = m[1].toLowerCase();
-    if (["module", "ports", "port", "signals", "behaviour", "behavior", "parameter", "default", "the", "and", "with", "when", "sync", "active", "high", "low", "is", "of", "on", "to", "a", "an"].indexOf(w) >= 0) continue;
-    names.add(m[1] + (m[2] ? m[2].replace(/\s+/g, "") : ""));
-  }
-  return Array.from(names);
-}
-function renderEditor() {
-  const ta = $("request"), v = ta.value;
-  $("edHl").innerHTML = hlSpec(v) + "\n";
-  const lines = Math.max(1, v.split("\n").length);
-  const g = $("edGutter");
-  if (g.childElementCount !== lines) {
-    clear(g);
-    for (let i = 1; i <= lines; i++) g.appendChild(el("div", { text: String(i) }));
-  }
-  ta.style.height = "auto";
-  ta.style.height = Math.max(190, ta.scrollHeight) + "px";
-  const name = ($("projname") && $("projname").value.trim()) || (/\bmodule\s+([A-Za-z_][\w$]*)/.exec(v) || [])[1] || "";
-  $("edName").textContent = name ? name + ".spec" : "spec";
-  const ph = clear($("edParams"));
-  specParams(v).forEach((t) => ph.appendChild(el("span", { class: "chip", text: t })));
-  const sh = clear($("edSignals"));
-  const sig = specSignals(v);
-  if (!sig.length) sh.appendChild(document.createTextNode("signals appear as you name ports"));
-  else {
-    sig.slice(0, 8).forEach((t) => sh.appendChild(el("span", { class: "chip", text: t })));
-    if (sig.length > 8) sh.appendChild(el("span", { text: "+" + (sig.length - 8) }));
-  }
-}
-const STEP_LANES = ["contract", "review", "reference", "rtl", "verify", "sign-off"];
-function renderShell() {
-  const d = S.detail, live = S.sessions.filter((x) => x.alive)[0];
-  const _v = S.status && S.status.version; $("topVersion").textContent = _v ? String(_v).replace(/\.0$/, "") : "";
-  const crumb = clear($("topCrumb"));
-  if (S.current) crumb.appendChild(document.createTextNode(d && d.module ? d.module : S.current));
-  else crumb.appendChild(document.createTextNode("new design"));
-  const st = clear($("stepper"));
-  const stages = (S.current && d && d.stages) || null;
-  if (stages && stages.length) {
-    stages.forEach((sg, i) => {
-      if (i) st.appendChild(el("span", { class: "sep", text: "›" }));
-      const cls = sg.status === "done" ? "pass" : sg.status === "failed" ? "fail" : sg.status === "withheld" ? "hold" : sg.status === "running" ? "run" : "stop";
-      st.appendChild(el("span", { class: "stp" + (sg.status === "running" || sg.status === "done" ? " on" : ""), title: sg.detail || "" },
-        [glyph(cls, sg.status === "running"), STEP_LANES[i] || String(sg.name).toLowerCase()]));
-    });
-  } else if (live) {
-    st.appendChild(el("span", { class: "stp on" }, [glyph("run", true), "running " + moduleOf(live)]));
-  }
-  const tools = (S.status && S.status.doctor && S.status.doctor.tools) || {};
-  const req = Object.keys(tools).filter((n) => n !== "sby");
-  const miss = req.filter((n) => !tools[n].ok);
-  const tn = clear($("topTools"));
-  tn.appendChild(glyph(miss.length ? "hold" : "pass"));
-  tn.appendChild(document.createTextNode(miss.length ? " toolchain missing " + miss.join(", ") : (tools.sby && tools.sby.ok ? " toolchain ready" : " toolchain ready, no sby")));
-  tn.title = req.map((n) => n + " " + (tools[n].ok ? (tools[n].version || "ok") : "missing")).join(" · ");
-  renderStatusBar();
-}
-function renderStatusBar() {
-  const v = providerView(S.provider, S.status && S.status.settings);
-  const set = (S.status && S.status.settings) || {};
-  const pv = clear($("stProvider"));
-  const b = el("button", { class: "linkbtn", style: "color:inherit", title: v.title + (v.body ? ": " + v.body : ""), onclick: () => openSettings() },
-    [glyph(TONE_GLYPH[v.tone] || "stop"), " " + v.meta.name + " · " + (v.model || "no model") + " · ", el("span", { class: v.tone, text: v.short })]);
-  pv.appendChild(b);
-  const kn = clear($("stKey"));
-  const keyOk = set.key_present === true || v.kind === "ok";
-  kn.appendChild(el("span", { class: keyOk ? "" : "h", text: keyOk ? "key " + (set.key_hint || "set") : "key missing" }));
-  const rn = clear($("stRun"));
-  const d = S.detail;
-  if (d && d.model_calls && d.model_calls.count) {
-    const mc = d.model_calls;
-    rn.appendChild(document.createTextNode(mc.count + " calls · " + (mc.tokens || 0) + " tokens" + (mc.last_latency_s ? " · last " + mc.last_latency_s + " s" : "")));
-  }
-}
-
-/* ---------------- rail ---------------- */
-function matchesFilter(s) {
-  if (!S.filter) return true;
-  const q = S.filter.toLowerCase();
-  return [s.module, s.name, s.workspace, s.intent, s.request, s.state, statusOf(s).word]
-    .some((v) => String(v || "").toLowerCase().indexOf(q) >= 0);
-}
-function sessionRow(s, counts) {
-  const ws = s.workspace;
-  const st = statusOf(s);
-  const b = el("button", { class: "row-s", "aria-current": S.current === ws ? "true" : "false", onclick: () => openSession(ws),
-    title: [ws, st.word, s.reason].filter(Boolean).join(" · "), "aria-label": moduleOf(s) + ", " + st.word });
-  b.appendChild(glyph(st.cls, st.pulse));
-  b.appendChild(moduleNode(s, counts, "span", "nm"));
-  b.appendChild(el("span", { class: "age", text: ago(s.updated || s.created) }));
-  const intent = s.intent || (s.request || "").split("\n")[0];
-  if (intent) b.appendChild(el("span", { class: "intent", text: intent }));
-  return b;
-}
-function renderRail() {
-  const host = clear($("sessionList"));
-  if ($("topCrumb")) setTimeout(renderShell, 0);
-  const list = S.sessions.filter(matchesFilter);
-  if (!S.sessions.length) host.appendChild(el("p", { class: "empty-line", text: "no sessions yet. describe a module to start one." }));
-  else if (!list.length) host.appendChild(el("p", { class: "empty-line", text: "no session matches that search." }));
-  else { const counts = dupModules(); list.forEach((s) => host.appendChild(sessionRow(s, counts))); }
-  const ver = S.status && S.status.version;
-  $("version").textContent = ver ? String(ver).replace(/\.0$/, "") : "";
-  renderRailFoot();
-}
-
-/* ---------------- home ---------------- */
-function shortVersion(v) { const m = /(\d+(?:\.\d+)*)/.exec(String(v || "")); return m ? m[1] : ""; }
-function renderReadiness() {
-  const host = clear($("readiness"));
-  const st = S.status;
-  if (!st) return;
-  const set = st.settings || {};
-  const tools = (st.doctor && st.doctor.tools) || {};
-  const names = Object.keys(tools);
-  const missing = names.filter((k) => tools[k] && !tools[k].ok && k !== "sby");
-  if (missing.length) {
-    host.appendChild(el("span", { title: "a run is refused while a required tool is missing; install the oss cad suite (icarus verilog, verilator, yosys)" },
-      [glyph("hold"), el("span", { class: "h", text: "toolchain missing " + missing.join(", ") })]));
-  } else if (names.length) {
-    const bits = names.filter((n) => n !== "vvp").map((n) => tools[n].ok ? (n + (shortVersion(tools[n].version) && n !== "sby" ? " " + shortVersion(tools[n].version) : "")) : n + " not found");
-    host.appendChild(el("span", {}, [glyph("pass"), "toolchain  " + bits.join(" · ")]));
-  }
-  const v = providerView(S.provider, set);
-  const keyOk = set.key_present === true || v.kind === "ok";
-  const settingsLink = el("button", { class: "linkbtn", text: "settings", onclick: () => openSettings() });
-  if (!keyOk) {
-    host.appendChild(el("span", {}, [glyph("hold"), el("span", { class: "h", text: "model key missing" }), " · ", settingsLink]));
-  } else if (BLOCKING.indexOf(v.kind) >= 0 || v.kind === "server_error") {
-    host.appendChild(el("span", {}, [glyph(v.tone === "f" ? "fail" : "hold"), el("span", { class: v.tone, text: (v.model || "model") + " " + v.short + (v.second ? ", " + v.second : "") }), " · ", settingsLink]));
-  } else {
-    host.appendChild(el("span", {}, [glyph("pass"), (v.model || "model") + " · key " + (set.key_hint || "set") + " · ", settingsLink]));
-  }
-  host.appendChild(el("span", { text: "typical run 1 to 3 min" }));
-}
-function openRowKeys(fn) { return (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } }; }
-function renderHomeSessions() {
-  const host = clear($("homeSessions"));
-  $("homeCount").textContent = S.sessions.length ? S.sessions.length + (S.sessions.length === 1 ? " session" : " sessions") : "";
-  if (!S.sessions.length) {
-    host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "no sessions yet" }),
-      el("div", { text: "describe the module above and the first session opens here." }),
-      el("div", { class: "acts" }, [
-        el("button", { class: "btn small", text: "commands", onclick: () => openHelp() }),
-        el("button", { class: "btn small", text: "settings", onclick: () => openSettings() }),
-      ]),
-    ]));
-    return;
-  }
-  const tbody = el("tbody");
-  const counts = dupModules();
-  S.sessions.forEach((s) => {
-    const st = statusOf(s);
-    const open = () => openSession(s.workspace);
-    tbody.appendChild(el("tr", { class: "click", tabindex: "0", role: "link", title: [s.workspace, s.reason].filter(Boolean).join(" · "),
-      "aria-label": moduleOf(s) + ", " + st.word, onclick: open, onkeydown: openRowKeys(open) }, [
-      el("td", { class: "g" }, [glyph(st.cls, st.pulse)]),
-      moduleNode(s, counts, "td", "nm"),
-      el("td", { class: "prose hide-narrow", text: s.intent || (s.request || "").split("\n")[0] }),
-      el("td", { class: "r " + ST_TEXT[st.cls], text: st.word }),
-      el("td", { class: "r i", style: "width:48px", text: ago(s.updated || s.created) }),
-    ]));
-  });
-  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [tbody])]));
-}
-
-/* ---------------- command palette ---------------- */
-const COMMANDS = [
-  { cmd: "/resume", desc: "session history: open or restart a run", run: () => openResume() },
-  { cmd: "/settings", desc: "provider, model, api key, toolchain", run: () => openSettings() },
-  { cmd: "/help", desc: "what the commands do", run: () => openHelp() },
-];
-let palItems = [], palIndex = 0;
-function paletteQuery() {
-  const v = $("request").value;
-  if (!/^\//.test(v) || /\n/.test(v)) return null;
-  return v.trim();
-}
-function renderPalette() {
-  const q = paletteQuery();
-  const box = $("palette");
-  const ta = $("request");
-  if (q === null) { box.hidden = true; palItems = []; ta.setAttribute("aria-expanded", "false"); ta.removeAttribute("aria-activedescendant"); return; }
-  palItems = COMMANDS.filter((c) => c.cmd.indexOf(q.split(/\s+/)[0]) === 0 || q === "/");
-  if (!palItems.length) palItems = COMMANDS.filter((c) => c.cmd.indexOf(q) === 0);
-  const term = q.replace(/^\//, "").trim().toLowerCase();
-  if (term) {
-    S.sessions.filter((x) => (moduleOf(x) + " " + x.workspace).toLowerCase().indexOf(term) >= 0).slice(0, 6).forEach((x) => {
-      palItems.push({ cmd: moduleOf(x), desc: "open session · " + statusOf(x).word, run: () => openSession(x.workspace) });
-    });
-  }
-  if (palIndex >= palItems.length) palIndex = 0;
-  clear(box);
-  if (!palItems.length) {
-    box.appendChild(el("div", { class: "pal-item", style: "cursor:default" }, [el("span", { class: "cmd", text: q }), el("span", { class: "ds", text: "no command matches. known: /resume, /settings, /help." })]));
-    box.hidden = false;
-    ta.setAttribute("aria-expanded", "true");
-    return;
-  }
-  palItems.forEach((c, i) => {
-    box.appendChild(el("button", {
-      type: "button", class: "pal-item", role: "option", id: "pal-" + i,
-      "aria-selected": i === palIndex ? "true" : "false",
-      onmousedown: (e) => e.preventDefault(),
-      onclick: () => runPalette(i),
-    }, [el("span", { class: "cmd", text: c.cmd }), el("span", { class: "ds", text: c.desc })]));
-  });
-  box.hidden = false;
-  ta.setAttribute("aria-expanded", "true");
-  ta.setAttribute("aria-activedescendant", "pal-" + palIndex);
-}
-function runPalette(i) {
-  const c = palItems[i];
-  if (!c) return;
-  $("request").value = "";
-  palIndex = 0;
-  renderPalette();
-  c.run();
-}
-function paletteKey(e) {
-  if ($("palette").hidden) return false;
-  const n = Math.max(1, palItems.length);
-  if (e.key === "ArrowDown") { palIndex = (palIndex + 1) % n; renderPalette(); return true; }
-  if (e.key === "ArrowUp") { palIndex = (palIndex - 1 + n) % n; renderPalette(); return true; }
-  if (e.key === "Enter" || e.key === "Tab") { if (palItems.length) { runPalette(palIndex); return true; } return false; }
-  if (e.key === "Escape") { $("request").value = ""; renderPalette(); return true; }
-  return false;
-}
-
-/* ---------------- modals ---------------- */
-const MODALS = ["settingsScrim", "resumeScrim", "helpScrim", "reviseScrim"];
-function topModal() { return MODALS.map($).find((n) => n && !n.hidden) || null; }
-function openModal(id, focusSel) {
-  S.lastFocus = document.activeElement;
-  const scrim = $(id);
-  scrim.hidden = false;
-  const first = (focusSel && scrim.querySelector(focusSel)) || scrim.querySelector("button, input, textarea, select, a[href]");
-  if (first) first.focus();
-}
-function closeModal(id) {
-  const scrim = $(id);
-  if (!scrim || scrim.hidden) return;
-  scrim.hidden = true;
-  if (S.lastFocus && document.contains(S.lastFocus)) S.lastFocus.focus();
-}
-document.addEventListener("click", (e) => {
-  const t = e.target.closest ? e.target.closest("[data-close]") : null;
-  if (t) { closeModal(t.getAttribute("data-close")); return; }
-  MODALS.forEach((id) => { const s = $(id); if (s && !s.hidden && e.target === s) closeModal(id); });
-});
-document.addEventListener("keydown", (e) => {
-  const open = topModal();
-  if (e.key === "Escape" && open) { e.preventDefault(); closeModal(open.id); return; }
-  if (e.key === "Tab" && open) {
-    const f = Array.prototype.filter.call(
-      open.querySelectorAll("button, input, textarea, select, a[href], [tabindex]:not([tabindex='-1'])"),
-      (n) => !n.disabled && n.offsetParent !== null);
-    if (!f.length) return;
-    const firstEl = f[0], lastEl = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
-    else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
-  }
-});
-
-/* ---------------- resume palette (/resume) ---------------- */
-function openResume() {
-  renderResume();
-  openModal("resumeScrim");
-}
-function renderResume() {
-  const host = clear($("resumeList"));
-  if (!S.sessions.length) {
-    host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "no sessions to resume" }),
-      el("div", { text: "nothing has been built yet. close this and describe a module." }),
-    ]));
-    return;
-  }
-  const tbody = el("tbody");
-  const counts = dupModules();
-  S.sessions.forEach((s) => {
-    const st = statusOf(s);
-    const open = () => { closeModal("resumeScrim"); openSession(s.workspace); };
-    const raw = RESULT_LABEL[resultOf(s)] || String(resultOf(s)).replace(/_/g, " ");
-    const SYN = { pass: ["accepted"], fail: ["failed"], stopped: ["interrupted"], running: ["running"], revising: ["running"], created: ["created"] };
-    const second = (SYN[st.word] || []).indexOf(raw) >= 0 ? "" : raw;
-    const acts = el("td", { class: "r", style: "white-space:nowrap" });
-    acts.appendChild(el("button", { class: "btn small", text: "open", onclick: (e) => { e.stopPropagation(); open(); } }));
-    if (isResumable(s)) {
-      acts.appendChild(document.createTextNode(" "));
-      acts.appendChild(el("button", { class: "btn small", style: "border-color:var(--accent);color:var(--accent)", text: resumeLabel(s),
-        onclick: (e) => { e.stopPropagation(); resumeRun(s, e.currentTarget); } }));
-    }
-    tbody.appendChild(el("tr", { class: "click", tabindex: "0", role: "button", title: s.reason || s.workspace,
-      onkeydown: (e) => { if (e.target === e.currentTarget) openRowKeys(open)(e); }, onclick: open }, [
-      el("td", { class: "g" }, [glyph(st.cls, st.pulse)]),
-      el("td", {}, [
-        moduleNode(s, counts, "div", "nm"),
-        el("div", { style: "font-family:var(--sans);color:var(--muted);font-size:12.5px", text: s.intent || (s.request || "").slice(0, 120) }),
-      ]),
-      el("td", { class: "hide-narrow", style: "white-space:nowrap" }, [
-        el("div", { class: ST_TEXT[st.cls], text: st.word }),
-        second ? el("div", { class: "i", style: "font-size:11.5px", text: second }) : null,
-      ]),
-      el("td", { class: "i hide-narrow", style: "white-space:nowrap;font-size:12px", text: absTime(s.updated || s.created) }),
-      acts,
-    ]));
-  });
-  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [tbody])]));
-}
-async function resumeRun(s, btn) {
-  if (btn) btn.disabled = true;
-  try {
-    await api("/api/runs/" + encodeURIComponent(s.workspace) + "/resume", {});
-    closeModal("resumeScrim");
-    await loadSessions();
-    openSession(s.workspace);
-  } catch (e) {
-    if (e.status === 404) toast("resume is not available", "the session folder is gone, or this server does not expose the resume endpoint.");
-    else if (e.status === 409) toast("already running", "a thread for this session is alive, so there is nothing to resume.");
-    else if (e.status === 400) toast("nothing to resume", e.message);
-    else toast("could not resume", e.message);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-/* ---------------- help ---------------- */
-function openCommands() {
-  if (!$("homeView").hidden) { $("request").focus(); if (!/^\//.test($("request").value)) $("request").value = "/"; renderPalette(); renderEditor(); return; }
-  openResume();
-}
-function openHelp() { openModal("helpScrim"); }
-
-/* ---------------- settings ---------------- */
-function settingsDraft() {
-  if (!S.settingsDraft) {
-    const set = (S.status && S.status.settings) || {};
-    S.settingsDraft = { provider: set.provider || PROVIDERS[0].id, model: set.model || "", base_url: set.base_url || "" };
-  }
-  return S.settingsDraft;
-}
-function renderProviderCards() {
-  const host = clear($("provCards"));
-  const d = settingsDraft();
-  PROVIDERS.forEach((p, i) => {
-    const checked = d.provider === p.id;
-    host.appendChild(el("button", {
-      type: "button", class: "prov-row", role: "radio", "aria-checked": checked ? "true" : "false",
-      "data-prov": p.id, tabindex: (checked || (i === 0 && !PROVIDERS.some((x) => x.id === d.provider))) ? "0" : "-1",
-      onclick: () => { pickProvider(p.id); },
-      onkeydown: (e) => {
-        let n = -1;
-        if (e.key === "ArrowRight" || e.key === "ArrowDown") n = (i + 1) % PROVIDERS.length;
-        if (e.key === "ArrowLeft" || e.key === "ArrowUp") n = (i - 1 + PROVIDERS.length) % PROVIDERS.length;
-        if (n < 0) return;
-        e.preventDefault();
-        pickProvider(PROVIDERS[n].id);
-        const b = $("provCards").querySelector('[data-prov="' + PROVIDERS[n].id + '"]');
-        if (b) b.focus();
-      },
-    }, [el("span", { class: "rd", "aria-hidden": "true" }), el("span", { class: "nm", text: p.name }), el("span", { class: "ds", text: p.desc })]));
-  });
-}
-function pickProvider(id) {
-  const d = settingsDraft();
-  const known = (S.status && S.status.settings) || {};
-  d.provider = id;
-  const meta = providerMeta(id);
-  if (known.provider === id) {
-    d.model = known.model || meta.presets[0] || "";
-    d.base_url = (known.base_url && known.base_url !== meta.base) ? known.base_url : "";
-  } else {
-    d.model = meta.presets[0] || "";
-    d.base_url = "";
-  }
-  renderSettingsFields();
-}
-function renderSettingsFields() {
-  const d = settingsDraft();
-  const meta = providerMeta(d.provider);
-  renderProviderCards();
-  $("model").value = d.model || "";
-  const presets = (S.status && S.status.settings && S.status.settings.provider === d.provider && (S.status.settings.presets || []).length)
-    ? S.status.settings.presets : meta.presets;
-  clear($("modelPresets"));
-  presets.forEach((m) => $("modelPresets").appendChild(el("option", { value: m })));
-  $("baseUrlWrap").hidden = !meta.baseEditable;
-  $("baseurl").value = d.base_url || "";
-  $("baseurl").placeholder = meta.base || "https://";
-  $("keyHint").textContent = meta.env ? "(or the environment variable " + meta.env + ")" : "";
-}
-function renderToolchain() {
-  const host = clear($("toolchain"));
-  const tools = (S.status && S.status.doctor && S.status.doctor.tools) || {};
-  const names = Object.keys(tools);
-  if (!names.length) {
-    host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "toolchain not reported" }),
-      el("div", { text: "the server did not return a toolchain check, so verification readiness is unknown." }),
-    ]));
-    return;
-  }
-  const body = names.map((n) => {
-    const t = tools[n] || {};
-    const cls = t.ok ? "pass" : (n === "sby" ? "stop" : "fail");
-    return el("tr", {}, [
-      el("td", { text: n }),
-      el("td", { class: "hide-narrow", style: "color:var(--muted);font-size:12px", text: t.ok ? (t.version || "") : "not on PATH" + (n === "sby" ? " (optional)" : "") }),
-      el("td", { class: "r" }, [statusNode({ cls: cls, word: t.ok ? "found" : "missing" })]),
-    ]);
-  });
-  host.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt" }, [el("tbody", {}, body)])]));
-  const missing = names.filter((n) => !tools[n].ok && n !== "sby");
-  if (missing.length) host.appendChild(el("p", { class: "hint", style: "margin-top:8px", text: "a run that needs " + missing.join(", ") + " is refused until the tool is on PATH." }));
-}
-function openSettings() {
-  S.settingsDraft = null;
-  const rate = S.status && S.status.settings ? S.status.settings.usd_per_million_tokens : null;
-  $("tokenrate").value = rate === null || rate === undefined ? "" : rate;
-  settingsDraft();
-  renderSettingsFields();
-  renderToolchain();
-  clear($("testResult"));
-  $("apikey").value = "";
-  openModal("settingsScrim");
-}
-async function saveSettings(silent) {
-  const d = settingsDraft();
-  d.model = $("model").value.trim();
-  d.base_url = $("baseurl").value.trim();
-  const body = { provider: d.provider, model: d.model, base_url: d.base_url, usd_per_million_tokens: $("tokenrate").value };
-  const key = $("apikey").value;
-  if (key) body.api_key = key;
-  await api("/api/settings", body);
-  $("apikey").value = "";
-  await loadStatus();
-  if (!silent) toast("settings saved", providerMeta(d.provider).name + (d.model ? " · " + d.model : ""));
-}
-/* normalise both the ProviderStatus contract and the older /api/test shape */
-function normaliseTest(res) {
-  if (!res) return { kind: "unknown" };
-  if (res.kind) return res;
-  const out = { provider: res.provider, model: res.configured || res.model, checked_at: new Date().toISOString() };
-  const ping = res.ping || {};
-  if (res.ok === false) {
-    const m = String(res.error || "");
-    if (/401|403|unauthor|invalid/i.test(m)) out.kind = "invalid_key";
-    else if (/429|rate/i.test(m)) out.kind = "rate_limited";
-    else if (/quota|budget|limit/i.test(m)) out.kind = "quota";
-    else if (/5\d\d/.test(m)) out.kind = "server_error";
-    else out.kind = "unreachable";
-    out.message = res.error || "";
-    return out;
-  }
-  if (res.configured_is_served === false) { out.kind = "model_not_served"; out.message = "the configured model is not in the served list."; return out; }
-  out.kind = ping.ok ? "ok" : "server_error";
-  out.message = ping.error || (ping.ok ? "" : "the model did not answer");
-  out.latency_s = ping.latency_s;
-  return out;
-}
-function renderTestResult(ps, ping) {
-  const host = clear($("testResult"));
-  if (ps.kind === "model_not_served") {
-    host.appendChild(glyph("hold"));
-    host.appendChild(el("span", { class: "h", text: "model not served" }));
-    host.appendChild(el("span", { text: ps.message || "the provider does not serve this model id." }));
-    return;
-  }
-  const v = providerView(ps, null);
-  const lat = (ping && typeof ping.latency_s === "number") ? ping.latency_s : ps.latency_s;
-  const bits = [v.meta.name];
-  if (ps.model) bits.push(ps.model);
-  if (v.second) bits.push(v.second);              // the countdown, once
-  if (ps.kind !== "ok") bits.push(v.body);        // the provider's message, once
-  if (ping && ping.reply) bits.push("reply " + ping.reply);
-  host.appendChild(glyph(TONE_GLYPH[v.tone] || "stop"));
-  host.appendChild(el("span", { class: v.tone, text: ps.kind === "ok" ? "connected" + (typeof lat === "number" ? " in " + lat + " s" : "") : v.short }));
-  host.appendChild(el("span", { class: "muted", text: bits.filter(Boolean).join(" · ") }));
-  if (v.link) host.appendChild(el("a", { href: v.link, target: "_blank", rel: "noreferrer noopener", text: "open the gateway page" }));
-}
-async function testConnection() {
-  const btn = $("testBtn");
-  btn.disabled = true;
-  clear($("testResult")).appendChild(el("span", { class: "muted", text: "testing the connection" }));
-  try {
-    await saveSettings(true);
-    const res = await api("/api/test", {});
-    const ps = normaliseTest(res);
-    if (ps.kind !== "model_not_served") S.provider = ps;
-    renderTestResult(ps, res.ping);
-    renderRailFoot();
-    renderReadiness();
-    renderBlocker();
-  } catch (e) {
-    const ps = { kind: e.offline ? "unreachable" : "server_error", message: e.message, provider: settingsDraft().provider };
-    S.provider = ps;
-    renderTestResult(ps, null);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-/* ---------------- session view helpers ---------------- */
-function isLiveDetail(d) { return !!(d && (d.alive || ((d.state === "running" || d.state === "planned") && d.alive !== false))); }
-function stageList(d) {
-  const stages = d && Array.isArray(d.stages) ? d.stages : [];
-  const byName = {};
-  stages.forEach((s) => { if (s && s.name) byName[String(s.name).toLowerCase()] = s; });
-  return STAGE_NAMES.map((n) => {
-    const s = byName[n.toLowerCase()] || { name: n, status: "pending", detail: "" };
-    const status = ["pending", "running", "done", "withheld", "failed"].indexOf(s.status) >= 0 ? s.status : "pending";
-    return { name: n, key: n.toLowerCase(), status: status, detail: s.detail || "" };
-  });
-}
-function label(num, text, id) { return el("span", { class: "label", id: id || null }, [el("b", { text: num }), text]); }
-
-/* ---------------- 01 interface: pin-out symbol from the contract ports ---------------- */
-function renderInterface(d) {
-  const host = clear($("iface"));
-  const c = d.contract;
-  const ports = c && Array.isArray(c.ports) ? c.ports.filter((p) => p && p.name) : [];
-  const cr = (c && c.clock_reset) || {};
-  const metaBits = [];
-  if (ports.length) metaBits.push(ports.length + (ports.length === 1 ? " port" : " ports"));
-  if (cr.clock) metaBits.push((cr.clock_edge || "posedge") + " " + cr.clock);
-  if (cr.reset) metaBits.push(cr.reset + " " + resetShort(cr));
-  if (ports.length && !cr.clock) metaBits.push("combinational");
-  host.appendChild(el("div", { class: "sub" }, [label("01", "interface"), el("span", { class: "label", text: metaBits.join(" · ") })]));
-  if (!ports.length) {
-    host.appendChild(el("div", { class: "empty" }, [
-      el("div", { class: "t", text: "no contract yet" }),
-      el("div", { text: isLiveDetail(d) ? "the pin-out is drawn from the contract once intake finishes." : "no contract was recorded for this run, so there is no interface to draw." }),
-    ]));
-    return;
-  }
-  host.appendChild(pinout(c, ports, cr));
-}
-function resetShort(cr) {
-  const kind = /^async/i.test(cr.reset_kind || "") ? "async" : (/^sync/i.test(cr.reset_kind || "") ? "sync" : (cr.reset_kind || ""));
-  return [kind, cr.reset_active || ""].filter(Boolean).join(" ");
-}
-function pinout(c, ports, cr) {
-  const CH = 7.25, MAXC = 18, PIN = 60, ROW = 30, TOP = 44, BY = 12;
-  const left = ports.filter((p) => (p.direction || "input") === "input");
-  const right = ports.filter((p) => (p.direction || "input") !== "input");
-  const shown = (n) => clip(n, MAXC);
-  const lw = Math.max(3, ...left.map((p) => shown(p.name).length)) * CH;
-  const rw = Math.max(3, ...right.map((p) => shown(p.name).length)) * CH;
-  const title = clip(c.module_name || S.current || "", 28);
-  const bodyW = Math.max(190, title.length * 8.2 + 36);
-  const rows = Math.max(left.length, right.length, 1);
-  const bodyH = TOP + (rows - 1) * ROW + 26;
-  const x0 = Math.ceil(lw + 10), bx = x0 + PIN, bx2 = bx + bodyW;
-  const W = Math.ceil(bx2 + PIN + 6 + rw + 6), H = BY + bodyH + 12;
-  const svg = sv("svg", { class: "sym", viewBox: "0 0 " + W + " " + H, width: "100%", role: "img",
-    "aria-label": "pin-out of " + (c.module_name || "the module") + ": " + ports.map((p) => (p.direction || "input") + " " + p.name).join(", "),
-    style: "max-width:" + W + "px;display:block" });
-  svg.appendChild(sv("rect", { class: "body", x: bx, y: BY, width: bodyW, height: bodyH }));
-  const tt = sv("text", { class: "title", x: bx + bodyW / 2, y: BY + 22, "text-anchor": "middle" }, title);
-  if (title !== c.module_name) tt.appendChild(sv("title", {}, c.module_name));
-  svg.appendChild(tt);
-  const drawPin = (p, i, side) => {
-    const y = BY + TOP + i * ROW;
-    const xa = side === "l" ? x0 : bx2, xb = side === "l" ? bx : bx2 + PIN;
-    const widthLabel = p.width_expr ? String(p.width_expr) : (Number(p.width) > 1 ? String(p.width) : "");
-    const bus = !!widthLabel;
-    svg.appendChild(sv("line", { class: bus ? "bus" : "pin", x1: xa, y1: y, x2: xb, y2: y }));
-    const name = shown(p.name);
-    const t = sv("text", side === "l" ? { x: x0 - 6, y: y + 4, "text-anchor": "end" } : { x: xb + 6, y: y + 4 }, name);
-    t.appendChild(sv("title", {}, (p.direction || "input") + " " + p.name + (widthLabel ? " [" + widthLabel + "]" : "") + (p.description ? ": " + p.description : "")));
-    svg.appendChild(t);
-    if (bus) {
-      const mx = (xa + xb) / 2;
-      svg.appendChild(sv("line", { class: "thin", x1: mx - 4, y1: y + 5, x2: mx + 4, y2: y - 5 }));
-      svg.appendChild(sv("text", { class: "w", x: mx, y: y - 7, "text-anchor": "middle" }, clip(widthLabel, 12)));
-    }
-    if (p.direction === "inout") {
-      const o = side === "l" ? xa + 8 : xb - 8, n = side === "l" ? xb - 8 : xa + 8;
-      const out = side === "l" ? -1 : 1;
-      svg.appendChild(sv("path", { class: "thin", d: "M" + (o - 4 * out) + " " + (y - 4) + " L" + o + " " + y + " L" + (o - 4 * out) + " " + (y + 4) +
-        " M" + (n + 4 * out) + " " + (y - 4) + " L" + n + " " + y + " L" + (n + 4 * out) + " " + (y + 4) }));
-    }
-    const isClock = p.name === cr.clock || (!cr.clock && p.role === "clock");
-    const isReset = p.name === cr.reset || (!cr.reset && p.role === "reset");
-    if (isClock) {
-      const e = side === "l" ? bx : bx2, dx = side === "l" ? 10 : -10;
-      svg.appendChild(sv("path", { class: "thin", d: "M" + e + " " + (y - 7) + " L" + (e + dx) + " " + y + " L" + e + " " + (y + 7) }));
-    }
-    const notes = [];
-    if (isReset && cr.reset) notes.push(resetShort(cr));
-    if (p.timing === "registered" && (p.direction || "input") !== "input") notes.push("reg");
-    if (notes.length) {
-      svg.appendChild(sv("text", side === "l" ? { class: "w", x: bx + (isClock ? 16 : 7), y: y + 4 } : { class: "w", x: bx2 - 7, y: y + 4, "text-anchor": "end" }, notes.join(" ")));
-    }
-  };
-  left.forEach((p, i) => drawPin(p, i, "l"));
-  right.forEach((p, i) => drawPin(p, i, "r"));
-  return svg;
-}
-
-/* ---------------- 02 sign-off: checks from the outcome and evidence ---------------- */
-function signoffRows(d) {
-  const o = d.outcome || {};
-  const ev = d.evidence || {};
-  const so = ev.signoff || {};
-  const vc = o.verification_config || {};
-  const stages = stageList(d);
-  const stage = (k) => stages.find((s) => s.key === k) || { status: "pending", detail: "" };
-  const hist = (Array.isArray(ev.attempts) && ev.attempts.length) ? ev.attempts : (o.history || []);
-  const last = hist.length ? hist[hist.length - 1] : null;
-  const sl = String(o.status_line || so.status_line || "");
-  const summary = String((last && last.summary) || stage("verify").detail || "");
-  const live = isLiveDetail(d);
-  const seeds = Array.isArray(vc.seeds) ? vc.seeds.length : 0;
-  const cycles = vc.sim_cycles;
-  const rows = [];
-  const add = (check, detail, res, cls, gateStage) => {
-    if (!res) {
-      const st = stage(gateStage || "verify").status;
-      if (live && st !== "done") res = "pending";
-      else res = "not run";
-    }
-    const rc = cls || ({ pass: "p", fail: "f", bounded: "i", "not run": "i", "n/a": "i", pending: "a" })[res] || "i";
-    rows.push({ check: check, detail: detail, res: res, cls: rc });
-  };
-  const pick = (re) => re.exec(sl) || re.exec(summary);
-
-  // lint
-  let m = /\blint (passed|ok|FAILED|failed|not run)/.exec(sl) || /\blint (ok|failed|passed)/.exec(summary);
-  let res = m ? ({ passed: "pass", ok: "pass", failed: "fail", not: "not run" })[m[1].toLowerCase().split(" ")[0]] : "";
-  if (m && /not run/.test(m[1])) res = "not run";
-  add("lint", "verilator -Wall", res);
-
-  // simulation
-  const simDetail = (n) => (n !== undefined ? n : (seeds ? seeds + " seeds" : "seeds")) + (cycles ? " x " + cycles + " cycles" : "") + " vs reference";
-  m = /simulation passed for (\d+)\/(\d+) seeds x (\d+) cycles/.exec(sl);
-  if (m) {
-    const ok = +m[1] === +m[2];
-    add("simulation", (ok ? m[2] + " seeds" : m[1] + " of " + m[2] + " seeds") + " x " + m[3] + " cycles vs reference", ok ? "pass" : "fail");
-  } else if ((m = /simulation passed for seeds \[([^\]]*)\] x (\d+) cycles/.exec(summary))) {
-    add("simulation", m[1].split(",").length + " seeds x " + m[2] + " cycles vs reference", "pass");
-  } else if (/compile (FAILED|failed)/.test(sl) || /compile failed/.test(summary)) {
-    add("simulation", "iverilog compile failed, " + simDetail(), "fail");
-  } else if (/simulation (FAILED|failed)|simulation mismatch/.test(sl + " " + summary)) {
-    add("simulation", "mismatch, " + simDetail(), "fail");
-  } else {
-    add("simulation", simDetail(), /simulation not run/.test(sl) ? "not run" : "");
-  }
-
-  // reference agreement
-  const cons = o.reference_consensus;
-  if (cons && Array.isArray(cons.references)) {
-    const n = cons.references.length;
-    let mm = 0, cyc = 0;
-    cons.references.forEach((r) => { if (r && r.vs_initial) { mm += Number(r.vs_initial.mismatches) || 0; cyc = Math.max(cyc, Number(r.vs_initial.cycles) || 0); } });
-    const corroborated = /corroborat/.test(String(cons.outcome || ""));
-    const low = String(cons.confidence || "") === "low";
-    let detail = n === 1 ? "1 reference, no second opinion" : (mm ? n + " independent, " + mm + " mismatches in " + cyc + " cycles" : n + " of " + n + " independent");
-    if (low) detail += ", low confidence";
-    add("reference agreement", detail, n < 2 ? "not run" : (corroborated && !low && !mm ? "pass" : (corroborated ? "partial" : "fail")), corroborated && (low || mm) ? "h" : null, "reference");
-  } else {
-    const rd = stage("reference").detail;
-    const rm = /(\d+) reference\(s\)(?:, arbitration: (\w+))?/.exec(rd);
-    if (rm) add("reference agreement", rm[1] === "1" ? "1 reference, no second opinion" : rm[1] + " independent, " + String(rm[2] || "").replace(/_/g, " "),
-      rm[1] === "1" ? "not run" : (/corroborat/.test(rm[2] || "") ? "pass" : ""), null, "reference");
-    else add("reference agreement", "independent references", "", null, "reference");
-  }
-
-  // synthesis
-  m = /synthesis (passed|FAILED|failed|not run)/.exec(sl) || /synthesis (ok|failed)/.exec(summary);
-  res = m ? (/passed|ok/.test(m[1]) ? "pass" : (/not run/.test(m[1]) ? "not run" : "fail")) : "";
-  add("synthesis", "yosys generic", res);
-
-  // formal
-  const f = o.formal || {};
-  const pf = (d.presentation && d.presentation.formal) || {};
-  const info = !!pf.informational;
-  let fstatus = f.status || "";
-  if (!fstatus) { m = /formal BMC(?: depth \d+)?: (\w+)/.exec(sl) || /formal BMC(?: depth \d+)?: (\w+)/.exec(summary); if (m) fstatus = m[1]; else if (/formal not run/.test(sl)) fstatus = "not_run"; }
-  const depth = f.depth || vc.formal_depth;
-  let fres = "";
-  if (/bounded/.test(fstatus)) fres = "bounded";
-  else if (/^(pass|proven|proof|proved)$/.test(fstatus)) fres = "pass";
-  else if (/counterexample|fail|error/.test(fstatus)) fres = "fail";
-  else if (/not_run|skipped/.test(fstatus)) fres = "not run";
-  if (vc.run_formal === false && !fres) fres = "n/a";
-  let fdetail = "bmc" + (depth ? " depth " + depth : "") + (info ? ", optional" : (pf.required ? ", required" : ""));
-  if (f.failed_assert) fdetail += ", assert at " + String(f.failed_assert).replace(/\.\d+-[\d.]+$/, "");
-  add("formal", fdetail, fres, info && fres ? "i" : null);
-
-  // interface: contract ports declared in the rtl
-  const c = d.contract;
-  const rtlText = Object.values(d.rtl || {}).join("\n");
-  if (c && Array.isArray(c.ports) && c.ports.length && rtlText) {
-    const names = c.ports.map((p) => p && p.name).filter(Boolean);
-    const found = names.filter((n) => new RegExp("\\b(input|output|inout)\\b[^;()]*?\\b" + n.replace(/[^\w$]/g, "\\$&") + "\\b").test(rtlText));
-    add("interface", found.length + " of " + names.length + " ports match contract", found.length === names.length ? "pass" : "fail");
-  } else {
-    add("interface", c ? "ports vs contract" : "no contract", "", null, "rtl");
-  }
-
-  add("timing closure", "not in scope", "n/a");
-
-  const withheld = so.withheld_reasons || [];
-  if (withheld.length) rows.push({ check: "sign-off", detail: "withheld: " + withheld.join("; "), res: "needs input", cls: "h", row: "hold" });
-  else if (o.accepted === true && o.provisional) rows.push({ check: "sign-off", detail: "provisional: needs your answer before it is final", res: "needs input", cls: "h", row: "hold" });
-  else if (o.accepted === false) {
-    const reason = String(o.reason || (/Reason: ([^\n]+)/.exec(sl) || [])[1] || "").split("\n")[0];
-    rows.push({ check: "sign-off", detail: "not accepted" + (reason ? ": " + clip(reason, 110) : ""), res: "fail", cls: "f" });
-  }
-  return { rows: rows, attempt: last ? ("attempt " + Math.max(hist.length, (Number(last.attempt) || 0) + 1) + " of " + Math.max(hist.length, (Number(last.attempt) || 0) + 1)) : "" };
-}
-function renderSignoff(d) {
-  const host = clear($("signoff"));
-  const data = signoffRows(d);
-  host.appendChild(el("div", { class: "sub" }, [label("02", "sign-off"), el("span", { class: "label", text: data.attempt })]));
-  const tbody = el("tbody");
-  data.rows.forEach((r) => {
-    tbody.appendChild(el("tr", { class: r.row || null }, [
-      el("td", { text: r.check }),
-      el("td", { class: "d", text: optionalFormalText(r.detail) }),
-      el("td", { class: "r " + r.cls, text: r.res }),
-    ]));
-  });
-  host.appendChild(el("table", { class: "dt so" }, [tbody]));
-}
-
-/* ---------------- 03 pipeline: timing diagram, one lane per stage ---------------- */
-const LANE_STEPS = { intake: ["intake"], review: ["review"], reference: ["reference"], rtl: ["properties", "rtl"], verify: ["verify"], "sign-off": ["report"] };
-function niceStep(total) {
-  const steps = [0.5, 1, 2, 5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
-  return steps.find((s) => total / s <= 5.5) || 14400;
-}
-function tickLabel(t) {
-  if (t >= 120) return (Math.round(t / 6) / 10) + " min";
-  return (Math.round(t * 10) / 10) + " s";
-}
-/* the lane text is a terse form of the stage detail; the full line stays in the tooltip and the evidence */
-function laneDetail(s) {
-  const raw = String(optionalFormalText(s.detail || (s.status === "running" ? "running" : "")) || "").split("\n")[0];
-  let m;
-  if (s.key === "intake" && (m = /^contract v(\d+)(?:, (\d+) requirement)?/.exec(raw))) return "contract v" + m[1] + (m[2] ? " \u00b7 " + m[2] + " req" : "");
-  if (s.key === "review" && (m = /(\d+) correction\(s\) applied/.exec(raw))) return m[1] + (m[1] === "1" ? " correction" : " corrections");
-  if (s.key === "reference" && (m = /^(\d+) reference\(s\)(?:, arbitration: (\w+))?/.exec(raw))) {
-    return m[1] + (m[1] === "1" ? " ref" : " refs") + (m[2] ? " \u00b7 " + m[2].replace(/_/g, " ") : "");
-  }
-  if (s.key === "rtl" && /^module /.test(raw)) return /properties/.test(raw) ? "properties + rtl" : "rtl";
-  if (s.key === "verify" && (m = /^attempt (\d+) of (\d+): (.*)$/.exec(raw))) {
-    const parts = m[3].split(/;\s*/).map((p) => {
-      if (/^lint ok/.test(p)) return "lint";
-      if (/^simulation passed/.test(p)) return "sim";
-      if (/synthesis ok/.test(p)) return "synth";
-      if (/formal|optional formal/.test(p)) return /bounded|pass/.test(p) ? "bmc" : "bmc " + p.replace(/^.*:\s*/, "").replace(/_/g, " ");
-      return p;
-    });
-    return (m[2] !== "1" ? "attempt " + m[1] + " of " + m[2] + " \u00b7 " : "") + parts.join(" \u00b7 ");
-  }
-  return raw;
-}
-function renderPipeline(d) {
-  const host = clear($("pipe"));
-  const stages = stageList(d);
-  const durs = Array.isArray(d.stage_durations) ? d.stage_durations : [];
-  const live = isLiveDetail(d);
-  stages.forEach((s) => {
-    s.secs = durs.filter((t) => (LANE_STEPS[s.key] || []).indexOf(t.stage) >= 0).reduce((a, t) => a + (Number(t.seconds) || 0), 0);
-  });
-  const total = stages.reduce((a, s) => a + s.secs, 0);
-  const hasTime = total > 0.05;
-  const right = hasTime ? (live ? dur(total) + " so far" : total.toFixed(1) + " s total") : "time not recorded";
-  host.appendChild(el("div", { class: "sub" }, [label("03", "pipeline"), el("span", { class: "label", text: right })]));
-
-  /* narrow screens draw at 1:1 in a 660-unit box that scrolls sideways, so labels stay legible */
-  const narrow = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
-  const VW = narrow ? 660 : 1000, LX = narrow ? 76 : 110, PX1 = VW - 28, TOP = 6, LANE = 28;
-  const H = TOP + stages.length * LANE + 22;
-  const baseOf = (i) => TOP + (i + 1) * LANE - 4;
-  const svg = sv("svg", { class: "lanes", viewBox: "0 0 " + VW + " " + H, width: narrow ? VW : "100%", role: "img",
-    "aria-label": "pipeline timing diagram: " + stages.map((s) => s.name + " " + s.status).join(", ") });
-  const plot = PX1 - LX;
-  const x = (t) => LX + (hasTime ? (t / total) * plot : t);
-  const lastBase = baseOf(stages.length - 1);
-  if (hasTime) {
-    const step = niceStep(total);
-    for (let t = 0; t <= total + 1e-6; t += step) {
-      const xx = x(t);
-      svg.appendChild(sv("line", { class: "grid", x1: xx, y1: TOP, x2: xx, y2: lastBase + 2 }));
-      svg.appendChild(sv("text", { class: "axis", x: xx, y: H - 4, "text-anchor": t === 0 ? "start" : (xx > PX1 - 30 ? "end" : "middle") }, tickLabel(t)));
-    }
-  }
-  let cursor = 0;
-  const slot = plot / stages.length;
-  stages.forEach((s, i) => {
-    const base = baseOf(i), high = base - 14;
-    svg.appendChild(sv("text", { x: 0, y: base - 3 }, s.name.toLowerCase()));
-    if (s.status === "pending" && !(hasTime && s.secs > 0)) {
-      svg.appendChild(sv("line", { class: "sig pend", x1: LX, y1: base, x2: PX1, y2: base }));
-      return;
-    }
-    let xs, xe;
-    if (hasTime) {
-      xs = x(cursor); cursor += s.secs; xe = x(cursor);
-      if (s.status === "running") xe = x(total);
-    } else {
-      xs = LX + i * slot + 6; xe = LX + (i + 1) * slot - 10;
-      if (s.status === "running") xe = PX1;
-    }
-    xe = Math.max(xe, xs + 6);
-    const tone = ({ done: "pass", running: "run", failed: "fail", withheld: "hold" })[s.status] || "pass";
-    const g = sv("g", { class: tone + (s.status === "running" ? " pulse" : "") });
-    const rise = Math.min(4, (xe - xs) / 3);
-    const running = s.status === "running";
-    g.appendChild(sv("path", { class: "fillp", d: "M" + xs + " " + base + " L" + (xs + rise) + " " + high + " H" + xe + (running ? " V" + base : " L" + (xe + rise) + " " + base) + " Z" }));
-    g.appendChild(sv("path", { class: "sig", d: "M" + LX + " " + base + " H" + xs + " L" + (xs + rise) + " " + high + " H" + xe + (running ? "" : " L" + (xe + rise) + " " + base + " H" + PX1) }));
-    svg.appendChild(g);
-    if (s.status === "failed") {
-      const cx = xe + rise + 6, cy = base - 7;
-      svg.appendChild(sv("path", { class: "x", d: "M" + (cx - 4) + " " + (cy - 4) + " L" + (cx + 4) + " " + (cy + 4) + " M" + (cx + 4) + " " + (cy - 4) + " L" + (cx - 4) + " " + (cy + 4) }));
-    }
-    const detail = laneDetail(s);
-    if (detail) {
-      const after = xe + rise + (s.status === "failed" ? 18 : 8);
-      const roomR = PX1 - after, roomL = xs - 8 - LX;
-      const inside = (xe - xs) > 140 && (Math.max(roomR, roomL) < 140 || (running && roomL < 140));
-      const useRight = !inside && !running && (roomR >= Math.min(roomL, 160) || roomR > 220);
-      const room = inside ? xe - xs - 16 : (useRight ? roomR : roomL);
-      const chars = Math.max(8, Math.floor(room / 6.4));
-      const txt = clip(detail, chars);
-      const pos = inside ? { class: "t", x: xs + rise + 8, y: base - 4 }
-        : (useRight ? { class: "t", x: after, y: base - 4 } : { class: "t", x: xs - 8, y: base - 4, "text-anchor": "end" });
-      const t = sv("text", pos, txt);
-      t.appendChild(sv("title", {}, s.name + ": " + (s.detail || detail)));
-      svg.appendChild(t);
-    }
-  });
-  host.appendChild(el("div", { class: "pipe-scroll", tabindex: narrow ? "0" : null, "aria-label": narrow ? "pipeline diagram, scroll sideways" : null }, [svg]));
-  if (narrow) host.appendChild(el("div", { class: "label", style: "margin-top:6px;text-align:right", text: "scroll sideways for the full timeline" }));
-  const list = el("ul", { class: "vh" });
-  stages.forEach((s) => list.appendChild(el("li", { text: s.name + ": " + s.status + (s.secs ? ", " + dur(s.secs) : "") + (s.detail ? ", " + s.detail : "") })));
-  host.appendChild(list);
-}
-
-/* ---------------- log ---------------- */
-function feedLineNode(line) {
-  const n = el("div", { class: "l" + (line.kind ? " l-" + line.kind : "") });
-  if (line.t) n.appendChild(el("span", { class: "ts", text: clock(line.t) + " " }));
-  const m = /^\[([^\]]{1,40})\]\s*([\s\S]*)$/.exec(line.text || "");
-  if (m) {
-    n.appendChild(el("span", { class: "role", text: "[" + m[1] + "] " }));
-    if (line.repeats > 1) n.appendChild(el("span", { class: "rep", text: "x " + line.repeats + " " }));
-    appendLinkedText(n, optionalFormalText(m[2]));
-  } else {
-    appendLinkedText(n, optionalFormalText(line.text || ""));
-  }
-  return n;
-}
-function pushFeed(t, text) {
-  const low = String(text || "").toLowerCase();
-  const kind = /^\[error|traceback|exception/.test(low) ? "error" : (/^\[provider/.test(low) ? "provider" : "");
-  S.feed.push({ t: t, text: text, kind: kind });
-}
-function renderFeed() {
-  const box = $("log");
-  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  clear(box);
-  const total = S.feed.length;
-  const shown = S.feedExpanded ? S.feed : S.feed.slice(-FEED_CAP);
-  const hidden = total - shown.length;
-  $("showEarlier").hidden = hidden <= 0;
-  $("showEarlier").textContent = "show earlier (" + hidden + ")";
-  $("feedNote").textContent = total ? total + (total === 1 ? " line" : " lines") + (hidden > 0 ? ", showing the last " + FEED_CAP : "") : "";
-  const count = $("tabCount-log");
-  if (count) count.textContent = total ? String(total) : "";
-  if (!total) {
-    box.appendChild(el("div", { class: "muted", text: "nothing logged yet. every wait shows its cause here." }));
-    return;
-  }
-  const frag = document.createDocumentFragment();
-  const grouped = [];
-  shown.forEach((l) => {
-    const prev = grouped[grouped.length - 1];
-    if (/^\[checkpoint\]/.test(l.text || "") && prev && /^\[checkpoint\]/.test(prev.text || "")) {
-      prev.repeats = (prev.repeats || 1) + 1; prev.text = l.text; prev.t = l.t;
-    } else grouped.push(Object.assign({}, l));
-  });
-  grouped.forEach((l) => frag.appendChild(feedLineNode(l)));
-  ((S.detail && S.detail.files) || []).filter((p) => p.endsWith("evidence.json"))
-    .forEach((p) => frag.appendChild(el("div", {}, [el("a", { href: artifactURL(p), text: p, target: "_blank", rel: "noopener" })])));
-  box.appendChild(frag);
-  if (atBottom) box.scrollTop = box.scrollHeight;
-}
-/* re-hydrate from structured events when the in-memory logs are gone (page refresh) */
-function hydrateFromEvents(events) {
-  if (!Array.isArray(events) || !events.length) return;
-  S.feed = [];
-  events.forEach((e) => {
-    const kind = e.kind || e.event || "event";
-    const rest = Object.keys(e)
-      .filter((k) => ["ts", "t", "kind", "event"].indexOf(k) < 0 && e[k] !== null && e[k] !== "" && e[k] !== undefined)
-      .map((k) => k + "=" + (typeof e[k] === "object" ? JSON.stringify(e[k]) : e[k]))
-      .join(" ");
-    pushFeed(e.ts || e.t, "[" + kind + "] " + rest.slice(0, 400));
-  });
-}
-
-/* ---------------- session view: header, tabs, panes ---------------- */
-function currentSession() {
-  return S.sessions.find((s) => s.workspace === S.current) || null;
-}
-function renderSessionHeader() {
-  const d = S.detail || {};
-  const sess = currentSession();
-  const o = d.outcome || {};
-  const missing = !!d.missing;
-  const module = (!missing && (d.module || (d.contract && d.contract.module_name))) || (sess && sess.module) || S.current || "session";
-  $("sessModule").textContent = module;
-  document.title = "openchip · " + module;
-  $("crumbWs").textContent = S.current || "";
-  $("crumbRun").textContent = d.run_id ? " / run " + String(d.run_id).split("-").slice(0, 2).join("-") : "";
-  $("crumbRun").title = d.run_id || "";
-
-  const merged = {
-    state: d.state || (sess && sess.state), alive: d.alive, accepted: o.accepted, provisional: !!o.provisional,
-    withheld_reason: ((d.evidence && d.evidence.signoff && d.evidence.signoff.withheld_reasons) || []).join("; ") || (sess && sess.withheld_reason),
-    needs_input: d.presentation ? !!((d.presentation.questions || []).length) && !d.alive : !!(sess && sess.needs_input),
-    result: d.result || ((sess && !d.state) ? sess.result : null),
-    previous_result: d.previous_result || null, reason: d.reason || (sess && sess.reason) || "",
-  };
-  if (d.alive) merged.result = null;
-  const b = d.budget || o.budget || {};
-  const mc = d.model_calls || {};
-  /* while the run is live the only honest elapsed time is wall-clock since it started; the recorded
-     budget.elapsed_s is the final figure and only settles when the run ends. */
-  let elapsed = b.elapsed_s !== undefined ? b.elapsed_s : d.elapsed_s;
-  if (d.alive && typeof d.started === "number") elapsed = Math.max(0, Date.now() / 1000 - d.started);
-  const calls = mc.count !== undefined ? mc.count : b.model_calls;
-
-  const v = clear($("sessVerdict"));
-  const sep = () => el("span", { class: "sep", text: "|" });
-  if (missing) {
-    v.appendChild(statusNode({ cls: "fail", word: "fail" }));
-    v.appendChild(el("span", { text: "this session's folder was deleted" }));
-  } else {
-    const st = statusOf(merged);
-    v.appendChild(statusNode(st, merged.reason || null));
-    let sentence = (d.presentation && d.presentation.sentence) || (isLiveDetail(d) ? "Building and checking your design" : "");
-    /* the server calls a planned run "building" even when no thread is left working on it */
-    if (!isLiveDetail(d) && resultOf(merged) === "interrupted" && /^building/i.test(sentence)) sentence = "stopped before it finished; resume continues from the last checkpoint";
-    sentence = lower1(sentence);
-    /* the verdict word is already on the line: do not say it twice */
-    const nq = /^needs your answer on (\d+) questions?$/.exec(sentence);
-    if (nq) sentence = nq[1] === "1" ? "1 question for you below" : nq[1] + " questions for you below";
-    if (sentence) v.appendChild(el("span", { text: sentence }));
-    const parts = [];
-    const cv = d.contract_version || (d.contract && d.contract.version);
-    if (cv) parts.push("contract v" + cv);
-    if (typeof elapsed === "number") parts.push(dur(elapsed));
-    if (typeof calls === "number" && calls) parts.push(calls + (calls === 1 ? " call" : " calls"));
-    parts.forEach((p) => { v.appendChild(sep()); v.appendChild(el("span", { text: p })); });
-  }
-  const meta = [];
-  if (!missing) {
-    const tokens = mc.tokens !== undefined ? mc.tokens : b.tokens;
-    if (typeof tokens === "number" && tokens) meta.push(tokens + " tokens");
-    if (typeof mc.last_latency_s === "number") meta.push("last call " + mc.last_latency_s + " s");
-    meta.push(d.cost_estimate_usd !== null && d.cost_estimate_usd !== undefined ? "est. model cost $" + Number(d.cost_estimate_usd).toFixed(4) : "cost estimate needs a token rate in settings");
-    if (d.step && d.step !== "-" && d.step !== "done") meta.push("step " + d.step);
-    if (d.reason) meta.push(clip(d.reason.split("\n")[0], 200));
-  } else {
-    meta.push("the workspace directory " + (S.current || "") + " no longer exists on the server");
-  }
-  $("sessMeta").textContent = meta.join(" · ");
-  renderAnswerCard(d);
-
-  const acts = clear($("sessActions"));
-  const live = isLiveDetail(d) || d.state === "running" && d.alive !== false;
-  const copy = el("button", { class: "btn", text: "copy rtl", onclick: async () => {
-    try { await navigator.clipboard.writeText(Object.entries(d.rtl || {}).map(([n, c]) => "// " + n + "\n" + c).join("\n")); toast("rtl copied"); }
-    catch (e) { toast("clipboard unavailable", "select and copy the rtl in the rtl tab."); }
-  } });
-  copy.disabled = missing || !Object.keys(d.rtl || {}).length;
-  acts.appendChild(copy);
-  if (!missing) acts.appendChild(el("a", { class: "btn", text: "download", title: "rtl, report and evidence as a zip", href: "/api/runs/" + encodeURIComponent(S.current) + "/bundle.zip", download: "openchip-delivery.zip" }));
-  const revise = el("button", { class: "btn", text: "request a change", onclick: () => openModal("reviseScrim", "#change") });
-  revise.disabled = live || missing;
-  if (missing) revise.title = "the workspace folder for this session no longer exists on the server.";
-  else if (live) revise.title = "a change can only be requested when the run is not live.";
-  acts.appendChild(revise);
-  const resumeTarget = sess ? Object.assign({}, sess, d.state ? { state: d.state, alive: d.alive, result: d.result } : {}) : { workspace: S.current, state: d.state, alive: d.alive, accepted: o.accepted, result: d.result };
-  if (!missing && !live && d.state && isResumable(resumeTarget)) {
-    acts.appendChild(el("button", { class: "btn", style: "border-color:var(--accent);color:var(--accent)", text: resumeLabel(resumeTarget), onclick: (e) => resumeRun(resumeTarget, e.currentTarget) }));
-  }
-}
-const TABS = [
-  { id: "rtl", n: "04", label: "rtl" },
-  { id: "contract", n: "05", label: "contract" },
-  { id: "evidence", n: "06", label: "evidence" },
-  { id: "diff", n: "07", label: "changes" },
-  { id: "request", n: "08", label: "request" },
-  { id: "log", n: "09", label: "log" },
-];
-function activeTab() {
-  if (S.tab) return S.tab;
-  const d = S.detail || {};
-  if (isLiveDetail(d)) return "log";
-  if (Object.keys(d.rtl || {}).length) return "rtl";
-  if (d.contract_md) return "contract";
-  return (S.feed.length || (d.events || []).length) ? "log" : "request";
-}
-function pickTab(id, focus) {
-  S.tab = id;
-  renderTabs();
-  renderPane();
-  if (focus) { const b = $("tab-" + id); if (b) b.focus(); }
-}
-function renderTabs() {
-  const host = clear($("tabs"));
-  const cur = activeTab();
-  TABS.forEach((t, i) => {
-    host.appendChild(el("button", {
-      role: "tab", id: "tab-" + t.id, "aria-selected": cur === t.id ? "true" : "false",
-      "aria-controls": t.id === "log" ? "logPane" : "pane", tabindex: cur === t.id ? "0" : "-1",
-      onclick: () => pickTab(t.id),
-      onkeydown: (e) => {
-        let n = -1;
-        if (e.key === "ArrowRight") n = (i + 1) % TABS.length;
-        if (e.key === "ArrowLeft") n = (i - 1 + TABS.length) % TABS.length;
-        if (e.key === "Home") n = 0;
-        if (e.key === "End") n = TABS.length - 1;
-        if (n < 0) return;
-        e.preventDefault();
-        pickTab(TABS[n].id, true);
-      },
-    }, [el("b", { text: t.n }), t.label, t.id === "log" ? el("small", { id: "tabCount-log", text: S.feed.length ? String(S.feed.length) : "" }) : null]));
-  });
-  $("pane").setAttribute("aria-labelledby", "tab-" + cur);
-  $("logPane").setAttribute("aria-labelledby", "tab-log");
-}
-function emptyPane(title, body) {
-  return el("div", { class: "empty" }, [el("div", { class: "t", text: title }), el("div", { text: body })]);
-}
-function listBlock(title, items) {
-  const arr = Array.isArray(items) ? items : [];
-  const box = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: title }), el("span", { class: "label", text: String(arr.length) })])]);
-  if (!arr.length) { box.appendChild(el("p", { class: "hint", text: "none recorded." })); return box; }
-  const ul = el("ul");
-  arr.forEach((it) => ul.appendChild(el("li", { text: typeof it === "string" ? it : (it.text || it.detail || JSON.stringify(it)) })));
-  box.appendChild(ul);
-  return box;
-}
-function renderEvidence(d) {
-  const pane = el("div");
-  const f = d.presentation && d.presentation.formal;
-  if (f) pane.appendChild(el("p", { class: "hint mono", text: (f.informational ? "optional formal check (information): " : "formal check: ") + String(f.status).replace(/_/g, " ") + ". bounded checks do not establish a full proof." }));
-  const ev = d.evidence;
-  if (!ev) {
-    pane.appendChild(emptyPane("no evidence yet", "verification artefacts and the sign-off decision appear here once the run reaches verification."));
-    return pane;
-  }
-  const attempts = Array.isArray(ev.attempts) ? ev.attempts : [];
-  const sect = el("section", { class: "ev-sect", style: "margin-top:8px" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "verification attempts" }), el("span", { class: "label", text: String(attempts.length) })])]);
-  if (!attempts.length) sect.appendChild(el("p", { class: "hint", text: "no attempt recorded yet." }));
-  else {
-    const rows = attempts.map((a, i) => {
-      const n = (typeof a.attempt === "number") ? a.attempt + 1 : (Number(a.attempt) >= 0 ? Number(a.attempt) + 1 : i + 1);
-      const verdict = a.accepted === true ? "pass" : (a.accepted === false ? "fail" : (a.status || a.result || a.stage || ""));
-      const detail = optionalFormalText(a.summary || a.detail || a.reason || a.stage || "");
-      const evPath = (d.files || []).find((p) => p === "verification/attempts/attempt_" + (n - 1) + "/evidence.json");
-      return el("tr", {}, [
-        el("td", { style: "width:32px", text: String(n) }),
-        el("td", { class: "d" }, [String(detail), evPath ? el("span", {}, ["  ", el("a", { href: artifactURL(evPath), target: "_blank", rel: "noopener", text: "evidence.json" })]) : null]),
-        el("td", { class: "r " + (verdict === "pass" ? "p" : verdict === "fail" ? "f" : "i"), text: verdict }),
-      ]);
-    });
-    sect.appendChild(el("div", { class: "tbl-scroll" }, [el("table", { class: "dt so" }, [el("tbody", {}, rows)])]));
-  }
-  pane.appendChild(sect);
-  const so = ev.signoff || {};
-  const signs = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "sign-off decision" })])]);
-  const st = so.accepted === true ? (so.provisional ? { cls: "hold", word: "provisional" } : { cls: "pass", word: "accepted" })
-    : (so.accepted === false ? { cls: "hold", word: "not accepted" } : { cls: "stop", word: "no decision yet" });
-  signs.appendChild(el("div", {}, [statusNode(st)]));
-  if (so.status_line) signs.appendChild(el("p", { class: "hint mono", style: "margin-top:8px;overflow-wrap:anywhere", text: optionalFormalText(so.status_line) }));
-  const reasons = so.withheld_reasons || so.reasons || [];
-  if (reasons.length) {
-    const ul = el("ul");
-    reasons.forEach((r) => ul.appendChild(el("li", { class: "h", text: typeof r === "string" ? r : JSON.stringify(r) })));
-    signs.appendChild(ul);
-  } else if (so.accepted === false) {
-    signs.appendChild(el("p", { class: "hint", text: "no withheld reason was recorded; the status line above is the whole record." }));
-  }
-  pane.appendChild(signs);
-  pane.appendChild(listBlock("unresolved", ev.unresolved));
-  pane.appendChild(listBlock("assumptions", ev.assumptions));
-  pane.appendChild(listBlock("escalations", ev.escalations));
-  const files = (d.files || []).filter((p) => /^reports\/|evidence\.json$/.test(p));
-  if (files.length) {
-    const fs = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "files" })])]);
-    files.forEach((p) => fs.appendChild(el("div", { class: "mono", style: "font-size:12.5px" }, [el("a", { href: artifactURL(p), target: "_blank", rel: "noopener", text: p })])));
-    pane.appendChild(fs);
-  }
-  const rep = el("section", { class: "ev-sect" }, [el("div", { class: "sub" }, [el("span", { class: "label", text: "report" })])]);
-  if (d.report_md) { const m = el("div", { class: "md" }); m.innerHTML = md(d.report_md); rep.appendChild(m); }
-  else rep.appendChild(el("p", { class: "hint", text: "the report is written when the run ends, and every claim in it is tied to a tool result." }));
-  pane.appendChild(rep);
-  return pane;
-}
-function renderPane() {
-  const host = clear($("pane"));
-  const d = S.detail;
-  const tab = activeTab();
-  const gone = !!(d && d.missing);
-  $("logPane").hidden = gone || tab !== "log";
-  host.hidden = !gone && tab === "log";
-  if (!d) { host.appendChild(el("p", { class: "hint", text: "loading the session." })); return; }
-  if (gone) {
-    host.appendChild(emptyPane("this session's folder was deleted",
-      "the workspace directory " + d.workspace + " no longer exists on the server, so there is nothing left to open or resume."));
-    return;
-  }
-  if (tab === "log") { renderFeed(); return; }
-  if (tab === "contract") {
-    if (d.contract_md) { const m = el("div", { class: "md" }); m.innerHTML = md(d.contract_md); host.appendChild(m); }
-    else host.appendChild(emptyPane("no contract yet", "the contract appears as soon as intake and review finish. it is the reviewable statement of what will be built."));
-    return;
-  }
-  if (tab === "rtl") {
-    const files = d.rtl || {};
-    const names = Object.keys(files);
-    if (!names.length) { host.appendChild(emptyPane("no rtl yet", "rtl is written after the independent reference model exists.")); return; }
-    names.forEach((n) => {
-      if (names.length > 1) host.appendChild(el("div", { class: "file-h", text: n }));
-      host.appendChild(codeBlock(files[n], true));
-    });
-    return;
-  }
-  if (tab === "diff") { const diff = d.contract_diff || "no previous contract version to compare.";
-    host.appendChild(diffBlock(/^---/.test(diff) ? diff : lower1(diff))); return; }
-  if (tab === "evidence") { host.appendChild(renderEvidence(d)); return; }
-  if (tab === "request") {
-    host.appendChild(el("pre", { class: "code", style: "white-space:pre-wrap", text: d.request || (currentSession() || {}).request || "" }));
-  }
-}
-
-/* ---------------- views and routing ---------------- */
-function showHome() {
-  S.current = null;
-  document.title = "openchip";
-  $("sessionView").hidden = true;
-  $("homeView").hidden = false;
-  renderRail();
-  renderReadiness();
-  renderHomeSessions();
-  renderShell();
-  schedule(0);
-}
-function showSession() {
-  $("homeView").hidden = true;
-  $("sessionView").hidden = false;
-  const d = S.detail;
-  const gone = !!(d && d.missing);
-  renderSessionHeader();
-  // a deleted session says one thing and nothing else: no blocker, no symbol, no progress, no log.
-  $("blocker").hidden = gone;
-  $("pair").hidden = gone || !d;
-  $("pipe").hidden = gone || !d;
-  $("tabs").hidden = gone;
-  renderBlocker();
-  if (d && !gone) { renderInterface(d); renderSignoff(d); renderPipeline(d); }
-  renderShell();
-  renderTabs();
-  if (!gone) renderFeed();
-  renderPane();
-}
-function resetSessionState(ws) {
-  S.current = ws;
-  S.detail = null; S.logSeen = 0; S.feed = []; S.feedExpanded = false; S.tab = null;
-}
-function openSession(ws) {
-  if (!ws) return;
-  if (location.hash !== "#/s/" + ws) { location.hash = "#/s/" + ws; return; }   // onhashchange continues
-  resetSessionState(ws);
-  $("rail").classList.add("collapsed");
-  $("railToggle").setAttribute("aria-expanded", "false");
-  showSession();
-  renderRail();
-  schedule(0);
-}
-function applyHash() {
-  const m = /^#\/s\/(.+)$/.exec(location.hash || "");
-  if (m) {
-    const ws = decodeURIComponent(m[1]);
-    if (S.current !== ws) resetSessionState(ws);
-    $("rail").classList.add("collapsed");
-    $("railToggle").setAttribute("aria-expanded", "false");
-    showSession();
-    renderRail();
-    schedule(0);
-  } else {
-    showHome();
-  }
-}
-window.addEventListener("hashchange", applyHash);
-let resizeTimer = null;
-window.addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (S.current && S.detail && !S.detail.missing) renderPipeline(S.detail); }, 150);
-});
-
-/* ---------------- loaders ---------------- */
-function sessionsFromStatus(st) {
-  const runs = (st && st.runs) || [];
-  return runs.map((r) => ({
-    workspace: r.workspace, name: r.workspace, module: r.module || r.workspace, intent: r.intent || (r.request || "").split("\n")[0],
-    request: r.request || "", created: r.created || r.updated,
-    updated: r.updated, state: r.state, step: r.step, accepted: r.accepted, alive: r.alive,
-    withheld_reason: r.withheld_reason, resumable: r.resumable, result: r.result,
-  }));
-}
-async function loadStatus() {
-  const st = await api("/api/status");
-  S.status = st;
-  const known = S.provider && S.provider.kind && S.provider.kind !== "unknown";
-  if (st.provider && st.provider.kind && !(known && st.provider.kind === "unknown")) S.provider = st.provider;
-  else if (!S.provider && st.settings && st.settings.key_present === false) S.provider = { kind: "no_key", provider: st.settings.provider, model: st.settings.model };
-  if (!S.sessionsOk) S.sessions = sessionsFromStatus(st);
-  return st;
-}
-async function loadSessions() {
-  try {
-    const list = await api("/api/sessions");
-    if (Array.isArray(list)) { S.sessions = list; S.sessionsOk = true; return; }
-    if (list && Array.isArray(list.sessions)) { S.sessions = list.sessions; S.sessionsOk = true; return; }
-    throw new Error("unexpected shape");
-  } catch (e) {
-    S.sessionsOk = false;                                  // older server: derive from /api/status
-    if (S.status) S.sessions = sessionsFromStatus(S.status);
-  }
-}
-async function loadDetail() {
-  if (!S.current) return;
-  const ws = S.current;
-  let d;
-  try {
-    d = await api("/api/runs/" + encodeURIComponent(ws) + "?since=" + S.logSeen);
-  } catch (e) {
-    if (S.current !== ws) return;
-    if (e.status === 404) {
-      // the workspace directory was deleted: say so once, disable the actions, and stop polling it.
-      S.detail = { workspace: ws, missing: true };
-      S.feed = [];
-      showSession();
-      if (S.timer) { clearTimeout(S.timer); S.timer = null; }
-      return;
-    }
-    if (!S.detail) toast("could not load the session", e.message);
-    return;
-  }
-  if (S.current !== ws) return;                           // the user moved on while this was in flight
-  S.detail = d;
-  if (d.provider && d.provider.kind) S.provider = d.provider;
-  const logs = Array.isArray(d.logs) ? d.logs : [];
-  if (logs.length) logs.forEach((l) => pushFeed(l.t, l.msg));
-  else if (!S.feed.length) hydrateFromEvents(d.events);
-  if (typeof d.log_total === "number") S.logSeen = d.log_total;
-  showSession();
-}
-function isAlive() {
-  const d = S.detail;
-  if (d && (d.alive || d.state === "running" || d.state === "planned")) return true;
-  return S.sessions.some((s) => s.alive || s.state === "running" || s.state === "planned");
-}
-
-/* ---------------- polling: 2 s alive, 8 s idle, paused when hidden ---------------- */
-function schedule(delay) {
-  if (S.timer) { clearTimeout(S.timer); S.timer = null; }
-  if (document.hidden) return;
-  if (S.current && S.detail && S.detail.missing) return;   // nothing left to poll for a deleted folder
-  S.timer = setTimeout(cycle, delay === undefined ? (isAlive() ? 2000 : 8000) : delay);
-}
-async function cycle() {
-  if (S.inFlight || document.hidden) { schedule(); return; }
-  S.inFlight = true;
-  try {
-    await loadStatus();
-    await loadSessions();
-    renderRail();
-    if (S.current) await loadDetail();
-    else { renderReadiness(); renderHomeSessions(); }
-  } catch (e) {
-    if (e.offline) {
-      S.provider = { kind: "unreachable", message: "the openchip server is not answering on this port.", provider: (S.status && S.status.settings && S.status.settings.provider) || null };
-      renderRailFoot();
-      renderBlocker();
-    }
-  } finally {
-    S.inFlight = false;
-    schedule();
-  }
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { if (S.timer) { clearTimeout(S.timer); S.timer = null; } }
-  else schedule(0);
-});
-/* the rate-limit and usage-limit countdowns tick every second, between polls */
-setInterval(() => {
-  if (document.hidden || !S.provider || !S.provider.until) return;
-  renderRailFoot();
-  if (S.current) renderBlocker(); else renderReadiness();
-}, 1000);
-
-/* ---------------- actions ---------------- */
+// -- new run -------------------------------------------------------------------------------------------
 async function startRun() {
-  const req = $("request").value.trim();
-  if (/^\//.test(req)) { renderPalette(); return; }
-  if (req.length < 20) { toast("the request is too short", "describe ports, reset and per-clock behaviour in at least a sentence (20 characters minimum)."); $("request").focus(); return; }
-  const btn = $("startBtn");
-  btn.disabled = true;
-  try {
-    const r = await api("/api/runs", { request: req, name: $("projname").value.trim(), budget_s: Number($("budget").value) || 1200 });
-    $("request").value = "";
-    await loadSessions();
-    if (r && r.workspace) openSession(r.workspace);
-    else showHome();
-  } catch (e) {
-    toast("the run was refused", e.message);
-  } finally {
-    btn.disabled = false;
-  }
+  const req = $('req').value.trim(); if (req.length < 20) return toast('Describe the module in at least a sentence.');
+  $('go').disabled = true;
+  try { const r = await api('/api/runs', {request: req, name: $('name').value, budget_s: +$('budget').value}); toast('Run started'); await refreshStatus(); openRun(r.workspace); }
+  catch (e) { toast(e.message); } finally { $('go').disabled = false; }
 }
-async function submitRevise() {
-  const c = $("change").value.trim();
-  if (c.length < 10) { toast("describe the change", "at least a sentence, so the new contract version is unambiguous."); return; }
-  const btn = $("reviseBtn");
-  btn.disabled = true;
-  try {
-    await api("/api/runs/" + encodeURIComponent(S.current) + "/revise", { change: c, budget_s: 1200 });
-    closeModal("reviseScrim");
-    $("change").value = "";
-    S.feed = []; S.logSeen = 0; S.tab = null;
-    await loadDetail();
-    schedule(0);
-  } catch (e) {
-    toast("the change was refused", e.message);
-  } finally {
-    btn.disabled = false;
+function showHome() { current = null; if (poll) clearInterval(poll); $('run').style.display='none'; $('home').style.display='block'; refreshStatus(); }
+
+// -- run view --------------------------------------------------------------------------------------------
+async function openRun(name) {
+  current = name; logSeen = 0; feedText = ''; $('feed').textContent = '';
+  $('home').style.display='none'; $('run').style.display='block'; $('runtitle').textContent = name;
+  if (poll) clearInterval(poll);
+  await tick(); poll = setInterval(tick, 2500);
+}
+let lastDetail = null;
+async function tick() {
+  if (!current) return;
+  const requested = current;
+  let d; try { d = await api(`/api/runs/${encodeURIComponent(current)}?since=${logSeen}`); } catch (e) { return; }
+  if (requested !== current) return;
+  lastDetail = d;
+  renderFeed(d);
+  logSeen = d.log_total || logSeen;
+  const o = d.outcome || {};
+  $('runstatus').textContent = d.result?.sentence || 'Starting…';
+  $('technical-status').textContent = o.status_line || '';
+  renderQuestions(d);
+  $('copy-rtl').disabled = !Object.keys(d.rtl || {}).length;
+  $('bundle').href = `/api/runs/${encodeURIComponent(current)}/bundle.zip`;
+  $('stage-times').innerHTML = (d.stages || []).map(s => `<span class="chip">${esc(s.stage)} · ${s.seconds} s</span>`).join('');
+  const f = d.result?.formal;
+  $('formal-info').textContent = f ? `${f.informational ? 'Optional formal check (information)' : 'Formal check'}: ${f.status}. Bounded checks do not establish a full proof.` : '';
+  const chips = [stateChip({state: d.alive ? "running" : d.state, accepted: o.accepted && !o.provisional && !(d.result?.questions || []).length})];
+  if (d.step) chips.push(`<span class="chip">step: ${esc(d.step)}</span>`);
+  if (d.contract_version) chips.push(`<span class="chip">contract v${d.contract_version}</span>`);
+  if (o.provisional) chips.push(`<span class="chip warn">provisional</span>`);
+  
+  $('chips').innerHTML = chips.join('');
+  const b = (o.budget || {}); $('elapsed').textContent = `${b.elapsed_s != null ? Math.round(b.elapsed_s) + ' s · ' : ''}${d.cost_estimate_usd != null ? 'Estimated model cost: $' + d.cost_estimate_usd.toFixed(4) : 'Cost estimate unavailable: set a token rate in Settings'}`;
+  $('counters').textContent = `${b.model_calls ?? '—'} model calls · ${b.tokens ?? '—'} tokens`;
+  renderPane();
+  if (!d.alive && d.state && d.state !== 'running' && d.state !== 'planned') { clearInterval(poll); poll = null; refreshStatus(); }
+}
+function tab(name, btn) { activeTab = name; document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderPane(); }
+function renderPane() {
+  const d = lastDetail; if (!d) return;
+  if (activeTab === 'contract') $('pane').innerHTML = d.contract_md ? md(d.contract_md) : '<div class="empty">The contract appears once intake finishes.</div>';
+  if (activeTab === 'rtl') $('pane').innerHTML = Object.keys(d.rtl||{}).length ? Object.entries(d.rtl).map(([n,c]) => `<h3>${esc(n)}</h3><pre>${esc(c)}</pre>`).join('') : '<div class="empty">No RTL yet.</div>';
+  if (activeTab === 'report') $('pane').innerHTML = d.report_md ? md(d.report_md) : '<div class="empty">The report is written when the run ends.</div>';
+  if (activeTab === 'diff') $('pane').innerHTML = `<pre>${esc(d.contract_diff || '')}</pre>`;
+  if (activeTab === 'evidence') $('pane').innerHTML = (d.files || []).map(p => `<p><a href="${artifactURL(p)}" target="_blank" rel="noopener">${esc(p)}</a></p>`).join('') || 'No evidence yet.';
+  if (activeTab === 'request') $('pane').innerHTML = `<pre>${esc(d.request||'')}</pre>`;
+}
+function openRevise() { if (!current) return; $('revise').classList.add('open'); }
+async function submitRevise() { const c = $('change').value.trim(); if (c.length < 10) return toast('Describe the change.'); try { await api(`/api/runs/${current}/revise`, {change: c, budget_s: 1200}); $('revise').classList.remove('open'); $('change').value=''; toast('Revision started'); logSeen = 0; feedText=''; $('feed').textContent = ''; await tick(); if (poll) clearInterval(poll); poll = setInterval(tick, 2500); } catch (e) { toast(e.message); } }
+
+const artifactURL = p => `/api/runs/${encodeURIComponent(current)}/artifact?path=${encodeURIComponent(p)}`;
+let questionKey = '';
+function renderQuestions(d) {
+  const qs = d.result?.questions || [];
+  const key = JSON.stringify([current, d.run_id, qs]);
+  $('questions').hidden = !qs.length || d.alive;
+  if (key === questionKey) return;
+  questionKey = key;
+  $('questions').innerHTML = '<h2 style="margin-top:0">What I need from you</h2>' + qs.map((q,i) => `<label for="answer-${i}">${esc(q)}</label><textarea id="answer-${i}" style="min-height:70px"></textarea>`).join('') + '<button class="btn primary" onclick="answerQuestions()">Apply answers and re-verify</button>';
+}
+async function answerQuestions() {
+  const qs = lastDetail?.result?.questions || [];
+  const answers = qs.map((q,i) => $(`answer-${i}`).value.trim());
+  if (answers.some(a => !a)) return toast('Please answer each question.');
+  $('change').value = qs.map((q,i) => `Question: ${q}\nAnswer: ${answers[i]}`).join('\n\n');
+  await submitRevise();
+}
+async function copyRTL() {
+  const text = Object.entries(lastDetail?.rtl || {}).map(([n,c]) => `// ${n}\n${c}`).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('RTL copied'); }
+  catch (e) { toast('Clipboard unavailable. Select and copy the RTL in the RTL tab.'); }
+}
+function renderFeed(d) {
+  // Persisted events work across reloads; collapse consecutive checkpoints of the same stage.
+  const groups = [];
+  for (const e of d.events || []) {
+    const prev = groups[groups.length - 1];
+    if (e.kind === 'checkpoint' && prev?.event.kind === 'checkpoint' && prev.event.step === e.step) prev.count++;
+    else groups.push({event:e, count:1});
   }
+  $('feed').innerHTML = groups.map(({event:e,count}) => {
+    const title = e.kind === 'checkpoint' ? `Working on ${e.step}` : e.kind.replaceAll('_', ' ');
+    const details = Object.entries(e).filter(([k]) => !['ts','kind'].includes(k)).map(([k,v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
+    return `<div>${esc(title)}${count > 1 ? ` (${count} checkpoints)` : ''}<details><summary>Details</summary><pre>${esc(details)}</pre></details></div>`;
+  }).join('');
+  const evidence = (d.files || []).filter(p => p.endsWith('evidence.json'));
+  $('feed').innerHTML += `<details><summary>Run log</summary><pre>${esc((d.logs || []).map(l => l.msg).join('\n'))}</pre></details>`;
+  $('feed').innerHTML += evidence.map(p => `<div><a href="${artifactURL(p)}" target="_blank" rel="noopener">${esc(p)}</a></div>`).join('');
 }
 
-function optionalFormalText(text) {
-  return S.detail && S.detail.presentation && S.detail.presentation.formal && S.detail.presentation.formal.informational
-    ? String(text).replace(/formal BMC(?: depth \d+)?\s*:/gi, "optional formal check (information):") : text;
+// -- settings ---------------------------------------------------------------------------------------------
+function providerChanged() {
+  const p = $('provider').value; const s = status ? status.settings : {};
+  const defaults = {openrouter:'https://openrouter.ai/api/v1', openai:'https://api.openai.com/v1', anthropic:'https://api.anthropic.com', 'openai-compatible':'http://127.0.0.1:8000/v1'};
+  const presets = {openrouter:['openai/gpt-oss-120b','qwen/qwen3.8-27b','anthropic/claude-sonnet-5','openai/gpt-5-codex'], openai:['gpt-5-codex','gpt-5','gpt-oss-120b'], anthropic:['claude-sonnet-5','claude-opus-5','claude-haiku-4-5-20251001'], 'openai-compatible':['openai/gpt-oss-120b','Qwen/Qwen3.8-27B','Qwen/Qwen3-8B']};
+  $('presets').innerHTML = presets[p].map(m => `<option value="${m}">`).join('');
+  $('baseurl').placeholder = defaults[p];
+  if (p !== s.provider) { $('model').value = presets[p][0]; $('baseurl').value = ''; } else { $('model').value = s.model || ''; $('baseurl').value = s.base_url === defaults[p] ? '' : (s.base_url || ''); }
+  $('keyhint').textContent = p === 'openai-compatible' ? '(optional; the server key if it has one)' : `(env ${ {openrouter:'OPENROUTER_API_KEY', openai:'OPENAI_API_KEY', anthropic:'ANTHROPIC_API_KEY'}[p] } also works)`;
 }
-function appendLinkedText(node, text) {
-  const files = (S.detail && S.detail.files) || [];
-  String(text).split(/(\s+)/).forEach((word) => {
-    const path = files.find((p) => word === p || word.endsWith("/" + p));
-    node.appendChild(path ? el("a", { href: artifactURL(path), text: path, target: "_blank", rel: "noopener" }) : document.createTextNode(word));
-  });
+async function openSettings() { if (!status) { try { await refreshStatus(); } catch (e) { return toast('Still loading — try again in a moment.'); } }
+  const s = status.settings; $('provider').value = s.provider; $('tokenrate').value = s.usd_per_million_tokens ?? ''; providerChanged(); $('apikey').value=''; $('testresult').textContent='';
+  $('tools').innerHTML = Object.entries(status.doctor.tools).map(([k,v]) => `<div>${k}</div><div>${v.ok ? '<span class="chip ok">ok</span> <span class="hint">'+esc(v.version)+'</span>' : '<span class="chip warn">missing</span>'}</div>`).join('');
+  $('settings').classList.add('open'); }
+function closeSettings() { $('settings').classList.remove('open'); }
+async function saveSettings() { try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value, usd_per_million_tokens: $('tokenrate').value}); $('apikey').value=''; toast('Saved'); await refreshStatus(); } catch (e) { toast(e.message); } }
+async function testConnection() {
+  $('testresult').textContent = 'Testing…';
+  try { await api('/api/settings', {provider: $('provider').value, model: $('model').value, base_url: $('baseurl').value, api_key: $('apikey').value, usd_per_million_tokens: $('tokenrate').value}); $('apikey').value='';
+    const h = await api('/api/test', {});
+    if (!h.ok) { $('testresult').innerHTML = `<span class="chip bad">unreachable</span> ${esc(h.error||'')}`; }
+    else { const p = h.ping || {}; $('testresult').innerHTML = `${p.ok ? '<span class="chip ok">connected</span>' : '<span class="chip warn">reachable, but the model did not answer</span>'} ${esc(h.provider)} · ${esc(h.configured)}${h.configured_is_served===false ? ' · <span class="chip warn">model not in the served list</span>' : ''} ${p.latency_s ? '· '+p.latency_s+' s' : ''} ${p.error ? '· '+esc(p.error) : ''}`; }
+    await refreshStatus();
+  } catch (e) { $('testresult').innerHTML = `<span class="chip bad">${esc(e.message)}</span>`; }
 }
-const artifactURL = (p) => "/api/runs/" + encodeURIComponent(S.current) + "/artifact?path=" + encodeURIComponent(p);
-let answerKey = "";
-function renderAnswerCard(d) {
-  const qs = (d.presentation && d.presentation.questions) || [];
-  const host = $("answerCard");
-  host.hidden = !qs.length || !!d.alive || !!d.missing;
-  const key = JSON.stringify([S.current, d.run_id, qs]);
-  if (answerKey === key) return;
-  answerKey = key; clear(host);
-  if (!qs.length) return;
-  host.appendChild(el("div", { class: "sub", style: "margin-bottom:4px" }, [
-    el("span", { class: "st hold" }, [glyph("hold"), el("span", { class: "label h", style: "color:var(--hold)", text: "what i need from you" })]),
-    el("span", { class: "label", text: qs.length + (qs.length === 1 ? " question" : " questions") }),
-  ]));
-  qs.forEach((q, i) => {
-    host.appendChild(el("label", { class: "q", for: "answer-" + i, style: "display:block", text: q }));
-    host.appendChild(el("textarea", { class: "box", id: "answer-" + i, rows: "2" }));
-  });
-  host.appendChild(el("div", { class: "btns", style: "margin-top:12px" }, [el("button", { class: "btn", style: "border-color:var(--ink)", text: "apply answers and re-verify", onclick: async (e) => {
-    const answers = qs.map((q, i) => $("answer-" + i).value.trim());
-    if (answers.some((a) => !a)) { toast("please answer each question"); return; }
-    $("change").value = qs.map((q, i) => "Question: " + q + "\nAnswer: " + answers[i]).join("\n\n");
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try { await submitRevise(); } finally { btn.disabled = false; }
-  } })]));
-}
-
-/* ---------------- wiring ---------------- */
-$("brandHome").addEventListener("click", (e) => { e.preventDefault(); location.hash = "#/"; showHome(); });
-$("backBtn").addEventListener("click", (e) => { e.preventDefault(); location.hash = "#/"; showHome(); });
-$("newBtn").addEventListener("click", () => { location.hash = "#/"; showHome(); $("rail").classList.add("collapsed"); $("request").focus(); });
-$("startBtn").addEventListener("click", startRun);
-$("reviseBtn").addEventListener("click", submitRevise);
-$("saveBtn").addEventListener("click", async () => { try { await saveSettings(false); renderSettingsFields(); renderToolchain(); } catch (e) { toast("could not save the settings", e.message); } });
-$("testBtn").addEventListener("click", testConnection);
-$("showEarlier").addEventListener("click", () => { S.feedExpanded = true; renderFeed(); });
-$("search").addEventListener("input", (e) => { S.filter = e.target.value; renderRail(); });
-$("railToggle").addEventListener("click", () => {
-  const open = $("rail").classList.toggle("collapsed") === false;
-  $("railToggle").setAttribute("aria-expanded", open ? "true" : "false");
-});
-$("request").addEventListener("input", () => { palIndex = 0; renderPalette(); renderEditor(); });
-$("projname").addEventListener("input", renderEditor);
-$("edCopy").addEventListener("click", async () => {
-  const v = $("request").value;
-  if (!v.trim()) return toast("nothing to copy yet");
-  try { await navigator.clipboard.writeText(v); toast("spec copied"); }
-  catch (e) { toast("clipboard unavailable", "select the text and copy it"); }
-});
-$("cmdkBtn").addEventListener("click", () => openCommands());
-$("stDocs").addEventListener("click", () => openHelp());
-$("brandTop").addEventListener("click", (e) => { e.preventDefault(); location.hash = ""; showHome(); });
-$("request").addEventListener("keydown", (e) => {
-  if (paletteKey(e)) { e.preventDefault(); return; }
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); startRun(); }
-});
-$("request").addEventListener("blur", () => { setTimeout(() => {
-  /* the box can regain focus before this fires (for example cmd+k reopening the palette): leave it alone then. */
-  if (document.activeElement === $("request") || $("palette").contains(document.activeElement)) return;
-  $("palette").hidden = true; $("request").setAttribute("aria-expanded", "false");
-}, 120); });
-document.addEventListener("keydown", (e) => {
-  const typing = ["INPUT", "TEXTAREA", "SELECT"].indexOf(document.activeElement.tagName) >= 0;
-  if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openCommands(); return; }
-  if (typing || topModal() || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === "/") {
-    e.preventDefault();
-    if (!$("homeView").hidden) { $("request").focus(); $("request").value = "/"; renderPalette(); renderEditor(); }
-    else $("search").focus();
-    return;
-  }
-  if (e.key === "n" || e.key === "N") { e.preventDefault(); location.hash = ""; showHome(); $("request").focus(); return; }
-  if (e.key === "?") { e.preventDefault(); openHelp(); }
-});
-
-/* ---------------- boot ---------------- */
-(async function boot() {
-  renderRail();
-  try { await loadStatus(); } catch (e) { toast("cannot reach the openchip server", e.message); }
-  await loadSessions();
-  renderRail();
-  renderEditor();
-  renderShell();
-  applyHash();          // restores the open session from #/s/<workspace> after a refresh
-  schedule(0);
-})();
+refreshStatus();
+setInterval(() => { if (!current) refreshStatus(); }, 8000);
 </script>
 </body>
 </html>

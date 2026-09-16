@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..contracts.schema import Contract, Disposition
-from ..contracts.underspec import underspec_questions
 from ..tools.base import tool_version
 
 if TYPE_CHECKING:
@@ -49,18 +48,13 @@ NON_UNANIMOUS_OUTCOMES = frozenset({"no_majority", "majority_initial", "majority
 def sign_off_withheld(ck: dict) -> str:
     """Why the design must not be signed off, or "" when it may be.
 
-    Conditions about the contract rather than the RTL; none is settled by repairing the RTL:
+    Two conditions, both about the contract rather than the RTL, so neither is settled by
+    repairing the RTL and both hand the design back to the user:
       - the model's own independent reference derivations never agreed unanimously;
       - the reference contradicts a table printed in the request, which is ground truth that
-        never passed through the model (docs/decisions/0010-request-tables.md);
-      - the reference contradicts the contract's own state-transition table, the table the RTL was
-        built from, so the two halves of the design were built from different readings of it;
-      - the request itself does not determine an observable behaviour
-        (docs/decisions/0012-underspec.md).
+        never passed through the model (docs/decisions/0010-request-tables.md).
     """
     reasons: list[str] = []
-    for q in underspec_questions(ck.get("request") or ""):
-        reasons.append("the request does not determine the answer: " + q)
     c = ck.get("consensus") or {}
     if c:
         outcome = c.get("outcome") or ""
@@ -71,10 +65,6 @@ def sign_off_withheld(ck: dict) -> str:
     t = ck.get("request_table_check") or {}
     if t.get("status") == "mismatch":
         reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
-    f = ck.get("fsm_table_check") or {}
-    if f.get("status") == "mismatch":
-        reasons.append("the reference model contradicts the contract's own state-transition table, which the RTL was built from: "
-                       + (f.get("detail") or ""))
     return "; ".join(reasons)
 
 
@@ -158,17 +148,12 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         },
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
         "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
-        "request_table_check": ck.get("request_table_check"), "fsm_table_check": ck.get("fsm_table_check"),
-        "model_escalations": ck.get("model_escalations", []),
-        "provider_status": ck.get("provider_status"),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
         "budget": budget, "tool_time_s": round(tool_time_s, 1),
         "requirements": req_index,
-        "underspec": underspec_questions(ck.get("request") or ""),
-        "unresolved": contract.unresolved if contract else [], "unresolved_demoted": ck.get("unresolved_triage") or [],
-        "assumptions": contract.assumptions if contract else [],
+        "unresolved": contract.unresolved if contract else [], "assumptions": contract.assumptions if contract else [],
         "defaults": contract.defaults if contract else [], "unsupported": contract.unsupported if contract else [],
         "host": platform.node(), "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -226,14 +211,6 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     md += ["## Requirement-to-evidence index", "", "| ID | Requirement | Source | Evidence |", "|---|---|---|---|"]
     md += [f"| {r['id']} | {r['text']} | {r['source']} | {r['evidence']} |" for r in req_index]
     md.append("")
-    if outcome["unresolved_demoted"]:
-        md += ["## Unresolved items demoted by triage (recorded as assumptions)", "",
-               "Each item below was filed by intake as an open question but answers itself: the request settles it, "
-               "it does not change the ports, or a documented convention decides it. It no longer withholds sign-off; "
-               "the rule that demoted it is shown so the demotion can be audited.", "",
-               "| Item | Rule | Why |", "|---|---|---|"]
-        md += [f"| {d['text']} | `{d['rule']}` | {d['note']} |" for d in outcome["unresolved_demoted"]]
-        md.append("")
     for title, items in (("Unresolved decisions (need the user)", outcome["unresolved"]), ("Assumptions", outcome["assumptions"]),
                          ("Defaults taken", outcome["defaults"]), ("Unsupported", outcome["unsupported"])):
         if items:

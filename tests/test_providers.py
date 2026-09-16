@@ -62,28 +62,3 @@ def test_keys_file_roundtrip(tmp_path, monkeypatch):
     from openchip.models.adapter import resolve_api_key
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False); monkeypatch.delenv("OPENCHIP_MODEL_API_KEY", raising=False)
     assert resolve_api_key(cfg) == "or-1"
-
-
-def test_openai_responses_shape_and_parse():
-    """Responses API: messages become `input`, a schema request becomes a prompt instruction, and a
-    model that rejects `temperature` is retried without it."""
-    calls = []
-    def handler(req):
-        body = json.loads(req.content); calls.append((str(req.url), body))
-        if "temperature" in body:
-            return httpx.Response(400, json={"error": {"param": "temperature", "message": "'temperature' is not supported with this model."}})
-        return httpx.Response(200, json={"id": "resp_1", "model": "gpt-5.6-luna", "status": "incomplete",
-                                         "incomplete_details": {"reason": "max_output_tokens"},
-                                         "output": [{"type": "reasoning", "summary": [{"type": "summary_text", "text": "thought"}]},
-                                                    {"type": "message", "content": [{"type": "output_text", "text": '{"a":1}'}]}],
-                                         "usage": {"input_tokens": 11, "output_tokens": 22}})
-    ad = _adapter("openai-responses", "gpt-5.6-luna", handler)
-    r = ad.chat([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}], json_schema={"type": "object"}, max_tokens=3000)
-    assert r.ok and r.text == '{"a":1}' and r.reasoning == "thought"
-    assert r.finish_reason == "length" and r.prompt_tokens == 11 and r.completion_tokens == 22
-    assert len(calls) == 2 and calls[1][0] == "https://opencode.ai/zen/go/v1/responses"
-    body = calls[1][1]
-    assert body["input"][0] == {"role": "system", "content": "s"}
-    assert body["input"][1]["content"].endswith("Reply with a single JSON object only.")
-    assert body["max_output_tokens"] == 3000 and body["reasoning"] == {"effort": "low"}
-    assert not {"temperature", "response_format", "max_tokens", "chat_template_kwargs", "reasoning_effort"} & set(body)

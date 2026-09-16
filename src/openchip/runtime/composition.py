@@ -16,6 +16,7 @@ from ..contracts.schema import Contract
 from ..contracts.system import Connection, Instance, SystemContract, render_top
 from ..models.adapter import ModelAdapter, extract_json
 from ..verification.harness import sha256_file
+from ..reporting.composition import render_composition_report
 from .run import Budget, BudgetExhausted, Runner, Stalled
 from .workspace import Workspace
 
@@ -159,6 +160,7 @@ def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print
         result["primary_model_calls"] = sum(a.usage.calls for a in adapters)
         result["primary_model_tokens"] = sum(a.usage.total_tokens for a in adapters)
         (project / "outcome.json").write_text(json.dumps(result, indent=2))
+        (project / "report.md").write_text(render_composition_report(result))
 
     def remaining():
         seconds = budget_s - (time.monotonic() - started)

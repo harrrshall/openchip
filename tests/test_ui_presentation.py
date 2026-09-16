@@ -78,11 +78,10 @@ def test_revision_is_backgrounded_and_duplicate_submission_is_rejected(tmp_path,
             pass
     monkeypatch.setattr(server, "Runner", SlowRevision)
     state = server.UIState(Config())
-    monkeypatch.setattr(state, "missing_tools", lambda: [])
     try:
         assert state.start_run("counter", "", 60, change="Reset takes priority")["workspace"] == "counter"
         assert entered.wait(1)
-        with pytest.raises(server.RunAlive):
+        with pytest.raises(ValueError, match="current run"):
             state.start_run("counter", "", 60, change="Reset takes priority")
     finally:
         release.set()

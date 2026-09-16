@@ -12,7 +12,7 @@ if [ ! -d "$DST/.git" ]; then git clone -q "$REMOTE" "$DST" 2>/dev/null || { mkd
 rsync -a --delete \
   --exclude '.git' --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.ruff_cache' --exclude '.venv' \
   --include '/README.md' --include '/LICENSE' --include '/pyproject.toml' --include '/.gitignore' \
-  --include '/src/***' --include '/tests/***' --include '/configs/***' --include '/scripts/***' --include '/examples/***' --include '/ui/***' --include '/assets/***' \
+  --include '/src/***' --include '/tests/***' --include '/configs/***' --include '/scripts/***' --include '/examples/***' --include '/ui/***' \
   --include '/evals/' --include '/evals/suite/***' --include '/evals/results/' --include '/evals/results/model-comparison.md' \
   --include '/evals/results/*/' --include '/evals/results/*/summary.md' --include '/evals/results/*/summary.json' \
   --exclude '*' \

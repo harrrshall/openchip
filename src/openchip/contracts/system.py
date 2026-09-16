@@ -92,10 +92,7 @@ class SystemContract(BaseModel):
                 raise ValueError(f"conflicting contracts for module definition {name}")
             definitions[name] = m.digest
             cr, top_cr = m.contract.clock_reset, self.top.clock_reset
-            # Reset polarity/kind are only comparable when both sides have a reset; a leaf with no
-            # reset simply takes no reset connection.
-            if cr and (not top_cr or (cr.reset and top_cr.reset
-                                      and (cr.reset_active != top_cr.reset_active or cr.reset_kind != top_cr.reset_kind))):
+            if cr and (not top_cr or cr.reset_active != top_cr.reset_active or cr.reset_kind != top_cr.reset_kind):
                 raise ValueError(f"{m.name}: clock/reset semantics do not match the top")
         drivers = {}
         used = set()
@@ -127,10 +124,7 @@ class SystemContract(BaseModel):
                     raise ValueError(f"{m.name}.{p.name}: output must be connected or explicitly open")
             cr = m.contract.clock_reset
             if cr:
-                pairs = [(cr.clock, self.top.clock_reset.clock)]
-                if cr.reset and self.top.clock_reset.reset:
-                    pairs.append((cr.reset, self.top.clock_reset.reset))
-                for leaf_port, top_port in pairs:
+                for leaf_port, top_port in ((cr.clock, self.top.clock_reset.clock), (cr.reset, self.top.clock_reset.reset)):
                     if drivers[(m.name, leaf_port)] != ("TOP", top_port):
                         raise ValueError(f"{m.name}.{leaf_port}: must connect directly to shared top clock/reset")
         # Conservatively assume every combinational leaf output depends on every

@@ -67,8 +67,7 @@ def main() -> int:
                 clean[p["name"]] = v & ((1 << p["width"]) - 1)
             step_in = dict(clean)
             if cr:
-                if cr.get("reset"):  # a null reset means the design has no reset port to pass
-                    step_in[cr["reset"]] = rst_inactive
+                step_in[cr["reset"]] = rst_inactive
                 step_in[cr["clock"]] = 0
             o = ref.step(step_in)
             if not isinstance(o, dict):

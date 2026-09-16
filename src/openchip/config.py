@@ -1,6 +1,5 @@
 """Validated configuration. No credentials live here; secrets come from the environment."""
 from __future__ import annotations
-import json
 
 import os
 import re
@@ -17,7 +16,7 @@ else:  # pragma: no cover
 
 
 class ModelConfig(BaseModel):
-    provider: Literal["openai-compatible", "openai", "openrouter", "opencode-go", "anthropic", "openai-responses"] = "openai-compatible"
+    provider: Literal["openai-compatible", "openai", "openrouter", "anthropic"] = "openai-compatible"
     base_url: str = "http://127.0.0.1:8000/v1"
     model: str = "Qwen/Qwen3-8B"
     revision: str = "main"
@@ -33,7 +32,6 @@ class ModelConfig(BaseModel):
     thinking_budget: int = 12000
     extra_body: dict = Field(default_factory=dict)
     user_agent: Optional[str] = None   # some gateways allow-list clients by User-Agent; set per provider if required
-    extra_headers: dict[str, str] = Field(default_factory=dict)  # extra HTTP headers, e.g. {"x-opencode-session": "<uuid>"}
     # Optional second model for cross-family reference corroboration and an optional independent spec reviewer.
     alt: Optional["ModelConfig"] = None
     review: Optional["ModelConfig"] = None
@@ -107,6 +105,7 @@ class Config(BaseModel):
         if os.environ.get("OPENCHIP_MODEL_REVISION"):
             cfg.model.revision = os.environ["OPENCHIP_MODEL_REVISION"]
         if os.environ.get("OPENCHIP_EXTRA_BODY"):
+            import json
             cfg.model.extra_body = json.loads(os.environ["OPENCHIP_EXTRA_BODY"])
         if os.environ.get("OPENCHIP_THINKING_ROLES") is not None:
             roles = [r for r in os.environ["OPENCHIP_THINKING_ROLES"].split(",") if r]
@@ -119,8 +118,6 @@ class Config(BaseModel):
             cfg.model.max_tokens = int(os.environ["OPENCHIP_MAX_TOKENS"])
         if os.environ.get("OPENCHIP_USER_AGENT"):
             cfg.model.user_agent = os.environ["OPENCHIP_USER_AGENT"]
-        if os.environ.get("OPENCHIP_EXTRA_HEADERS"):
-            cfg.model.extra_headers.update(json.loads(os.environ["OPENCHIP_EXTRA_HEADERS"]))
         if os.environ.get("OPENCHIP_MODEL_API_KEY_ENV"):
             cfg.model.api_key_env = os.environ["OPENCHIP_MODEL_API_KEY_ENV"]
         if os.environ.get("OPENCHIP_REVIEW") in ("0", "false", "off"):

@@ -61,10 +61,8 @@ def interface_matches(contract: Contract, expected: dict) -> list[str]:
     return problems
 
 
-def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log=print,
-             work: Optional[Path] = None) -> dict:
-    """`work` overrides the default <out_root>/<task>/rep<k> directory (used by the matrix runner)."""
-    tdir = Path(work) if work else out_root / task["id"] / f"rep{rep}"
+def run_task(cfg: Config, task: dict, out_root: Path, budget: str, rep: int, log=print) -> dict:
+    tdir = out_root / task["id"] / f"rep{rep}"
     if tdir.exists():
         shutil.rmtree(tdir)
     ws = Workspace(tdir)
