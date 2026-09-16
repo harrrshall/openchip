@@ -14,6 +14,7 @@ Contamination of the public benchmark in the model's training data is unknowable
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import shutil
 import time
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config import Config, model_slug
+from ..contracts.coerce import requested_module_name
 from ..models.adapter import ModelAdapter, extract_code
 from ..tools import iverilog
 from ..runtime.run import Runner
@@ -89,9 +91,14 @@ def run_agent(cfg: Config, prob: dict, work: Path, budget_s: float, log) -> dict
     ws = Workspace(work)
     if work.exists():
         raise FileExistsError(f"Refusing to overwrite retained evaluation artifacts: {work}")
-    ws.init(request=prob["prompt"], name=prob["id"])
+    request = prob["prompt"]
+    naming_directive = requested_module_name(request) is None
+    if naming_directive:
+        request = "Implement the top-level module named TopModule.\n\n" + request
+    ws.init(request=request, name=prob["id"])
+    (work / ".openchip" / "benchmark-original-prompt.txt").write_text(prob["prompt"])
     runner = Runner(ws, cfg, log=lambda m: log(f"  [{prob['id']}] {m}"))
-    runner.start(prob["prompt"], budget_s=budget_s)
+    runner.start(request, budget_s=budget_s)
     try:
         outcome = runner.execute()
     except Exception as e:  # noqa: BLE001
@@ -100,8 +107,12 @@ def run_agent(cfg: Config, prob: dict, work: Path, budget_s: float, log) -> dict
     rec = {"id": prob["id"], "mode": "agent", "state": outcome.get("state"), "accepted": bool(outcome.get("accepted")), "attempts": outcome.get("attempts", 0),
            "provisional": bool(outcome.get("provisional")), "review_verdict": rv.get("verdict"), "review_applied": len(rv.get("applied", [])),
            "calls": runner.adapter.usage.calls, "tokens": runner.adapter.usage.total_tokens, "wall_s": round(time.time() - t0, 1)}
-    rtl = work / "rtl" / "TopModule.v"
-    if rtl.is_file():
+    rec.update(benchmark_naming_directive=naming_directive,
+               original_prompt_sha256=hashlib.sha256(prob["prompt"].encode()).hexdigest(),
+               effective_request_sha256=hashlib.sha256(request.encode()).hexdigest())
+    artifact = (outcome.get("artifacts") or {}).get("rtl")
+    rtl = Path(artifact) if artifact else work / "rtl" / "TopModule.v"
+    if rtl.is_file() and rtl.resolve().is_relative_to(work.resolve()):
         rec.update(score(rtl, prob, work / "verification" / "veval_score", cfg))
     else:
         rec["status"] = "no_rtl"
