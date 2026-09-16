@@ -9,6 +9,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -41,6 +42,24 @@ class ToolResult:
 
 def which(name: str) -> Optional[str]:
     return shutil.which(name)
+
+
+def stage_verilog_sources(sources: list[str], cwd: str | Path, *, prefix: str,
+                          purpose: str) -> Iterator[tuple[Path, Path]]:
+    """Yield each regular source and staged copy before staging the next input."""
+    work = Path(cwd)
+    for index, source in enumerate(sources):
+        original = Path(source)
+        if not original.is_absolute():
+            original = work / original
+        if original.is_symlink() or not original.is_file():
+            raise ValueError(f"{purpose} input must be a regular file")
+        destination = work / f"openchip_{prefix}_input_{index}.v"
+        if destination.is_symlink():
+            raise ValueError(f"{purpose} staging destination must not be a symlink")
+        if original.resolve() != destination.resolve():
+            shutil.copyfile(original, destination)
+        yield original, destination
 
 
 def tool_version(exe: str, args: tuple[str, ...] = ("--version",)) -> str:

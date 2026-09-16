@@ -286,10 +286,11 @@ class UIState:
             runs = store.list_runs()
             if runs:
                 run = store.get_run(runs[0]["run_id"]) or {}
+                events = store.events(runs[0]["run_id"])
                 detail.update({"run_id": runs[0]["run_id"], "state": run.get("state"), "step": run.get("step"), "outcome": run.get("outcome") or {},
-                               "events": [{k: v for k, v in e.items() if k != "error" or v} for e in store.events(runs[0]["run_id"])][-60:]})
+                               "events": [{k: v for k, v in e.items() if k != "error" or v} for e in events][-60:]})
                 detail.update(self._recovery_state(name, run, store))
-                detail["stages"] = stage_durations(store.events(runs[0]["run_id"]), time.time() if detail["alive"] else run["updated"])
+                detail["stages"] = stage_durations(events, time.time() if detail["alive"] else run["updated"])
             store.close()
         spec = sorted(ws.dir("spec").glob("contract.v*.md"), key=lambda p: int(p.stem.split(".v")[1]))
         detail["contract_md"] = spec[-1].read_text() if spec else ""

@@ -8,11 +8,10 @@ from __future__ import annotations
 import json
 import re
 import hashlib
-import shutil
 import tempfile
 from pathlib import Path
 
-from .base import ToolResult, run_tool, tool_version
+from .base import ToolResult, run_tool, stage_verilog_sources, tool_version
 
 
 def synth_generic(sources: list[str], top: str, cwd: str | Path, exe: str = "yosys", timeout_s: float = 300.0,
@@ -25,17 +24,7 @@ def synth_generic(sources: list[str], top: str, cwd: str | Path, exe: str = "yos
     # of that language entirely, while retaining the source-to-staged mapping.
     staged = []
     source_files = []
-    for index, source in enumerate(sources):
-        original = Path(source)
-        if not original.is_absolute():
-            original = Path(cwd) / original
-        if original.is_symlink() or not original.is_file():
-            raise ValueError("synthesis input must be a regular file")
-        destination = Path(cwd) / f"openchip_synth_input_{index}.v"
-        if destination.is_symlink():
-            raise ValueError("synthesis staging destination must not be a symlink")
-        if original.resolve() != destination.resolve():
-            shutil.copyfile(original, destination)
+    for original, destination in stage_verilog_sources(sources, cwd, prefix="synth", purpose="synthesis"):
         staged.append(destination.name)
         source_files.append({"source": str(original), "staged": destination.name,
                              "sha256": hashlib.sha256(destination.read_bytes()).hexdigest()})

@@ -6,10 +6,9 @@ timeout, error/unsupported. A bounded pass is not a proof.
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
 import re
 
-from .base import ToolResult, run_tool, tool_version
+from .base import ToolResult, run_tool, stage_verilog_sources, tool_version
 
 SBY_TEMPLATE = """[options]
 mode bmc
@@ -36,19 +35,8 @@ def write_sby(work: Path, sources: list[str], top: str, depth: int, solver: str 
         raise ValueError("formal top must be an ordinary Verilog identifier")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", solver):
         raise ValueError("formal solver must be a simple executable name")
-    names = []
-    for index, source in enumerate(sources):
-        original = Path(source)
-        if not original.is_absolute():
-            original = work / original
-        if original.is_symlink() or not original.is_file():
-            raise ValueError("formal input must be a regular file")
-        destination = work / f"openchip_formal_input_{index}.v"
-        if destination.is_symlink():
-            raise ValueError("formal staging destination must not be a symlink")
-        if original.resolve() != destination.resolve():
-            shutil.copyfile(original, destination)
-        names.append(destination.name)
+    names = [destination.name for _, destination in
+             stage_verilog_sources(sources, work, prefix="formal", purpose="formal")]
     cfg = SBY_TEMPLATE.format(depth=depth, solver=solver, files=" ".join(names),
                               top=top, file_list="\n".join(names))
     p = work / f"{top}.sby"
