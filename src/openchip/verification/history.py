@@ -6,6 +6,23 @@ import json
 from pathlib import Path
 
 
+def _matching_evidence(root: Path, identity: dict):
+    """Read contained receipts matching every requested artifact identity."""
+    for path in sorted((root / "verification").rglob("evidence.json")):
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            continue
+        try:
+            raw = path.read_bytes()
+            previous = json.loads(raw)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(previous, dict) or not isinstance(previous.get("artifacts"), dict):
+            continue
+        if any(previous["artifacts"].get(key) != value for key, value in identity.items()):
+            continue
+        yield path, raw, previous
+
+
 def prior_simulation_failures(workspace: Path, artifacts: dict) -> list[dict]:
     """Find retained failures for this exact RTL, reference and contract.
 
@@ -24,18 +41,7 @@ def prior_simulation_failures(workspace: Path, artifacts: dict) -> list[dict]:
     if not all(isinstance(value, str) and value for value in identity.values()):
         return []
     failures = []
-    for path in sorted((root / "verification").rglob("evidence.json")):
-        if path.is_symlink() or not path.resolve().is_relative_to(root):
-            continue
-        try:
-            raw = path.read_bytes()
-            previous = json.loads(raw)
-        except (OSError, ValueError):
-            continue
-        if not isinstance(previous, dict) or not isinstance(previous.get("artifacts"), dict):
-            continue
-        if any(previous["artifacts"].get(key) != value for key, value in identity.items()):
-            continue
+    for path, raw, previous in _matching_evidence(root, identity):
         sims = previous.get("sims") or []
         netlist_sims = previous.get("netlist_sims") or []
         if not isinstance(sims, list) or not isinstance(netlist_sims, list):
@@ -65,23 +71,12 @@ def prior_formal_failures(workspace: Path, artifacts: dict, formal: dict | None)
         return []
     current = {**(formal or {}).get("extra", {}), **(formal or {})}
     failures = []
-    for path in sorted((root / "verification").rglob("evidence.json")):
-        if path.is_symlink() or not path.resolve().is_relative_to(root):
-            continue
-        try:
-            raw = path.read_bytes()
-            previous = json.loads(raw)
-        except (OSError, ValueError):
-            continue
-        if not isinstance(previous, dict) or not isinstance(previous.get("artifacts"), dict):
-            continue
-        if any(previous["artifacts"].get(key) != value for key, value in identity.items()):
-            continue
+    for path, raw, previous in _matching_evidence(root, identity):
         old_formal = previous.get("formal")
         if not isinstance(old_formal, dict):
             continue
         old = {**old_formal.get("extra", {}), **old_formal}
-        if not isinstance(old, dict) or old.get("status") != "counterexample":
+        if old.get("status") != "counterexample":
             continue
         old_hash = previous["artifacts"].get("properties_sha256")
         new_hash = artifacts.get("properties_sha256")
