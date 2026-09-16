@@ -150,3 +150,7 @@ They accept parameter names, `clog2` of positive integers, and `min`/`max`.
 Strings, floating-point values and excessively large or complex expressions are
 rejected before tool execution. Limits are 4096 expression characters, 256 syntax
 nodes, 64 nesting levels and 4096 bits per intermediate integer.
+
+Imported and generated contracts must explicitly set `clock_reset.reset` to the
+exact reset input name, or `null` for a resetless interface. Omitting it is a
+validation error; OpenChip no longer assumes an undeclared `rst` port.

@@ -64,7 +64,7 @@ class Parameter(BaseModel):
 class ClockReset(BaseModel):
     clock: str = "clk"
     clock_edge: Literal["posedge", "negedge"] = "posedge"
-    reset: Optional[str] = "rst"
+    reset: Optional[str] = Field(description="Required: the exact declared reset input name, or null when there is no reset port. Never infer or invent a reset port from an omitted field.")
     reset_active: Literal["high", "low"] = "high"
     reset_kind: Literal["synchronous", "asynchronous"] = "synchronous"
     conditioning: list[dict[str, StrictInt]] = Field(default_factory=list, max_length=256, description="Resetless simulation startup: one complete data-input vector per clock edge. Empty uses three zero-data edges. Not a hardware reset or power-up guarantee.")

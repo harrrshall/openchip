@@ -1,0 +1,22 @@
+{
+  "model": "OpenCode Go glm-5.3-flash",
+  "model_revision": "unknown",
+  "source_commit": "b0150bcc1",
+  "independent_observations": 395,
+  "independent_mismatches": 0,
+  "formal_depth": 20,
+  "formal_status": "bounded_pass",
+  "original_build_accepted": false,
+  "copied_run_after_checker_review_accepted": true,
+  "rtl_unchanged_by_review": true,
+  "negative_controls": {
+    "increment2": "counterexample",
+    "ignoredclear": "counterexample"
+  },
+  "recovery_evidence_sha256": "e83bb7c30cc8e4421b3ab46a4df8c3ba2ca6b5f8dc6872901535630f1f1b1e1c",
+  "artifact_sha256": {
+    "event_counter.v": "00d93ac42bded6256259e1c2b4563edaf25883608574dc0f45398d0010f7871d",
+    "tb.v": "45f188a8cc220539551b24a57e02da7a0eb754f0b47a6d13e204a26d12630f02",
+    "request.md": "a0796f4e5703c36834c35095a9bc01c49e99511c39ab754264dcef02ba841540"
+  }
+}
