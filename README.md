@@ -144,3 +144,9 @@ actual delivered RTL, a separate runnable bench, and evidence limits. Complete
 explicit elementary-cell transition requests are checked against their printed
 rows before generated references enter arbitration; power-up before a load is
 not treated as initialized state.
+
+Width expressions use bounded integer arithmetic; `/` truncates toward zero.
+They accept parameter names, `clog2` of positive integers, and `min`/`max`.
+Strings, floating-point values and excessively large or complex expressions are
+rejected before tool execution. Limits are 4096 expression characters, 256 syntax
+nodes, 64 nesting levels and 4096 bits per intermediate integer.

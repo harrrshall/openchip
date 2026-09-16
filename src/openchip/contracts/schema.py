@@ -271,27 +271,77 @@ class Contract(BaseModel):
 
 
 def eval_width(expr: str, params: dict[str, int]) -> int:
-    """Evaluate a restricted integer expression over parameters (no builtins)."""
+    """Evaluate bounded integer width arithmetic, without Python eval.
+
+    Widths are integers: `/` truncates toward zero. Limit expression complexity
+    and intermediate magnitudes before allocating large shifts or powers.
+    """
     import ast
 
+    max_bits = 4096
+    if len(expr) > 4096:
+        raise ValueError("width expression exceeds the length limit")
     tree = ast.parse(expr, mode="eval")
-    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name, ast.Add, ast.Sub,
-               ast.Mult, ast.FloorDiv, ast.Div, ast.Mod, ast.Pow, ast.LShift, ast.RShift, ast.USub, ast.UAdd,
-               ast.Call, ast.Load)
-    for node in ast.walk(tree):
-        if not isinstance(node, allowed):
-            raise ValueError(f"disallowed syntax in width expression: {type(node).__name__}")
-        if isinstance(node, ast.Call):
-            if not (isinstance(node.func, ast.Name) and node.func.id in ("clog2", "max", "min")):
-                raise ValueError("only clog2/max/min calls are allowed")
-        if isinstance(node, ast.Name) and node.id not in params and node.id not in ("clog2", "max", "min"):
-            raise ValueError(f"unknown parameter {node.id!r}")
+    if sum(1 for _ in ast.walk(tree)) > 256:
+        raise ValueError("width expression exceeds the complexity limit")
 
-    def clog2(n: int) -> int:
-        return max(0, (int(n) - 1).bit_length())
+    def bounded(value: int) -> int:
+        if type(value) is not int:
+            raise ValueError("width expressions require integer operands")
+        if value.bit_length() > max_bits:
+            raise ValueError("width arithmetic exceeds the intermediate size limit")
+        return value
 
-    val = eval(compile(tree, "<width>", "eval"), {"__builtins__": {}}, {**params, "clog2": clog2, "max": max, "min": min})
-    return int(val)
+    def evaluate(node: ast.AST, depth: int = 0) -> int:
+        if depth > 64:
+            raise ValueError("width expression exceeds the nesting limit")
+        child = lambda n: evaluate(n, depth + 1)
+        if isinstance(node, ast.Constant):
+            return bounded(node.value)
+        if isinstance(node, ast.Name) and node.id in params:
+            return bounded(params[node.id])
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = child(node.operand)
+            return bounded(value if isinstance(node.op, ast.UAdd) else -value)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
+            args = [child(a) for a in node.args]
+            if node.func.id == "clog2" and len(args) == 1 and args[0] > 0:
+                return (args[0] - 1).bit_length()
+            if node.func.id in ("min", "max") and args:
+                return (min if node.func.id == "min" else max)(args)
+            raise ValueError("only clog2(positive integer) and min/max(integer arguments) are allowed")
+        if isinstance(node, ast.BinOp):
+            left, right = child(node.left), child(node.right)
+            op = node.op
+            if isinstance(op, ast.Add):
+                value = left + right
+            elif isinstance(op, ast.Sub):
+                value = left - right
+            elif isinstance(op, ast.Mult):
+                value = left * right
+            elif isinstance(op, (ast.Div, ast.FloorDiv, ast.Mod)):
+                if right == 0:
+                    raise ValueError("division by zero in width expression")
+                if isinstance(op, ast.Div):
+                    value = (abs(left) // abs(right)) * (-1 if (left < 0) != (right < 0) else 1)
+                else:
+                    value = left // right if isinstance(op, ast.FloorDiv) else left % right
+            elif isinstance(op, (ast.LShift, ast.RShift)):
+                if not 0 <= right <= max_bits:
+                    raise ValueError("width shift exceeds the size limit")
+                if isinstance(op, ast.LShift) and left.bit_length() + right > max_bits:
+                    raise ValueError("width shift exceeds the intermediate size limit")
+                value = left << right if isinstance(op, ast.LShift) else left >> right
+            elif isinstance(op, ast.Pow):
+                if not 0 <= right <= max_bits or (abs(left) > 1 and (abs(left).bit_length() - 1) * right > max_bits):
+                    raise ValueError("width power exceeds the size limit")
+                value = left ** right
+            else:
+                raise ValueError("unsupported width arithmetic operator")
+            return bounded(value)
+        raise ValueError("unsupported syntax or unknown parameter in width expression")
+
+    return evaluate(tree.body)
 
 
 def contract_json_schema() -> dict:
