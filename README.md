@@ -47,6 +47,12 @@ its `bin` directory on PATH. Namespace setup must work for the service account;
 there is no unisolated fallback. Public multi-user hosting remains unsupported;
 per-tenant authorization and aggregate resource quotas are not implemented.
 
+Generated RTL is restricted to clocked reset logic and synthesizable data-path
+constructs. Simulator control, file/system tasks, initial blocks and cross-hierarchy
+references are rejected after preprocessing. Value functions such as `$clog2`
+remain supported. If formal checking is required, missing or failed formal
+evidence blocks acceptance.
+
 ## Command line
 ```bash
 openchip doctor                                   # tools, model connectivity, features

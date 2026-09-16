@@ -21,6 +21,7 @@ from ..tools import iverilog, verilator, yosys
 from ..tools.base import ToolResult
 from .formal import run_formal
 from .sandbox import run_isolated
+from .rtl_policy import check_rtl
 from .testbench import dump_contract_json, generate_testbench, write_vectors
 
 REFGEN = Path(__file__).with_name("refgen.py")
@@ -181,6 +182,19 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
     res.artifacts = {"rtl": str(rtl_path), "rtl_sha256": sha256_file(rtl_path), "reference": str(reference_py),
                      "reference_sha256": sha256_file(reference_py), "contract_digest": contract.digest()}
 
+    findings, policy = check_rtl(rtl_path, work, tcfg.iverilog, tcfg.timeout_s)
+    (work / "rtl-policy.json").write_text(json.dumps(policy, indent=2))
+    if findings:
+        res.stage = "rtl_policy"
+        res.guard_findings = findings
+        res.summary = "RTL is outside the supported synthesizable subset"
+        return res
+    if cfg.verification.require_formal and (not cfg.verification.run_formal or
+            contract.combinational or props_path is None or not props_path.is_file()):
+        res.stage = "formal"
+        res.summary = "required formal verification is unavailable"
+        return res
+
     # 1. reference vectors for every seed (a broken reference is reported, not blamed on RTL)
     vectors = {}
     for seed in seeds:
@@ -247,8 +261,8 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
         res.artifacts["properties_sha256"] = sha256_file(props_path)
         st = fr.extra.get("status")
         formal_note = f"; formal BMC depth {cfg.verification.formal_depth}: {st}"
-        if st == "counterexample" and cfg.verification.require_formal:
-            res.summary = "formal counterexample"
+        if cfg.verification.require_formal and (st != "bounded_pass" or not fr.ok):
+            res.summary = f"required formal verification failed: {st}"
             return res
 
     res.stage = "done"
@@ -261,7 +275,7 @@ def parse_sim(sim: ToolResult, seed: int, cycles: int, vec: dict) -> SimSeedResu
     text = sim.stdout + sim.stderr
     if sim.timed_out:
         return SimSeedResult(seed, cycles, "timeout", detail="simulator exceeded its time limit")
-    if not sim.ok and "RESULT" not in text:
+    if not sim.ok:
         return SimSeedResult(seed, cycles, "sim_error", detail=sim.tail(20))
     if "RESULT TIMEOUT" in text:
         return SimSeedResult(seed, cycles, "timeout", detail="testbench watchdog fired (clock or reset never advanced?)")
@@ -273,6 +287,7 @@ def parse_sim(sim: ToolResult, seed: int, cycles: int, vec: dict) -> SimSeedResu
     m = re.search(r"RESULT FAIL mismatches=(\d+)", text)
     if m:
         return SimSeedResult(seed, cycles, "fail", int(m.group(1)), mm)
-    if "RESULT PASS" in text:
+    passes = re.findall(r"^RESULT PASS cycles=(\d+)$", text, re.M)
+    if len(passes) == 1 and int(passes[0]) == cycles and not mm:
         return SimSeedResult(seed, cycles, "pass")
     return SimSeedResult(seed, cycles, "sim_error", detail=sim.tail(20))

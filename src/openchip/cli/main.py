@@ -201,7 +201,10 @@ def cmd_verify(args) -> int:
     ref = ws.dir("reference") / "reference.py"
     work = ws.dir("verification") / "reverify"
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else None
-    res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds)
+    props = ws.dir("verification") / f"{contract.module_name}_props.v"
+    res = verify(contract, rtl, ref, work, cfg, cycles=args.cycles, seeds=seeds,
+                 props_path=props if props.is_file() else None)
+    (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=2))
     print(json.dumps({"accepted": res.accepted, "stage": res.stage, "summary": res.summary, "sims": [(s["seed"], s["status"], s["mismatches"]) for s in res.sims]}, indent=1))
     return 0 if res.accepted else 3
 

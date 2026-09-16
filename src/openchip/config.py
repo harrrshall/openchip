@@ -69,7 +69,7 @@ class VerificationConfig(BaseModel):
     require_synth: bool = True
     corroborate: bool = True      # acceptance needs agreement with a second independent reference (or 2 of 3)
     run_formal: bool = True       # run SBY BMC when a property checker exists (extra evidence)
-    require_formal: bool = False  # formal counterexample blocks acceptance
+    require_formal: bool = False  # acceptance requires a successful bounded formal check
     formal_depth: int = 20
     formal_timeout_s: float = 300.0
 
