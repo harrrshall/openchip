@@ -18,6 +18,7 @@ import os
 import re
 import shlex
 import time
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -36,7 +37,15 @@ PROVIDER_DEFAULTS = {
 KEYS_FILE = Path(os.environ.get("OPENCHIP_KEYS_FILE", Path.home() / ".config" / "openchip" / "keys.env"))
 
 
+_KEYS_LOCK = threading.RLock()
+
 def read_keys_file() -> dict[str, str]:
+    # Readers must not observe an in-process writer between truncate and close.
+    with _KEYS_LOCK:
+        return _read_keys_file()
+
+
+def _read_keys_file() -> dict[str, str]:
     out: dict[str, str] = {}
     try:
         for line in KEYS_FILE.read_text().splitlines():
@@ -58,6 +67,11 @@ def read_keys_file() -> dict[str, str]:
 
 def write_keys_file(updates: dict[str, str]) -> None:
     """Persist keys for the UI (mode 600). Empty values delete the entry."""
+    with _KEYS_LOCK:
+        _write_keys_file(updates)
+
+
+def _write_keys_file(updates: dict[str, str]) -> None:
     KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
     cur = read_keys_file()
     for k, v in updates.items():

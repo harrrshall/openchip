@@ -47,7 +47,7 @@ PRESETS = {
 class UIState:
     def __init__(self, base_cfg: Config):
         self.base_cfg = base_cfg
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.logs: dict[str, list[dict]] = {}      # workspace name -> log lines
         self.threads: dict[str, threading.Thread] = {}
         self.settings = self._load_settings()
@@ -61,6 +61,11 @@ class UIState:
             return {"provider": m.provider, "model": m.model, "base_url": m.base_url}
 
     def save_settings(self, data: dict) -> dict:
+        # One Settings transaction includes the provider identity and saved key.
+        with self.lock:
+            return self._save_settings(data)
+
+    def _save_settings(self, data: dict) -> dict:
         provider = data.get("provider") or self.settings.get("provider") or "openai-compatible"
         if provider not in PROVIDER_DEFAULTS:
             raise ValueError("unknown provider")
@@ -79,6 +84,10 @@ class UIState:
         return self.public_settings()
 
     def public_settings(self) -> dict:
+        with self.lock:
+            return self._public_settings()
+
+    def _public_settings(self) -> dict:
         provider = self.settings.get("provider", "openai-compatible")
         env = PROVIDER_DEFAULTS[provider]["key_env"]
         key = resolve_api_key(self.config().model)
@@ -88,6 +97,10 @@ class UIState:
                 "presets": PRESETS.get(provider, [])}
 
     def config(self) -> Config:
+        with self.lock:
+            return self._config()
+
+    def _config(self) -> Config:
         cfg = Config.load()
         m = cfg.model
         identity = (m.provider, m.model, m.base_url)
@@ -424,6 +437,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
 
+class UIHTTPServer(ThreadingHTTPServer):
+    # Browser tabs can issue bursts while other requests are completing.
+    request_queue_size = 64
+
+
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False) -> None:
     token = os.environ.get("OPENCHIP_UI_TOKEN", "")
     try:
@@ -434,7 +452,7 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False)
         raise ValueError("Set OPENCHIP_UI_TOKEN to a secret of at least 32 characters before exposing the UI.")
     Handler.auth_token = token
     Handler.state = UIState(Config.load())
-    httpd = ThreadingHTTPServer((host, port), Handler)
+    httpd = UIHTTPServer((host, port), Handler)
     url = f"http://{host}:{port}"
     print(f"OpenChip UI at {url}  (workspaces: {WORKSPACES})")
     if open_browser:
