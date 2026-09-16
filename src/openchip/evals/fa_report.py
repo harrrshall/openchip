@@ -9,36 +9,57 @@ import json
 import sys
 from pathlib import Path
 
-LABELS = {"D": "baseline (no review, no alt)", "A": "independent spec review", "B": "review + cross-family alt refs", "C": "cross-family alt refs only"}
+LABELS = {
+    "D": "baseline (no review, no alt)",
+    "A": "independent spec review",
+    "B": "review + cross-family alt refs",
+    "C": "cross-family alt refs only",
+}
 
 
 def main(argv: list[str]) -> int:
     root = Path(argv[0])
     out = Path(argv[1]) if len(argv) > 1 else root / "fa-report.md"
     rows = []
-    for c in ("D", "A", "B", "C"):
-        d = root / c
-        if not d.is_dir():
+    for config in ("D", "A", "B", "C"):
+        config_dir = root / config
+        if not config_dir.is_dir():
             continue
-        agent = next(iter(sorted(d.glob("verilogeval-v2-agent-*"))), None)
-        core = next(iter(sorted(d.glob("core-v1-*"))), None)
-        held = next(iter(sorted(d.glob("heldout-v1-*"))), None)
-        r = {"config": c, "label": LABELS.get(c, c)}
+        agent = next(iter(sorted(config_dir.glob("verilogeval-v2-agent-*"))), None)
+        core = next(iter(sorted(config_dir.glob("core-v1-*"))), None)
+        heldout = next(iter(sorted(config_dir.glob("heldout-v1-*"))), None)
+        row = {"config": config, "label": LABELS.get(config, config)}
         if agent and (agent / "records.jsonl").is_file():
-            recs = [json.loads(l) for l in (agent / "records.jsonl").read_text().splitlines() if l.strip()]
-            r.update({"agent_n": len(recs), "agent_pass": sum(x.get("status") == "pass" for x in recs), "agent_accepted": sum(bool(x.get("accepted")) for x in recs),
-                      "agent_false": sum(bool(x.get("false_acceptance")) for x in recs), "agent_provisional": sum(bool(x.get("provisional")) for x in recs),
-                      "agent_false_nonprov": sum(bool(x.get("false_acceptance")) and not x.get("provisional") for x in recs),
-                      "review_applied": sum(1 for x in recs if x.get("review_applied")), "agent_wall": round(sum(x.get("wall_s", 0) for x in recs) / max(1, len(recs)), 1)})
-        for name, dd in (("core", core), ("held", held)):
-            if dd and (dd / "summary.json").is_file():
-                s = json.loads((dd / "summary.json").read_text())
-                r.update({f"{name}_golden": s["golden_pass"], f"{name}_n": s["n"], f"{name}_false": s["false_acceptance"]})
-        rows.append(r)
+            records = [json.loads(line) for line in (agent / "records.jsonl").read_text().splitlines() if line.strip()]
+            row.update({
+                "agent_n": len(records),
+                "agent_pass": sum(record.get("status") == "pass" for record in records),
+                "agent_accepted": sum(bool(record.get("accepted")) for record in records),
+                "agent_false": sum(bool(record.get("false_acceptance")) for record in records),
+                "agent_provisional": sum(bool(record.get("provisional")) for record in records),
+                "agent_false_nonprov": sum(bool(record.get("false_acceptance")) and not record.get("provisional") for record in records),
+                "review_applied": sum(1 for record in records if record.get("review_applied")),
+                "agent_wall": round(sum(record.get("wall_s", 0) for record in records) / max(1, len(records)), 1),
+            })
+        for name, run_dir in (("core", core), ("held", heldout)):
+            if run_dir and (run_dir / "summary.json").is_file():
+                summary = json.loads((run_dir / "summary.json").read_text())
+                row.update({
+                    f"{name}_golden": summary["golden_pass"], f"{name}_n": summary["n"],
+                    f"{name}_false": summary["false_acceptance"],
+                })
+        rows.append(row)
     md = ["# False-acceptance experiment (same primary model, four configurations)", "",
           "| config | agent pass (n=39) | accepted | false acc. | of which provisional | review applied | core-v1 golden / false | heldout golden / false | agent wall s |", "|---|---|---|---|---|---|---|---|---|"]
-    for r in rows:
-        md.append(f"| {r['config']} {r['label']} | {r.get('agent_pass','–')}/{r.get('agent_n','–')} | {r.get('agent_accepted','–')} | **{r.get('agent_false','–')}** | {r.get('agent_provisional','–')} | {r.get('review_applied','–')} | {r.get('core_golden','–')}/{r.get('core_n','–')} / {r.get('core_false','–')} | {r.get('held_golden','–')}/{r.get('held_n','–')} / {r.get('held_false','–')} | {r.get('agent_wall','–')} |")
+    for row in rows:
+        md.append(
+            f"| {row['config']} {row['label']} | {row.get('agent_pass', '–')}/{row.get('agent_n', '–')} "
+            f"| {row.get('agent_accepted', '–')} | **{row.get('agent_false', '–')}** "
+            f"| {row.get('agent_provisional', '–')} | {row.get('review_applied', '–')} "
+            f"| {row.get('core_golden', '–')}/{row.get('core_n', '–')} / {row.get('core_false', '–')} "
+            f"| {row.get('held_golden', '–')}/{row.get('held_n', '–')} / {row.get('held_false', '–')} "
+            f"| {row.get('agent_wall', '–')} |"
+        )
     out.write_text("\n".join(md) + "\n")
     print("\n".join(md))
     (root / "fa-report.json").write_text(json.dumps(rows, indent=1))

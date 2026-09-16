@@ -127,6 +127,17 @@ these scripts use the same provisioned cloud layout as the demo helpers:
 
 see each script's usage comment for arguments. retain the logs and result summaries, and use their recorded verdicts to judge acceptance; `DONE` markers indicate script completion, not verification success.
 
+### summarize recorded results
+
+on the linux verification host, generate reports from retained result copies without new model calls:
+
+```sh
+python -m openchip.evals.compare /path/to/results-copy /path/to/model-comparison.md
+python -m openchip.evals.fa_report /path/to/fa-experiment-copy /path/to/fa-report.md
+```
+
+the comparison reads run summaries and keeps the last directory in name order for each model/revision and protocol. the false-acceptance report reads configurations `D`, `A`, `B`, and `C`, using the first matching directory in name order for each protocol; it also writes `fa-report.json` inside the experiment copy. these commands summarize recorded evidence; they do not rerun verification.
+
 ### recheck evaluation results
 
 on the linux verification host, use a copy of an evaluation results directory when rerunning these tools: they write verification artifacts and reports into that directory.
