@@ -4,7 +4,7 @@ import json
 import httpx
 
 from openchip.config import ModelConfig
-from openchip.models.adapter import ModelAdapter, write_keys_file, read_keys_file, KEYS_FILE
+from openchip.models.adapter import ModelAdapter, write_keys_file, read_keys_file
 
 
 def _adapter(provider, model, handler, key="k-test"):
@@ -17,7 +17,9 @@ def _adapter(provider, model, handler, key="k-test"):
 def test_openai_body_has_no_vllm_extras():
     seen = {}
     def handler(req):
-        seen["url"] = str(req.url); seen["auth"] = req.headers.get("authorization"); seen["body"] = json.loads(req.content)
+        seen["url"] = str(req.url)
+        seen["auth"] = req.headers.get("authorization")
+        seen["body"] = json.loads(req.content)
         return httpx.Response(200, json={"id": "x", "model": "gpt-5", "choices": [{"message": {"content": '{"a":1}'}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}})
     ad = _adapter("openai", "gpt-5", handler)
     r = ad.chat([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}], json_schema={"type": "object"})
@@ -30,7 +32,8 @@ def test_openai_body_has_no_vllm_extras():
 def test_openrouter_headers_and_schema_fallback():
     calls = []
     def handler(req):
-        body = json.loads(req.content); calls.append(body)
+        body = json.loads(req.content)
+        calls.append(body)
         if "response_format" in body:
             return httpx.Response(400, json={"error": "unsupported"})
         return httpx.Response(200, json={"choices": [{"message": {"content": 'here: {"b": 2}'}, "finish_reason": "stop"}], "usage": {}})
@@ -43,7 +46,9 @@ def test_openrouter_headers_and_schema_fallback():
 def test_anthropic_messages_api_and_forced_tool():
     seen = {}
     def handler(req):
-        seen["url"] = str(req.url); seen["hdr"] = dict(req.headers); seen["body"] = json.loads(req.content)
+        seen["url"] = str(req.url)
+        seen["hdr"] = dict(req.headers)
+        seen["body"] = json.loads(req.content)
         return httpx.Response(200, json={"id": "m", "model": "claude-sonnet-5", "stop_reason": "tool_use",
                                          "content": [{"type": "tool_use", "name": "emit", "input": {"module_name": "x"}}], "usage": {"input_tokens": 5, "output_tokens": 7}})
     ad = _adapter("anthropic", "claude-sonnet-5", handler, key="sk-ant-test")
@@ -60,5 +65,6 @@ def test_keys_file_roundtrip(tmp_path, monkeypatch):
     assert read_keys_file() == {"OPENROUTER_API_KEY": "or-1"}
     cfg = ModelConfig(provider="openrouter", model="m")
     from openchip.models.adapter import resolve_api_key
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False); monkeypatch.delenv("OPENCHIP_MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCHIP_MODEL_API_KEY", raising=False)
     assert resolve_api_key(cfg) == "or-1"

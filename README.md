@@ -156,6 +156,7 @@ rescoring checks saved rtl against the suite reference without new model calls. 
 - `src/openchip/runtime/` coordinates generation, repair, and project state.
 - `src/openchip/tools/` and `src/openchip/verification/` run hardware tools and evaluate their results.
 - `src/openchip/reporting/` records evidence; `src/openchip/ui/` serves the browser interface.
+- `src/openchip/evals/` runs evaluations and summarizes or rechecks recorded results.
 
 browse [examples](examples/) for sample requests and projects, and [configs](configs/) for configuration files.
 
