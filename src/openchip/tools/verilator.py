@@ -11,7 +11,7 @@ MSG_RE = re.compile(r"^%(?P<kind>Error|Warning)(?:-(?P<code>[A-Z0-9_]+))?:\s*(?P
 
 def lint(sources: list[str], top: str, cwd: str | Path, exe: str = "verilator", timeout_s: float = 300.0,
          extra_args: list[str] | None = None) -> ToolResult:
-    argv = [exe, "--lint-only", "-Wall", "-Wno-fatal", "-Wno-DECLFILENAME", "-Wno-UNUSEDPARAM", "-Wno-UNUSEDSIGNAL",
+    argv = [exe, "--lint-only", "-Wall", "-Wno-fatal", "-Werror-MULTIDRIVEN", "-Wno-DECLFILENAME", "-Wno-UNUSEDPARAM", "-Wno-UNUSEDSIGNAL",
             "--top-module", top, *(extra_args or []), *sources]
     r = run_tool("verilator", argv, cwd, timeout_s, version=tool_version(exe), inputs=sources)
     r.extra["diagnostics"] = parse_diagnostics(r.stderr + "\n" + r.stdout)

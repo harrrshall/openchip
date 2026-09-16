@@ -15,6 +15,20 @@ VALUE_FUNCTIONS = {'clog2', 'bits', 'signed', 'unsigned', 'size', 'left', 'right
 IGNORED = re.compile(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*', re.S)
 
 
+def _driver_check_suppressed(source: str) -> bool:
+    # Only inspect comments, not quoted strings. Keep the submitted RTL intact;
+    # a model cannot opt its own output out of a required structural check.
+    for token in IGNORED.finditer(source):
+        comment = token[0]
+        if not comment.startswith(('//', '/*')):
+            continue
+        body = comment[2:-2] if comment.startswith('/*') else comment[2:]
+        directive = re.match(r'\s*verilator\s+lint_off(?:\s+([A-Za-z_][A-Za-z_0-9]*))?', body)
+        if directive and directive[1] in {None, 'MULTIDRIVEN', 'ALL'}:
+            return True
+    return False
+
+
 def check_rtl(path: Path, work: Path, exe: str, timeout_s: float) -> tuple[list[dict], dict]:
     expanded = work.resolve() / 'expanded_rtl.v'
     result = run_tool('iverilog-preprocess', [exe, '-g2012', '-E', '-o', str(expanded), str(path.resolve())],
@@ -22,9 +36,12 @@ def check_rtl(path: Path, work: Path, exe: str, timeout_s: float) -> tuple[list[
     evidence = result.to_dict()
     if not result.ok or not expanded.is_file():
         return [{'message': 'RTL preprocessing failed: ' + (result.error or result.tail())}], evidence
-    text = IGNORED.sub(' ', expanded.read_text())
+    expanded_text = expanded.read_text()
+    text = IGNORED.sub(' ', expanded_text)
     forbidden = sorted(set(re.findall(r'\$([A-Za-z_][A-Za-z_0-9]*)', text)) - VALUE_FUNCTIONS)
     findings = []
+    if _driver_check_suppressed(path.read_text()) or _driver_check_suppressed(expanded_text):
+        findings.append({'message': 'Generated RTL cannot disable the MULTIDRIVEN structural lint check. Remove the suppression and give each output bit a single driver.'})
     if forbidden:
         findings.append({'message': 'Generated RTL cannot use simulation/system tasks: ' + ', '.join('$'+x for x in forbidden)})
     if re.search(r'\b(initial|force|release|bind)\b', text):
