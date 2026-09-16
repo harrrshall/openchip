@@ -31,9 +31,39 @@ def write_vectors(vec: dict, contract: Contract, path_in: Path, path_out: Path) 
             f.write(f"{word:x}\n")
 
 
+def _with_private_signals(contract: Contract, n_cycles: int, max_report: int, generate) -> str:
+    """DUT port names must not collide with testbench variables or tasks."""
+    prefix = "__oc_signal_"
+    names = [p.name for p in contract.ports] + [p.name for p in contract.parameters]
+    while any(name.startswith(prefix) for name in names):
+        prefix = "_" + prefix
+    aliases = {p.name: f"{prefix}{i}" for i, p in enumerate(contract.ports)}
+    private = contract.model_copy(deep=True)
+    for port in private.ports:
+        port.name = aliases[port.name]
+    if private.clock_reset:
+        private.clock_reset.clock = aliases[private.clock_reset.clock]
+        private.clock_reset.reset = aliases[private.clock_reset.reset]
+    text = generate(private, n_cycles, max_report)
+    for original, alias in aliases.items():
+        # DUT connections and user-facing diagnostics retain the actual names.
+        text = text.replace(f".{alias}(", f".{original}(")
+        text = text.replace(f"port={alias} ", f"port={original} ")
+        text = text.replace(f"{alias}=%0h", f"{original}=%0h")
+    return text
+
+
 def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
+    return _with_private_signals(contract, n_cycles, max_report, _generate_testbench)
+
+
+def generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
+    return _with_private_signals(contract, n_cycles, max_report, _generate_comb_testbench)
+
+
+def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
     if contract.clock_reset is None:
-        return generate_comb_testbench(contract, n_cycles, max_report)
+        return _generate_comb_testbench(contract, n_cycles, max_report)
     cr = contract.clock_reset
     din = contract.data_inputs()
     outs = contract.outputs()
@@ -113,7 +143,7 @@ def generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20) 
     return "\n".join(L) + "\n"
 
 
-def generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
+def _generate_comb_testbench(contract: Contract, n_cycles: int, max_report: int = 20) -> str:
     """Combinational DUT: apply each vector, settle, compare."""
     din = contract.data_inputs()
     outs = contract.outputs()

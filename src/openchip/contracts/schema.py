@@ -137,6 +137,8 @@ class Contract(BaseModel):
             raise ValueError("a parameter and a port share a name")
         cr = self.clock_reset
         if cr is not None:
+            if cr.clock == cr.reset:
+                raise ValueError("clock and reset must be distinct input ports; a missing reset must not be replaced with the clock")
             if cr.clock not in names:
                 raise ValueError(f"clock port {cr.clock!r} is not declared")
             if cr.reset not in names:
