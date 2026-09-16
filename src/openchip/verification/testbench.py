@@ -43,7 +43,8 @@ def _with_private_signals(contract: Contract, n_cycles: int, max_report: int, ge
         port.name = aliases[port.name]
     if private.clock_reset:
         private.clock_reset.clock = aliases[private.clock_reset.clock]
-        private.clock_reset.reset = aliases[private.clock_reset.reset]
+        if private.clock_reset.reset is not None:
+            private.clock_reset.reset = aliases[private.clock_reset.reset]
     text = generate(private, n_cycles, max_report)
     for original, alias in aliases.items():
         # DUT connections and user-facing diagnostics retain the actual names.
@@ -78,7 +79,8 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     L.append("`timescale 1ns/1ps")
     L.append(f"module tb_{contract.module_name};")
     L.append(f"  reg {cr.clock} = {initial_clock};")
-    L.append(f"  reg {cr.reset} = {rst_on};")
+    if cr.reset is not None:
+        L.append(f"  reg {cr.reset} = {rst_on};")
     for p in din:
         L.append(f"  reg [{p.width - 1}:0] {p.name};  // starts X; driven at the first inactive edge so always @* blocks get an event")
     for p in outs:
@@ -91,7 +93,10 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     pstr = ""
     if params:
         pstr = " #(" + ", ".join(f".{k}({v})" for k, v in params.items()) + ")"
-    conns = [f".{cr.clock}({cr.clock})", f".{cr.reset}({cr.reset})"] + [f".{p.name}({p.name})" for p in din + outs]
+    conns = [f".{cr.clock}({cr.clock})"]
+    if cr.reset is not None:
+        conns.append(f".{cr.reset}({cr.reset})")
+    conns += [f".{p.name}({p.name})" for p in din + outs]
     L.append(f"  {contract.module_name}{pstr} dut (" + ", ".join(conns) + ");")
     L.append(f"  always #5 {cr.clock} = ~{cr.clock};")
     # unpack inputs
@@ -105,14 +110,16 @@ def _generate_testbench(contract: Contract, n_cycles: int, max_report: int = 20)
     L.append('    if (!$value$plusargs("vexp=%s", vexp_file)) vexp_file = "vectors_exp.hex";')
     L.append("    $readmemh(vin_file, in_vec);")
     L.append("    $readmemh(vexp_file, exp_vec);")
-    L.append(f"    {cr.reset} = {rst_on};")
+    if cr.reset is not None:
+        L.append(f"    {cr.reset} = {rst_on};")
     L.append(f"    @({inactive_edge} {cr.clock});")
     if din:
         L.append("    {" + ", ".join(p.name for p in din) + "} = 0;")
     L.append(f"    repeat ({RESET_CYCLES}) @({cr.clock_edge} {cr.clock});")
     L.append(f"    for (i = 0; i < {n_cycles}; i = i + 1) begin")
     L.append(f"      @({inactive_edge} {cr.clock});")
-    L.append(f"      {cr.reset} = {rst_off};")
+    if cr.reset is not None:
+        L.append(f"      {cr.reset} = {rst_off};")
     L.append("      drive(i);")
     L.append("      #1;")
     L.append("      got = {" + ", ".join(p.name for p in outs) + "};")

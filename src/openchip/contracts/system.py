@@ -93,6 +93,7 @@ class SystemContract(BaseModel):
             definitions[name] = m.digest
             cr, top_cr = m.contract.clock_reset, self.top.clock_reset
             if cr and (not top_cr or cr.clock_edge != top_cr.clock_edge
+                       or (cr.reset is None) != (top_cr.reset is None)
                        or cr.reset_active != top_cr.reset_active or cr.reset_kind != top_cr.reset_kind):
                 raise ValueError(f"{m.name}: clock/reset semantics do not match the top")
         drivers = {}
@@ -126,6 +127,8 @@ class SystemContract(BaseModel):
             cr = m.contract.clock_reset
             if cr:
                 for leaf_port, top_port in ((cr.clock, self.top.clock_reset.clock), (cr.reset, self.top.clock_reset.reset)):
+                    if leaf_port is None:
+                        continue
                     if drivers[(m.name, leaf_port)] != ("TOP", top_port):
                         raise ValueError(f"{m.name}.{leaf_port}: must connect directly to shared top clock/reset")
         # Conservatively assume every combinational leaf output depends on every

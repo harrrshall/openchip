@@ -33,18 +33,22 @@ def generate_formal_top(contract: Contract) -> str:
         L.append(f"  input [{p.width - 1}:0] {p.name},")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
-    L.append(f"  reg {cr.reset};")
     # Reset is held for the first two cycles: the formal initial state is unconstrained, the first edge
     # establishes the reset state and the second is a stable reset cycle. Clocked immediate assertions
     # sample the values just before the edge (i.e. the previous step), so BMC skips steps 0-1 (`skip 2`).
-    L.append("  reg [1:0] init = 2'b11;")
-    L.append(f"  always @({cr.clock_edge} {cr.clock}) init <= {{init[0], 1'b0}};")
-    L.append(f"  always @* {cr.reset} = init[1] ? {rst_on} : ~{rst_on};")
+    if cr.reset is not None:
+        L.append(f"  reg {cr.reset};")
+        L.append("  reg [1:0] init = 2'b11;")
+        L.append(f"  always @({cr.clock_edge} {cr.clock}) init <= {{init[0], 1'b0}};")
+        L.append(f"  always @* {cr.reset} = init[1] ? {rst_on} : ~{rst_on};")
     for p in outs:
         L.append(f"  wire [{p.width - 1}:0] {p.name};")
     params = contract.param_defaults()
     pstr = (" #(" + ", ".join(f".{k}({v})" for k, v in params.items()) + ")") if params else ""
-    conns = ", ".join([f".{cr.clock}({cr.clock})", f".{cr.reset}({cr.reset})"] + [f".{p.name}({p.name})" for p in din + outs])
+    controls = [f".{cr.clock}({cr.clock})"]
+    if cr.reset is not None:
+        controls.append(f".{cr.reset}({cr.reset})")
+    conns = ", ".join(controls + [f".{p.name}({p.name})" for p in din + outs])
     L.append(f"  {contract.module_name}{pstr} dut ({conns});")
     L.append(f"  {checker_name(contract)}{pstr} chk ({conns});")
     L.append("endmodule")
@@ -54,7 +58,9 @@ def generate_formal_top(contract: Contract) -> str:
 def checker_skeleton(contract: Contract) -> str:
     """Port list the model must use for the checker module."""
     cr = contract.clock_reset
-    ports = [f"input {cr.clock}", f"input {cr.reset}"]
+    ports = [f"input {cr.clock}"]
+    if cr.reset is not None:
+        ports.append(f"input {cr.reset}")
     for p in contract.data_inputs() + contract.outputs():
         ports.append(f"input [{p.width - 1}:0] {p.name}")
     params = contract.parameters

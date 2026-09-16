@@ -64,7 +64,7 @@ class Parameter(BaseModel):
 class ClockReset(BaseModel):
     clock: str = "clk"
     clock_edge: Literal["posedge", "negedge"] = "posedge"
-    reset: str = "rst"
+    reset: Optional[str] = "rst"
     reset_active: Literal["high", "low"] = "high"
     reset_kind: Literal["synchronous", "asynchronous"] = "synchronous"
     reset_description: str = "All state returns to its documented initial value."
@@ -141,7 +141,7 @@ class Contract(BaseModel):
                 raise ValueError("clock and reset must be distinct input ports; a missing reset must not be replaced with the clock")
             if cr.clock not in names:
                 raise ValueError(f"clock port {cr.clock!r} is not declared")
-            if cr.reset not in names:
+            if cr.reset is not None and cr.reset not in names:
                 raise ValueError(f"reset port {cr.reset!r} is not declared")
             for p in self.ports:
                 if p.name == cr.clock and (p.direction != Direction.input or p.width != 1):
@@ -221,6 +221,9 @@ class Contract(BaseModel):
         out += ["## Clock and reset", ""]
         if cr is None:
             out += ["- Purely combinational: no clock, no reset, no internal state.", ""]
+        elif cr.reset is None:
+            out += [f"- Clock `{cr.clock}`, {cr.clock_edge}; no reset port.",
+                    "- Power-up state is not initialized by the harness. Simulation compares after three zero-data conditioning edges; this is not a hardware reset.", ""]
         else:
             out += [f"- Clock `{cr.clock}`, {cr.clock_edge}. Reset `{cr.reset}`, active-{cr.reset_active}, {cr.reset_kind}.", f"- {cr.reset_description}", ""]
         out += [

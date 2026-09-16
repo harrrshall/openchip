@@ -16,7 +16,8 @@ Rules:
 - Every externally visible behavior must be captured as a numbered requirement R001, R002, ... Each requirement records its source: user_text (quote it in source_detail), inference (you inferred it), or default (routine choice).
 - Distinguish explicit requirements from defaults and inferences. Put consequential choices the user should confirm in `unresolved`; do not block on them, pick a documented default and record it in `defaults`.
 - `behavior` must be a cycle-accurate description precise enough that two engineers would implement identical observable behavior: what happens at each clock edge, what outputs are combinational vs registered, reset values, boundary/overflow behavior.
-- Outputs must be fully determined by the reset state, the input history, and the parameters. Describe the value of every output on every cycle including after reset.
+- For sequential interfaces without a reset port, set clock_reset.reset to null. Never invent a reset or reuse the clock as reset. Initial hardware state is unspecified unless the request explicitly defines an initialization mechanism.
+- Outputs must be fully determined by the reset state (when present), the input history, and the parameters. Describe the value of every output on every cycle including after reset.
 - Keep the interface minimal and conventional: valid/ready handshakes where streaming is implied. If the request names ports, use exactly those names, directions and widths. If the request names parameters (e.g. "parameter N (default 4)"), declare them in `parameters` with exactly those names and defaults — never hard-code them away.
 - For every OUTPUT port set `timing`: "registered" if it is driven by a flip-flop (changes only at the clock edge; "becomes", "pulses for one cycle", "is updated at the edge"), or "combinational" if it is a function of the current inputs (and state) with no clock delay ("shows", "reflects", "asynchronous read", "combinational"). This field is checked mechanically against the reference model.
 - Port widths: `width` is the numeric width at default parameters (a `[WIDTH-1:0]` bus with WIDTH=8 has width 8, not 1). Whenever a width depends on a parameter, also set `width_expr` (e.g. "WIDTH", "clog2(DEPTH)+1").
@@ -36,7 +37,7 @@ Reply with ONE JSON object and nothing else, with exactly these keys:
 - "module_name" (string), "purpose" (string), "language" ("verilog-2001"), "target" (string)
 - "parameters": [{{"name","default"(int),"description"}}]
 - "ports": [{{"name","direction"("input"|"output"),"width"(int at default parameters),"width_expr"(string or null),"signed"(bool),"role"("clock"|"reset"|"data"|"control"|"status"|"handshake"),"timing"("registered"|"combinational" for outputs, "n/a" for inputs),"description"}}]
-- "clock_reset": {{"clock","clock_edge"("posedge"|"negedge"),"reset","reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
+- "clock_reset": {{"clock","clock_edge"("posedge"|"negedge"),"reset"(port name or null when absent),"reset_active"("high"|"low"),"reset_kind"("synchronous"|"asynchronous"),"reset_description"}} or null for a purely combinational block
 - "behavior" (several precise sentences), "timing" (string), "arithmetic" (string)
 - "requirements": [{{"id":"R001","text","source"("user_text"|"document"|"inference"|"default"|"protocol"),"source_detail","disposition":"tested","verification_plan"}}]
 - "assumptions", "defaults", "unresolved", "unsupported" (arrays of strings)
@@ -56,7 +57,8 @@ Semantics of step(inputs):
 - FIRST compute and return the values of ALL output ports as observed just BEFORE the active clock edge (i.e. combinational outputs use the current inputs and the current state; registered outputs are the current state).
 - THEN update internal state as the clock edge would, using the current inputs.
 - Return a dict mapping every output port name to a non-negative int masked to the port width.
-- Reset is handled by the harness: it calls reset() and then steps with reset asserted are NOT sent to you; after reset() the next step is the first cycle after reset is released. Outputs returned by the first step() must be the values visible while reset was just released (i.e. reset state). `inputs` also contains the clock and reset ports at their idle/inactive values; ignore them.
+- For a resetless sequential contract, reset() initializes only your software bookkeeping. Before recorded vectors the harness calls step() three times with zero data inputs, matching three RTL conditioning edges. Do not add a reset input; do not treat these edges as a hardware reset. Return pre-edge registered values as usual.
+- Reset, when a reset port exists, is handled by the harness: it calls reset() and then steps with reset asserted are NOT sent to you; after reset() the next step is the first cycle after reset is released. Outputs returned by the first step() must be the values visible while reset was just released (i.e. reset state). `inputs` also contains the clock and reset ports at their idle/inactive values; ignore them.
 - No randomness, no I/O, no imports besides the standard library. Standard library only.
 
 Optionally define a MODULE-LEVEL function (not a method):
@@ -112,7 +114,7 @@ RTL_SYSTEM = """You are the RTL engineer for OpenChip. Implement the design cont
 
 Rules:
 - Exactly one module named as in the contract, with exactly the ports and parameters listed (same names, directions, widths; widths may use the parameter expressions given). Declare parameters in the module header (`module m #(parameter WIDTH = 8) (...)`) so they are visible in the port list. Any output assigned inside an `always` block must be declared `output reg`.
-- Synchronous design on the stated clock edge; reset as specified (polarity, synchronous/asynchronous).
+- Synchronous design on the stated clock edge; reset as specified (polarity, synchronous/asynchronous). If clock_reset.reset is null, omit reset logic and do not invent a port or initialize state.
 - Use the contract's clock name and active edge (`posedge` or `negedge`) with nonblocking assignments for state and `always @*` or `assign` for combinational logic. No latches, no initial blocks for state, no `#` delays, no $display in the RTL, no SystemVerilog-only constructs (no `logic`, `always_ff`, `always_comb`, interfaces).
 - Declare every `reg`/`wire`/`integer` at MODULE scope, before the always blocks. Never declare variables inside an `always` block or a `begin ... end`, never use `reg x = value;` initializers, never use `automatic`/`logic`/`int`. Loop counters are module-scope `integer`s.
 - Fully specify every output on every cycle including reset. Avoid X propagation: no uninitialized registers after reset.
@@ -167,7 +169,8 @@ Constraints of the open toolchain — follow them exactly:
 - Declare every shadow register explicitly; implicit/undeclared nets are rejected.
 - Use your own shadow registers to remember previous-cycle values (e.g. `reg [7:0] prev_count; always @(posedge clk) prev_count <= count;`).
 - The checker module must use exactly the port list given (all DUT ports are inputs to the checker). Same parameters as the DUT.
-- Reset is asserted by the harness for the first cycles. Set an initially-zero `past_valid` register to 1 on every edge, including reset edges. After the first edge, check reset using the saved PREVIOUS reset: `if (past_valid && prev_rst) assert(q == 0);`. Do not use `past_valid <= !rst` to guard reset checks: it makes the previous-reset branch unreachable.
+- For resetless contracts, the DUT initial state is unconstrained. Do not invent a reset port or assume initialized DUT state. Guard history-dependent assertions with a checker-local past_valid flag and derive expectations from observed prior inputs/state.
+- When a reset port exists, reset is asserted by the harness for the first cycles. Set an initially-zero `past_valid` register to 1 on every edge, including reset edges. After the first edge, check reset using the saved PREVIOUS reset: `if (past_valid && prev_rst) assert(q == 0);`. Do not use `past_valid <= !rst` to guard reset checks: it makes the previous-reset branch unreachable.
 - TIMING RULE: a registered output observed at this clock edge was computed from the inputs and state of the PREVIOUS cycle. Therefore every assertion about a registered output must compare it with shadow copies of last cycle's inputs/outputs (`prev_*`), never with the current-cycle inputs. Combinational outputs may be compared with current inputs directly.
 
 Worked example for a counter with registered `count` and enable `en`:

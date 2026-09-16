@@ -177,6 +177,8 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "request_table_repair": ck.get("table_repair"),
         "request_table_check": ck.get("request_table_check"),
         "clock_check": ck.get("clock_check"),
+        "resetless_startup": ({"zero_data_conditioning_edges": 3, "power_up_state_verified": False}
+                              if contract and contract.clock_reset and contract.clock_reset.reset is None else None),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
@@ -190,6 +192,9 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
 
     # ---- markdown --------------------------------------------------------------------------
     md = [f"# OpenChip delivery report — run `{run_id}`", "", f"**Outcome:** {status_line}", ""]
+    if outcome["resetless_startup"]:
+        md += ["**Startup scope:** no reset port. Simulation checks outputs after three zero-data conditioning edges. "
+               "DUT state is not initialized by the harness; X/Z remains a failure. Power-up state is not verified.", ""]
     if ck.get("table_repair"):
         retained = Path(ck["table_repair"]["retained"])
         retained_label = str(retained.relative_to(ws.root)) if retained.is_relative_to(ws.root) else str(retained)

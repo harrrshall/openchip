@@ -48,6 +48,15 @@ def coerce_contract(data: dict[str, Any], request: str = "", *, enforce_module_n
             cr["reset_kind"] = "synchronous"
         if str(cr.get("reset_kind", "")).lower().startswith("async"):
             cr["reset_kind"] = "asynchronous"
+        reset = cr.get("reset", "rst")
+        declared = {p.get("name") for p in d.get("ports", []) if isinstance(p, dict)}
+        if isinstance(reset, str) and reset.lower().strip() in {"", "none", "null", "no reset"} and reset not in declared:
+            cr["reset"] = None
+            notes.append("explicit absence of a reset normalized to null")
+        if cr.get("reset", "rst") is None:
+            # These fields have no physical meaning without a reset port.
+            cr["reset_active"] = "high"
+            cr["reset_kind"] = "synchronous"
         d["clock_reset"] = cr
     # ports
     ports = []

@@ -46,6 +46,14 @@ def main() -> int:
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         ref = mod.Reference(params)
         ref.reset()
+        if cr and cr.get("reset") is None:
+            # Match testbench.RESET_CYCLES zero-data edges; no DUT reset or
+            # initialized state is assumed. X/Z in the RTL is still a failure.
+            conditioning = {p["name"]: 0 for p in data_in}
+            conditioning[cr["clock"]] = 0
+            for _ in range(3):
+                ref.step(dict(conditioning))
+            result["startup"] = {"reset": False, "zero_data_conditioning_edges": 3}
         stim = getattr(mod, "stimulus", None)
         if stim is None and callable(getattr(ref, "stimulus", None)):
             stim = ref.stimulus
@@ -67,7 +75,8 @@ def main() -> int:
                 clean[p["name"]] = v & ((1 << p["width"]) - 1)
             step_in = dict(clean)
             if cr:
-                step_in[cr["reset"]] = rst_inactive
+                if cr.get("reset") is not None:
+                    step_in[cr["reset"]] = rst_inactive
                 step_in[cr["clock"]] = 0
             o = ref.step(step_in)
             if not isinstance(o, dict):

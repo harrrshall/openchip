@@ -70,7 +70,7 @@ class VerificationResult:
             parts.append("IVERILOG COMPILE:\n" + _fmt_diags(self.compile))
         for s in self.sims:
             if s["status"] == "fail":
-                lines = [f"SIMULATION seed={s['seed']}: {s['mismatches']} mismatching cycles out of {s['cycles']}. First mismatches (cycle numbers count from the first cycle after reset release; expected = reference model; got=x/X/z means the RTL output is undefined — an uninitialized register, missing reset assignment, or unassigned wire):"]
+                lines = [f"SIMULATION seed={s['seed']}: {s['mismatches']} mismatching cycles out of {s['cycles']}. First mismatches (cycle numbers count from the first recorded comparison after the startup sequence; expected = reference model; got=x/X/z means the RTL output is undefined — an uninitialized register, missing reset assignment, or unassigned wire):"]
                 if s.get("sampling"):
                     lines.append(s["sampling"])
                 first = next(iter(s["first_mismatches"]), {})
@@ -246,6 +246,8 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
                        "Sampling: outputs are compared BEFORE the active clock edge, after current inputs settle. "
                        "State reflects preceding cycles' inputs; current inputs affect the upcoming edge. "
                        "Combinational outputs may respond immediately to current inputs.")
+        if contract.clock_reset and contract.clock_reset.reset is None:
+            sr.sampling += " No reset: comparison begins after three zero-data conditioning edges; DUT startup state is not initialized and X/Z still fails."
         res.sims.append(asdict(sr))
         (work / f"sim_{seed}.log").write_text(sim.stdout + sim.stderr)
         if sr.status != "pass":
