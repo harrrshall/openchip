@@ -12,7 +12,7 @@ request → contract (JSON, versioned, requirement provenance)
         → reference model (Python, derived and reviewed without candidate RTL)
         → property checker (Verilog immediate assertions, optional)
         → RTL (Verilog-2001)
-        → lint · sim vs reference (3 seeds × 400 cycles) · generic synth · BMC
+        → lint · sim vs reference (3 seeds × 20000 cycles) · generic synth · BMC
         → repair loop (bounded, every attempt kept) with independent reference cross-check
         → report.md + outcome.json (requirement-to-evidence index, hashes, tool/model manifest)
 ```
@@ -134,10 +134,11 @@ Configuration: `configs/default.toml` (model endpoint, budgets, verification lay
 A measured serially programmed timer, with a full-transaction bench and recovery
 provenance, is available in [`examples/serial_timer`](examples/serial_timer/).
 
-Simulation defaults to 400 cycles per seed. Choose a longer horizon for timers,
-long packets or multi-step transactions: set `sim_cycles = 20000` under
-`[verification]` in your build configuration, or run
-`openchip verify --project ws/timer --cycles 20000` on an existing design.
+New configurations default to 20000 simulation cycles per seed. Explicit
+`[verification] sim_cycles` settings and saved-run configurations retain their
+chosen values. Longer timers or transactions can require a larger window; set
+`sim_cycles` in your build configuration or use `openchip verify --cycles` with
+the desired count on an existing project.
 This command preserves the original report and writes separate verification
 evidence. Recorded simulation failures for the same RTL, reference and
 contract identity continue to withhold sign-off, even when a shorter recheck

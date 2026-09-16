@@ -64,7 +64,7 @@ class ReviewConfig(BaseModel):
 
 class VerificationConfig(BaseModel):
     review_counterexamples: bool = False  # experimental independent checker review; preserve CE unless recheck passes
-    sim_cycles: int = 400
+    sim_cycles: int = 20000
     seeds: list[int] = Field(default_factory=lambda: [1, 2, 3])
     require_lint: bool = True
     require_synth: bool = True

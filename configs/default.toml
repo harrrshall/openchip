@@ -35,7 +35,7 @@ max_model_calls = 40
 max_total_tokens = 2000000
 
 [verification]
-sim_cycles = 400
+sim_cycles = 20000
 seeds = [1, 2, 3]
 require_lint = true
 require_synth = true
