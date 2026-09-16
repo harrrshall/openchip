@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..contracts.schema import Contract
-from ..contracts.tables import RequestTable, TableVar, parse_request_tables
+from ..contracts.tables import RequestTable, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
@@ -66,13 +66,9 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
         if (v.port, bit) in covered:
             return None
         covered.add((v.port, bit))
-    # every input bit the reference can see must be pinned by the table
-    for p in contract.ports:
-        if p.direction != "input":
-            continue
-        for b in range(p.lsb, p.lsb + p.width):
-            if (p.name, b) not in covered:
-                return None
+    # Bounds and uniqueness above ensure these are distinct, valid input bits.
+    if len(covered) != sum(p.width for p in contract.inputs()):
+        return None
     rows: list[tuple[dict[str, int], int]] = []
     for values, expected in table.rows:
         vec: dict[str, int] = {p.name: 0 for p in contract.ports if p.direction == "input"}
@@ -81,10 +77,6 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
         rows.append((vec, expected))
     return BoundTable(table=table, output_port=table.output.port, rows=rows,
                       input_offsets={p.name: p.lsb for p in contract.inputs()})
-
-
-def _describe(v: TableVar, value: int) -> str:
-    return f"{v.name}={value}"
 
 
 def check_reference_against_request_tables(
@@ -209,11 +201,10 @@ def check_reference_against_request_tables(
                 actual = (actual >> (b.table.output.bit - port.lsb)) & 1
             if actual != int(expected):
                 if len(mismatches) < MAX_REPORTED:
-                    inputs = ", ".join(_describe(v, val) for v, val in zip(b.table.inputs, _row_values(b, vec)))
+                    inputs = ", ".join(f"{v.name}={val}" for v, val in zip(b.table.inputs, _row_values(b, vec)))
                     mismatches.append({"kind": b.table.kind, "output": b.table.output.name, "inputs": inputs,
                                        "request_says": int(expected), "reference_says": actual})
         out["rows"] = checked
-    out["rows"] = checked
     out["mismatches"] = mismatches
     out["status"] = "mismatch" if mismatches else "ok"
     if mismatches:
