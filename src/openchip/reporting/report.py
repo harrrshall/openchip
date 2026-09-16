@@ -86,10 +86,12 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
     clock = ck.get("clock_check") or {}
     if requires_clock_check(ck.get("request", "")) and clock.get("status") != "ok":
         reasons.append("the independent standard-clock check did not pass: " + (clock.get("detail") or "check not completed"))
-    from ..verification.lfsrcheck import requires_lfsr_check
+    from ..verification.lfsrcheck import requires_lfsr_check, lfsr_contract_matches
     lfsr = ck.get("lfsr_check") or {}
     if requires_lfsr_check(ck.get("request", "")) and lfsr.get("status") != "ok":
         reasons.append("the independent LFSR check did not pass: " + (lfsr.get("detail") or "check not completed"))
+    if contract is not None and lfsr_contract_matches(contract, ck.get("request", "")) is False:
+        reasons.append("the generated LFSR contract has not been reconciled with the request-derived specification; create a new build from the original request to derive a consistent contract")
     if ((evidence or {}).get("formal") or {}).get("status") == "counterexample":
         reasons.append("formal checking found a counterexample; the RTL or property checker requires review")
     return "; ".join(reasons)
@@ -183,6 +185,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "clock_check": ck.get("clock_check"),
         "lfsr_check": ck.get("lfsr_check"),
         "properties_origin": ck.get("properties_origin", "model-generated"),
+        "contract_origin": ck.get("contract_origin", "model-generated"),
         "resetless_startup": ({"zero_data_conditioning_edges": 3, "power_up_state_verified": False}
                               if contract and contract.clock_reset and contract.clock_reset.reset is None else None),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,

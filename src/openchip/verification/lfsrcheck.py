@@ -88,6 +88,45 @@ def _compatible(contract: Contract, binding: dict) -> bool:
             {"clk": ("input", 1), "reset": ("input", 1), binding["output"]: ("output", binding["width"])})
 
 
+def lfsr_contract(request: str) -> Contract | None:
+    """Compile only the complete supported initial request, without extra prose."""
+    request = request.strip()
+    b = _binding(request)
+    if b is None:
+        return None
+    from ..contracts.coerce import requested_module_name
+    module = requested_module_name(request)
+    if module is None:
+        return None
+    width, output = b["width"], b["output"]
+    reset = f"On each positive edge of clk with reset=1, {output} becomes {width}'h{b['seed']:x}."
+    transition = (f"On each positive edge with reset=0, the next value is "
+                  f"({output} >> 1) XOR ({output}[0] ? {width}'h{b['xor_mask']:x} : {width}'h0), using the old value of {output}.")
+    hold = f"The {width}-bit unsigned output {output} is registered and holds its value between positive clock edges."
+    return Contract(module_name=module, purpose=f"{width}-bit right-shifting XOR Galois LFSR.",
+                    ports=[{"name": "clk", "direction": "input", "width": 1, "role": "clock", "timing": "n/a", "description": "Positive-edge clock."},
+                           {"name": "reset", "direction": "input", "width": 1, "role": "reset", "timing": "n/a", "description": "Active-high synchronous reset."},
+                           {"name": output, "direction": "output", "width": width, "role": "data", "timing": "registered", "description": "LFSR state."}],
+                    clock_reset={"clock": "clk", "clock_edge": "posedge", "reset": "reset", "reset_active": "high",
+                                 "reset_kind": "synchronous", "reset_description": reset},
+                    behavior=" ".join((reset, transition, hold)), timing=hold,
+                    arithmetic=f"Unsigned {width}-bit logical right shift and bitwise XOR; one-based taps {b['tap_positions']} map to bit indices {[p-1 for p in b['tap_positions']]}.",
+                    requirements=[{"id": f"R{i:03d}", "text": text, "source": "user_text", "source_detail": request}
+                                  for i, text in enumerate((reset, transition, hold), 1)])
+
+
+def lfsr_contract_matches(contract: Contract, request: str) -> bool | None:
+    canonical = lfsr_contract(request)
+    if canonical is None:
+        return None
+    ignore = {"version", "parent_version", "revision_reason", "revision_authority"}
+    actual, expected = contract.model_dump(exclude=ignore), canonical.model_dump(exclude=ignore)
+    for data in (actual, expected):
+        for requirement in data["requirements"]:
+            requirement["source_detail"] = " ".join(requirement["source_detail"].split())
+    return actual == expected
+
+
 def lfsr_properties(contract: Contract, request: str) -> str | None:
     """Complete one-step registered-output properties from the supported request."""
     b, incomplete = _scope(request)

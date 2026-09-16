@@ -27,7 +27,7 @@ from ..models.adapter import ModelAdapter, extract_code, extract_json
 from ..reporting.report import write_report
 from ..verification.formal import checker_skeleton, parse_check, run_formal
 from ..verification.clockcheck import check_clock
-from ..verification.lfsrcheck import check_lfsr, lfsr_properties, VERSION as LFSR_CHECK_VERSION
+from ..verification.lfsrcheck import check_lfsr, lfsr_properties, lfsr_contract, lfsr_contract_matches, VERSION as LFSR_CHECK_VERSION
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
@@ -293,6 +293,11 @@ class Runner:
     def _step_intake(self, ck: dict) -> dict:
         request = ck["request"]
         docs = self._documents_text()
+        compiled = lfsr_contract(request) if not docs.strip() else None
+        if compiled is not None:
+            self._save_lfsr_contract(ck, compiled, "intake")
+            self.store.checkpoint(self.run_id, "reference", ck)
+            return ck
         tables = self._request_tables_text(request)
         schema = contract_json_schema()
         errors: list[str] = []
@@ -342,6 +347,17 @@ class Runner:
             self.store.checkpoint(self.run_id, "review", ck)
             return ck
         raise RuntimeError("intake failed: could not obtain a valid contract in 3 attempts: " + (errors[-1] if errors else ""))
+
+    def _save_lfsr_contract(self, ck: dict, contract: Contract, stage: str) -> None:
+        spec = self.ws.dir("spec")
+        path = spec / f"contract.v{contract.version}.json"
+        path.write_text(contract.model_dump_json(indent=1))
+        path.with_suffix(".md").write_text(contract.summary_md())
+        self._save("contract", path, stage)
+        ck.update(contract_path=str(path), contract_version=contract.version,
+                  contract_origin="request-derived Galois contract")
+        self.store.event(self.run_id, "request_contract", {"version": contract.version, "parent_version": contract.parent_version})
+        self.log(f"[contract] v{contract.version} derived from the complete explicit LFSR request")
 
     # -- independent spec review ----------------------------------------------------------------
     def _step_review(self, ck: dict) -> dict:
@@ -781,6 +797,17 @@ class Runner:
 
     def _step_verify(self, ck: dict) -> dict:
         contract = self._load_contract(ck)
+        if not self._documents_text().strip() and lfsr_contract_matches(contract, ck.get("request", "")) is False:
+            canonical = lfsr_contract(ck["request"])
+            assert canonical is not None
+            canonical.version = max(int(p.stem.split(".v")[1]) for p in self.ws.dir("spec").glob("contract.v*.json")) + 1
+            canonical.parent_version = contract.version
+            canonical.revision_reason = "Reconcile generated descriptions with the complete request-derived LFSR specification."
+            self._save_lfsr_contract(ck, canonical, "request_reconciliation")
+            contract = canonical
+            for key in ("last_evidence", "final_evidence", "consensus", "consensus_done", "lfsr_check"):
+                ck.pop(key, None)
+            self.store.checkpoint(self.run_id, "verify", ck)
         rp = Path(ck["rtl_path"])
         ref = Path(ck["reference_path"])
         vdir = self.ws.dir("verification")
