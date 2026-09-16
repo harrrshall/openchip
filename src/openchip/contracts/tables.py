@@ -55,7 +55,7 @@ def _names_each_bit_once(table: RequestTable) -> bool:
     return len(keys) == len(set(keys))
 
 
-def parse_request_tables(request: str) -> list[RequestTable]:
+def parse_request_tables(request: str, *, include_external_mux: bool = False) -> list[RequestTable]:
     """Every table in `request` that can be read without guessing. `[]` when none can."""
     lines = request.splitlines()
     out: list[RequestTable] = []
@@ -66,6 +66,8 @@ def parse_request_tables(request: str) -> list[RequestTable]:
             if nxt > i:
                 if table is not None and _names_each_bit_once(table):
                     out.append(table)
+                elif include_external_mux and parse is _parse_kmap:
+                    out.extend(_parse_mux_kmap(lines, i, request))
                 i = nxt
                 break
         else:
@@ -213,7 +215,8 @@ def _cell(token: str) -> int | None:
 
 # -- Karnaugh map --------------------------------------------------------------------------------
 
-def _parse_kmap(lines: list[str], i: int, request: str) -> tuple[RequestTable | None, int]:
+def _parse_kmap(lines: list[str], i: int, request: str,
+                output_override: TableVar | None = None) -> tuple[RequestTable | None, int]:
     """A column-axis line, a row-axis line carrying the column codes, then `| cell |` rows."""
     if not CELL_ROW_RE.match(lines[i]):
         return None, i
@@ -232,7 +235,7 @@ def _parse_kmap(lines: list[str], i: int, request: str) -> tuple[RequestTable | 
         return None, end
     if {v.name for v in col_vars} & {v.name for v in row_vars}:
         return None, end
-    output = _declared_output(request)
+    output = output_override or _declared_output(request)
     if output is None:
         return None, end
     if len(set(col_codes)) != len(col_codes) or any(len(c) != len(col_vars) for c in col_codes):
@@ -268,6 +271,57 @@ def _parse_kmap(lines: list[str], i: int, request: str) -> tuple[RequestTable | 
     source = "\n".join(lines[i - 2:end])
     return RequestTable(kind="kmap", inputs=row_vars + col_vars, output=output,
                         rows=tuple(rows), dont_care=dont_care, source=source), end
+
+
+def _parse_mux_kmap(lines: list[str], i: int, request: str) -> list[RequestTable]:
+    """Project an explicitly wired external mux's K-map onto its data bus.
+
+    Selector concatenation establishes bit significance; explicit connections
+    establish numeric bus indexing. Gray-code display position has no significance.
+    Ambiguous or nonstandard wiring is declined rather than inferred.
+    """
+    outputs = OUTPUT_BULLET_RE.findall(request)
+    if len(outputs) != 1 or not outputs[0][1]:
+        return []
+    output, width_text = outputs[0]
+    width = int(width_text)
+    selectors = re.findall(r"\bmux\s+takes\s+as\s+input\s*\{([^{}]+)\}", request, re.I)
+    if len(selectors) != 1:
+        return []
+    names = [s.strip() for s in selectors[0].split(",")]
+    if not names or len(set(names)) != len(names) or any(not IDENT_RE.fullmatch(s) for s in names):
+        return []
+    if width != 2 ** len(names) or width > 16:
+        return []
+    selector_label = "".join(names)
+    connections = re.findall(r"\b" + re.escape(selector_label) + r"\s*=\s*([01]+)\s+(?:is\s+)?connected\s+to\s+"
+                             + re.escape(output) + r"\[(\d+)\]", request, re.I)
+    if not connections or any(len(code) != len(names) or int(code, 2) != int(bit)
+                              for code, bit in connections):
+        return []
+    if not {0, 1}.issubset({int(code, 2) for code, _ in connections}):
+        return []
+    declared = re.findall(r"^\s*-\s+input\s+([A-Za-z_]\w*)\s*(?:\(\s*(\d+)\s*bits?\s*\))?\s*$", request, re.M)
+    if not declared or any(w and int(w) != 1 for _, w in declared):
+        return []
+    physical = {n for n, _ in declared}
+    if physical & set(names):
+        return []  # selectors must belong to the external mux, not this module
+    raw, _ = _parse_kmap(lines, i, request, TableVar("__mux_function", "__mux_function", None))
+    if raw is None or any(v.bit is not None for v in raw.inputs):
+        return []
+    by_name = {v.name: j for j, v in enumerate(raw.inputs)}
+    if len(by_name) != len(raw.inputs) or set(by_name) != physical | set(names):
+        return []
+    inputs = tuple(v for v in raw.inputs if v.name in physical)
+    buckets: list[list] = [[] for _ in range(width)]
+    for values, value in raw.rows:
+        index = int("".join(str(values[by_name[n]]) for n in names), 2)
+        buckets[index].append((tuple(values[by_name[v.name]] for v in inputs), value))
+    return [RequestTable(kind="external_mux_kmap", inputs=inputs,
+                         output=TableVar(f"{output}[{bit}]", output, bit), rows=tuple(rows),
+                         dont_care=2 ** len(inputs) - len(rows), source=raw.source)
+            for bit, rows in enumerate(buckets) if rows]
 
 
 def _split_header(tokens: list[str]) -> tuple[list[str], list[str]] | None:

@@ -44,7 +44,9 @@ def bind(table: RequestTable, contract: Contract) -> BoundTable | None:
         return None  # a sequential contract: one row does not determine an output
     ports = {p.name: p for p in contract.ports}
     op = ports.get(table.output.port)
-    if op is None or op.direction != "output" or op.width != 1 or table.output.bit not in (None, 0):
+    if op is None or op.direction != "output":
+        return None
+    if (table.output.bit is None and op.width != 1) or (table.output.bit is not None and not 0 <= table.output.bit < op.width):
         return None
     covered: set[tuple[str, int]] = set()
     for v in table.inputs:
@@ -86,7 +88,7 @@ def check_reference_against_request_tables(
     """Return a verdict dict; `status` is one of not_applicable | ok | mismatch | error."""
     out: dict = {"status": "not_applicable", "tables": 0, "rows": 0, "mismatches": [], "detail": ""}
     try:
-        tables = parse_request_tables(request)
+        tables = parse_request_tables(request, include_external_mux=True)
     except Exception as e:  # noqa: BLE001 — a parser crash must never fail a run
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
         return out
@@ -125,10 +127,12 @@ def check_reference_against_request_tables(
         for (vec, expected), got in zip(b.rows, data["results"]):
             checked += 1
             actual = got.get(b.output_port)
+            if actual is not None and b.table.output.bit is not None:
+                actual = (int(actual) >> b.table.output.bit) & 1
             if actual is None or int(actual) != int(expected):
                 if len(mismatches) < MAX_REPORTED:
                     inputs = ", ".join(_describe(v, val) for v, val in zip(b.table.inputs, _row_values(b, vec)))
-                    mismatches.append({"kind": b.table.kind, "output": b.output_port, "inputs": inputs,
+                    mismatches.append({"kind": b.table.kind, "output": b.table.output.name, "inputs": inputs,
                                        "request_says": int(expected), "reference_says": actual})
     out["rows"] = checked
     out["mismatches"] = mismatches
