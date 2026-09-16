@@ -96,6 +96,8 @@ in the browser interface choose provider `openai`, enter the same base url, mode
 4. a bounded repair loop uses tool failures to revise the design and rerun verification.
 5. the project retains source files, logs, `report.md`, and `outcome.json` so you can inspect each result.
 
+the browser report preview supports headings, tables, bullet lists, fenced code, inline code and bold text. raw html is displayed as text. the project retains the original markdown report for download and further inspection.
+
 a passing result is limited to the recorded contract, checks, and bounds. openchip is experimental; general production readiness is still being evaluated. review the contract and evidence before using a design. timing closure and silicon validation remain outside this workflow.
 
 ## cloud demo helpers
