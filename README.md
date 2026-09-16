@@ -18,7 +18,14 @@ request → contract (JSON, versioned, requirement provenance)
 ```
 Each reference is reviewed against the request and contract in its own context, without the candidate RTL or another generated reference. Drafts are retained. Reference disagreement still withholds sign-off; review and model agreement are not proofs.
 
-A generated [UART transmitter example](examples/uart_tx8n1/README.md) includes its request, RTL, independent framing bench, and scoped verification record.
+Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
+[512-cell Rule 110 engine](examples/rule110/README.md), and
+[saturating event counter](examples/event_counter/README.md), and
+[reloadable timer](examples/reloadable_timer/README.md). Each includes actual
+RTL, a separate runnable bench, provenance and the limits of its measurements.
+Complete explicit elementary-cell transition requests are checked against their
+printed rows before generated references enter arbitration; power-up before a
+load is not treated as initialized state.
 
 ## Quick start (bring your own key)
 ```bash
@@ -45,7 +52,15 @@ resolve that counterexample. This does not establish unbounded correctness.
 
 For OpenCode Go chat-completion models, choose **OpenAI**, set the base URL to
 `https://opencode.ai/zen/go/v1`, and enter the Go model ID and key. OpenChip sends
-its own user agent and a session ID. Responses-only models are not supported.
+its own user agent and a session ID. For a Responses-only model, select the
+Responses-compatible provider and use its documented endpoint and model ID.
+
+The report's `thinking_requested` field (and legacy `thinking` alias) describes
+configuration, not verified provider behavior. Effective reasoning is recorded
+as unknown. Automatic retries with thinking disabled apply only to the
+OpenAI-compatible route that sends `enable_thinking`; hosted routes that do not
+send that toggle no longer repeat an identical request on truncation.
+
 
 Network binding requires `OPENCHIP_UI_TOKEN`, a secret of at least 32 characters.
 Keep it in your protected environment file, then run `openchip ui --host 0.0.0.0`.
@@ -75,6 +90,13 @@ checking. Unresolved contract questions also withhold sign-off until clarified;
 artifacts and tool evidence remain available for review. Timeouts and skipped
 checks are never described as formal passes.
 
+Formal checking requires at least one executable assertion in the elaborated
+checker. Comments, disabled generate branches and cover-only modules cannot
+produce a formal pass. This presence check does not establish that assertions
+are sufficient or non-vacuous. A required-formal run with an invalid checker
+withholds acceptance; optional formal reports the error without claiming a pass.
+
+
 Single-clock designs may use a rising or falling active edge. Resetless designs
 can declare `clock_reset.conditioning`: a bounded sequence of complete input
 vectors that physically establishes state before simulation comparisons. The
@@ -83,6 +105,17 @@ DUT registers or ignores unknown outputs. The report records this startup scope;
 power-up behavior is not verified. An empty sequence uses three zero-data edges.
 Dual-edge logic and compositions mixing active clock edges remain unsupported.
 General production readiness is not established.
+
+Width expressions use bounded integer arithmetic; `/` truncates toward zero.
+They accept parameter names, `clog2` of positive integers, and `min`/`max`.
+Strings, floating-point values and excessively large or complex expressions are
+rejected before tool execution. Limits are 4096 expression characters, 256 syntax
+nodes, 64 nesting levels and 4096 bits per intermediate integer.
+
+Imported and generated contracts must explicitly set `clock_reset.reset` to the
+exact reset input name, or `null` for a resetless interface. Omitting it is a
+validation error; OpenChip no longer assumes an undeclared `rst` port.
+
 
 ## Command line
 ```bash
@@ -96,7 +129,7 @@ openchip eval --suite core-v1 --budget 15m        # locked golden suite
 openchip assemble --system system.json --out top.v  # validate connections and generate a new top
 openchip compose --project ws/registered-sum --request examples/registered_sum_request.md --budget 20m
 ```
-Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
+Configuration: `configs/default.toml` (model endpoint, budgets, verification layers); alternative models in `configs/models/` (`--config`). Providers: `openai-compatible` (vLLM or any OpenAI-style server), `openai`, `openai-responses`, `openrouter`, `anthropic` (`OPENCHIP_PROVIDER`). An optional second model (`OPENCHIP_ALT_MODEL`, `OPENCHIP_ALT_BASE_URL`) supplies the cross-family reference used to corroborate acceptance, and an independent spec-review step checks the contract against the request before any code is written. No credentials in the repo.
 
 `assemble` is an initial multi-module capability: supply a top contract, two to
 four named instances with pinned leaf contracts and parameter bindings, and explicit
@@ -129,40 +162,14 @@ delivered RTL independently. This is one development design, not the three-desig
 held-out composition gate or a guarantee for other requests.
 
 ## Repository
-`src/openchip/` product · `tests/` (30 tests; real-tool tests need the EDA toolchain) · `evals/suite/core-v1/` locked tasks + goldens · `evals/results/` recorded runs · `outputs/demo/` delivered example packages (two successes, one useful failure) · `scripts/cloud/` provisioning/serving/eval scripts · `docs/` architecture, decisions, research, operations, product, project (STATUS, ROADMAP, BACKLOG, HANDOFF).
+`src/openchip/` product · `tests/` verification checks · `examples/` runnable
+designs and benches · `evals/suite/` locked acceptance tasks · `evals/results/`
+recorded benchmark summaries · `scripts/cloud/` cloud operations.
 
 ## Limitations (measured, not hypothetical)
-- Single-clock synchronous designs only; no CDC, bus protocols, timing, power, or physical implementation.
+- Combinational and single-clock RTL are the main supported scope. Level-sensitive latches are not currently validated reliably. CDC, timing closure, power and physical implementation are outside the verified scope.
 - Two model-derived artifacts agreeing is evidence, not proof: the timer task shows all three derivations sharing one misreading. Human review of the contract remains part of delivery.
-- Formal layer is bounded (depth 20) and uses immediate assertions only; the model's checkers still contain timing errors, so counterexamples are reported as non-blocking evidence.
-- Public benchmarks (VerilogEval) not yet run; contamination of any public benchmark is unknowable.
+- Formal checking is bounded (default depth 20) and uses immediate assertions. Generated checkers can contain timing or initialization errors; a counterexample withholds sign-off pending review, including when formal checking is optional.
+- Public VerilogEval runs and historical model comparisons have been recorded. Results apply only to their model, source and protocol; training contamination is unknown. General production readiness remains unproven.
 
 License: Apache-2.0 (see `pyproject.toml`); third-party model and tool licenses apply to their artifacts.
-
-A measured [512-cell Rule 110 example](examples/rule110/README.md) includes the
-actual delivered RTL, a separate runnable bench, and evidence limits. Complete
-explicit elementary-cell transition requests are checked against their printed
-rows before generated references enter arbitration; power-up before a load is
-not treated as initialized state.
-
-Width expressions use bounded integer arithmetic; `/` truncates toward zero.
-They accept parameter names, `clog2` of positive integers, and `min`/`max`.
-Strings, floating-point values and excessively large or complex expressions are
-rejected before tool execution. Limits are 4096 expression characters, 256 syntax
-nodes, 64 nesting levels and 4096 bits per intermediate integer.
-
-Imported and generated contracts must explicitly set `clock_reset.reset` to the
-exact reset input name, or `null` for a resetless interface. Omitting it is a
-validation error; OpenChip no longer assumes an undeclared `rst` port.
-
-Formal checking requires at least one executable assertion in the elaborated
-checker. Comments, disabled generate branches and cover-only modules cannot
-produce a formal pass. This presence check does not establish that assertions
-are sufficient or non-vacuous. A required-formal run with an invalid checker
-withholds acceptance; optional formal reports the error without claiming a pass.
-
-The report's `thinking_requested` field (and legacy `thinking` alias) describes
-configuration, not verified provider behavior. Effective reasoning is recorded
-as unknown. Automatic retries with thinking disabled apply only to the
-OpenAI-compatible route that sends `enable_thinking`; hosted routes that do not
-send that toggle no longer repeat an identical request on truncation.

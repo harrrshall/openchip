@@ -188,8 +188,9 @@ Constraints of the open toolchain — follow them exactly:
 - Use your own shadow registers to remember previous-cycle values (e.g. `reg [7:0] prev_count; always @(posedge clk) prev_count <= count;`).
 - The checker module must use exactly the port list given (all DUT ports are inputs to the checker). Same parameters as the DUT.
 - For resetless contracts, the DUT initial state is unconstrained. Do not invent a reset port or assume initialized DUT state. Guard history-dependent assertions with a checker-local past_valid flag and derive expectations from observed prior inputs/state.
+- Distinguish past_valid (a previous observation exists) from state_valid (a hidden state has a known value). One elapsed edge does not make an unknown resetless counter/register equal zero. A reconstructed shadow state becomes valid only after an observed operation that establishes it, such as a complete load or enough shifts to replace every unknown bit. If that operation never occurs, keep shadow-equivalence assertions disabled, while retaining direct properties that follow from observed outputs/inputs. Do not set state_valid unconditionally on the first edge.
 - When a reset port exists, reset is asserted by the harness for the first cycles. Set an initially-zero `past_valid` register to 1 on every edge, including reset edges. After the first edge, check reset using the saved PREVIOUS reset: `if (past_valid && prev_rst) assert(q == 0);`. Do not use `past_valid <= !rst` to guard reset checks: it makes the previous-reset branch unreachable.
-- TIMING RULE: a registered output observed at this clock edge was computed from the inputs and state of the PREVIOUS cycle. Therefore every assertion about a registered output must compare it with shadow copies of last cycle's inputs/outputs (`prev_*`), never with the current-cycle inputs. Combinational outputs may be compared with current inputs directly.
+- TIMING RULE: a registered output observed at this clock edge was computed from the inputs and state of the PREVIOUS cycle. For a DIRECT transition assertion, compare it with saved last-cycle inputs/outputs (`prev_*`), not current controls. A separately reconstructed shadow state is different: update that shadow with CURRENT edge inputs using nonblocking assignments, exactly when the specified hardware updates. Assert equality against its pre-edge value before those updates take effect. Feeding prev_* controls into a shadow-state transition adds an erroneous extra cycle of delay. Combinational outputs depend on current inputs and current state, not on a state's not-yet-applied nonblocking update.
 
 Worked example for a counter with registered `count` and enable `en`:
 ```verilog
@@ -209,6 +210,24 @@ module counter_props (input clk, input rst, input en, input [7:0] count);
 endmodule
 ```
 
+Alternative shadow-state pattern for a resetless loadable register (adapt the
+transition and ports to the actual contract; this example holds when not loaded):
+```verilog
+reg state_valid = 1'b0;
+reg [7:0] expected;
+always @(posedge clk) begin
+  if (state_valid) assert(q == expected);
+  if (load) begin
+    expected <= data;
+    state_valid <= 1'b1;
+  end
+end
+```
+At edge k, a current load updates both the hardware and expected after assertions;
+at edge k+1 their observed values agree. Do not wait for prev_load before updating
+expected or setting state_valid. For a counter shadow, its decrement/increment
+likewise consumes current controls. Keep direct prev_* transition checks separate.
+
 - Keep it to the 4–10 most valuable properties: reset values, register update rules, priorities, handshake/backpressure rules, boundary/saturation behaviour, and 1–2 `cover` statements showing interesting states are reachable.
 - Every assert/assume/cover must be INSIDE an `always @(posedge clk)` block (never at module scope, never in `always @*`).
 - Assertion syntax is exactly `assert(expr);` — NO action blocks (`else $error(...)`), no labels, no `assert property`, no `disable iff`.
@@ -224,6 +243,7 @@ Checker comments are claims to audit, not authoritative tool semantics. In parti
 Reset is a higher-priority transition, not just a way to choose a starting value for an ordinary transition. If the saved reset was active at edge k, the output observed at edge k+1 is the reset value: do not also apply the saved enable, load, or increment from that reset edge. Place reset and normal update assertions in mutually exclusive branches. For an asynchronous reset, account for its current active level too, according to the contract, without assuming away legal input combinations during reset.
 
 Checker bookkeeping (past_valid, history-valid bits and history-length counters) must start in a known invalid state using reg declaration initializers. This does not initialize or constrain DUT state. For resetless hardware, guard only those assertions whose required state has not yet been established by observed legal input history; track per-bit validity when needed. Never assume a DUT power-up value or force conditioning inputs. Update shadow state and its validity from the first observed edge, including edges before history-dependent assertions become valid. Respect reset polarity/priority, enables, hold behavior, combinational outputs and full packed-bit positions. Use only synthesizable immediate assert(...), cover(...) and explicit state; no SVA or $past.
+Audit every assignment that makes shadow state valid. A previous edge existing does not establish a known hidden state: past_valid and state_valid are different facts. A loadable resetless state becomes known on an observed load; until then, an arbitrary checker-local shadow initializer must not be compared with the DUT. Do not set shadow_valid merely because one edge elapsed. Continue updating the shadow on current inputs and assert its equivalence only after a real state-establishing operation; preserve direct observable transition checks that do not need hidden state.
 Do not use assume statements or preprocessor macros; input/reset constraints belong to the harness. Remove redundant checker assumptions rather than replacing or expanding them. Audit interval boundaries: an output starting at edge k and lasting N full periods changes at k+N. An elapsed counter tested against N-1 on later edges starts at 0, not 1; a remaining counter starts at N. Check N=1 and N=2 explicitly."""
 
 
