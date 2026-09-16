@@ -282,6 +282,9 @@ def verify(contract: Contract, rtl_path: Path, reference_py: Path, work: Path, c
             return res
 
     # 6. formal (bounded model checking against the independent property checker)
+    if props_path is not None and props_path.is_file():
+        res.artifacts["properties"] = str(props_path)
+        res.artifacts["properties_sha256"] = sha256_file(props_path)
     formal_note = "; formal not run"
     if props_path is not None and props_path.is_file() and cfg.verification.run_formal and not contract.combinational:
         res.stage = "formal"

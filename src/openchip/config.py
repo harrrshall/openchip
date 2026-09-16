@@ -71,7 +71,7 @@ class VerificationConfig(BaseModel):
     corroborate: bool = True      # acceptance needs agreement with a second independent reference (or 2 of 3)
     run_formal: bool = True       # run SBY BMC; a counterexample always needs review before sign-off
     require_formal: bool = False  # acceptance requires a successful bounded formal check
-    formal_depth: int = 20
+    formal_depth: StrictInt = Field(default=20, ge=3)  # BMC skips initialization steps 0 and 1
     formal_timeout_s: float = 300.0
 
 

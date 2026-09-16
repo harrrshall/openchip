@@ -156,6 +156,15 @@ Configuration: `configs/default.toml` (model endpoint, budgets, verification lay
 A measured serially programmed timer, with a full-transaction bench and recovery
 provenance, is available in [`examples/serial_timer`](examples/serial_timer/).
 
+Formal depth must be an integer of at least 3 because initialization skips the
+first two steps. The default remains 20. This minimum prevents an empty check;
+it does not establish sufficient coverage or assertion non-vacuity.
+
+CLI rechecks retain recorded formal counterexamples for unchanged RTL and
+contract. Disabling formal or shortening its bound cannot clear those results.
+A corrected checker must pass at least the recorded depth before the old
+counterexample is resolved. Historical receipts remain unchanged.
+
 New configurations default to 20000 simulation cycles per seed. Explicit
 `[verification] sim_cycles` settings and saved-run configurations retain their
 chosen values. Longer timers or transactions can require a larger window; set

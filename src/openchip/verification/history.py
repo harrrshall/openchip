@@ -46,3 +46,50 @@ def prior_simulation_failures(workspace: Path, artifacts: dict) -> list[dict]:
                              "simulations": [{key: sim.get(key) for key in ("seed", "cycles", "mismatches")}
                                              for sim in failed]})
     return failures
+
+
+def prior_formal_failures(workspace: Path, artifacts: dict, formal: dict | None) -> list[dict]:
+    """Retain counterexamples until RTL/contract or a verified checker changes.
+
+    A disabled/missing checker or a smaller bound cannot resolve a recorded
+    contradiction. A corrected checker must pass at least the recorded depth.
+    This records evidence continuity, not proof that a changed checker is sound.
+    """
+    root = workspace.resolve()
+    keys = ("rtl_sha256", "contract_digest")
+    identity = {key: artifacts.get(key) for key in keys}
+    if not all(isinstance(value, str) and value for value in identity.values()):
+        return []
+    current = {**(formal or {}).get("extra", {}), **(formal or {})}
+    failures = []
+    for path in sorted((root / "verification").rglob("evidence.json")):
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            continue
+        try:
+            raw = path.read_bytes()
+            previous = json.loads(raw)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(previous, dict) or not isinstance(previous.get("artifacts"), dict):
+            continue
+        if any(previous["artifacts"].get(key) != value for key, value in identity.items()):
+            continue
+        old_formal = previous.get("formal")
+        if not isinstance(old_formal, dict):
+            continue
+        old = {**old_formal.get("extra", {}), **old_formal}
+        if not isinstance(old, dict) or old.get("status") != "counterexample":
+            continue
+        old_hash = previous["artifacts"].get("properties_sha256")
+        new_hash = artifacts.get("properties_sha256")
+        changed = bool(old_hash and new_hash and old_hash != new_hash)
+        old_depth, new_depth = old.get("depth"), current.get("depth")
+        if (changed and (formal or {}).get("ok") is True
+                and current.get("status") == "bounded_pass"
+                and type(old_depth) is int and type(new_depth) is int
+                and new_depth >= old_depth):
+            continue
+        failures.append({"evidence": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                         "depth": old_depth, "properties_sha256": old_hash,
+                         "checker_changed": changed})
+    return failures

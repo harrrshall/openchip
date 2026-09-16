@@ -28,6 +28,8 @@ prep -top {top}
 
 
 def write_sby(work: Path, sources: list[str], top: str, depth: int, solver: str = "yices") -> Path:
+    if type(depth) is not int or depth < 3:
+        raise ValueError("formal depth must be at least 3: initialization skips steps 0 and 1")
     names = [Path(s).name for s in sources]
     cfg = SBY_TEMPLATE.format(depth=depth, solver=solver, files=" ".join(names), top=top, file_list="\n".join(str(Path(s).resolve()) for s in sources))
     p = work / f"{top}.sby"

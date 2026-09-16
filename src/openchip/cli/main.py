@@ -220,7 +220,7 @@ def cmd_verify(args) -> int:
     from ..verification.tablecheck import check_reference_against_request_tables
     from ..verification.clockcheck import check_clock
     from ..verification.lfsrcheck import check_lfsr, lfsr_properties
-    from ..verification.history import prior_simulation_failures
+    from ..verification.history import prior_simulation_failures, prior_formal_failures
     from ..reporting.report import sign_off_withheld
 
     cfg = _cfg(args)
@@ -271,9 +271,16 @@ def cmd_verify(args) -> int:
         reason = ("recorded simulation mismatches remain unresolved for this unchanged RTL, "
                   "reference and contract; a passing recheck does not clear those failing traces")
         withheld = "; ".join(filter(None, (withheld, reason)))
+    formal_failures = prior_formal_failures(ws.root, res.artifacts, res.formal)
+    if formal_failures:
+        reason = ("recorded formal counterexamples remain unresolved for this unchanged RTL "
+                  "and contract; skipping or shortening formal checking does not clear them. "
+                  "Review the RTL/checker; a corrected checker must pass at least the recorded depth")
+        withheld = "; ".join(filter(None, (withheld, reason)))
     accepted = res.accepted and not withheld
     evidence.update(accepted=accepted, sign_off_withheld=withheld,
                     prior_simulation_failures=prior_failures,
+                    prior_formal_failures=formal_failures,
                     request_table_check=ck["request_table_check"], clock_check=ck["clock_check"],
                     lfsr_check=ck["lfsr_check"],
                     properties_origin=properties_origin,

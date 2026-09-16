@@ -126,6 +126,11 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
 
 def run_formal(contract: Contract, rtl_path: Path, props_path: Path, work: Path, sby: str = "sby", depth: int = 20, timeout_s: float = 600.0, yosys: str = "yosys") -> ToolResult:
     work.mkdir(parents=True, exist_ok=True)
+    if type(depth) is not int or depth < 3:
+        r = ToolResult("sby", [sby], str(work), 1, 0.0, "", "",
+                       error="formal depth must be at least 3: initialization skips steps 0 and 1")
+        r.extra.update(status="error", depth=depth)
+        return r
     started = time.monotonic()
     validation = work / "checker-validation"
     validation.mkdir(exist_ok=True)
