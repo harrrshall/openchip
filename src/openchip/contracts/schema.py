@@ -180,7 +180,7 @@ class Contract(BaseModel):
         for p in self.ports:
             if p.width_expr:
                 try:
-                    val = eval_width(p.width_expr, {q.name: q.default for q in self.parameters})
+                    val = eval_width(p.width_expr, self.param_defaults())
                 except Exception as e:  # noqa: BLE001
                     raise ValueError(f"port {p.name}: cannot evaluate width_expr {p.width_expr!r}: {e}")
                 if val != p.width:

@@ -113,16 +113,6 @@ class AssemblyRunner(Runner):
         raise Stalled("integration failed; assembled wiring and leaf RTL are preserved for diagnosis")
 
 
-def _seed_contract(runner: Runner, contract: Contract, request: str, budget: float, review: bool) -> None:
-    runner.start(request, budget_s=budget)
-    path = runner.ws.dir("spec") / f"contract.v{contract.version}.json"
-    path.write_text(contract.model_dump_json(indent=2))
-    runner._save("contract", path, "composition")
-    runner.store.checkpoint(runner.run_id, "review" if review else "reference", {
-        "request": request, "contract_path": str(path), "contract_version": contract.version,
-    })
-
-
 def shared_control_connections(top: Contract, instances: list[Instance],
                                connections: list[Connection]) -> list[Connection]:
     """Complete mandatory shared controls; never replace an explicit driver."""
@@ -258,26 +248,31 @@ def compose(project: Path, request: str, cfg: Config, budget_s: float, log=print
         (project / "system.json").write_text(system.model_dump_json(indent=2))
         # Preserve authoritative user wording alongside the top contract. Never
         # substitute a derived summary or include generated leaf artifacts.
-        top_request = request
         (project / "integration-context.json").write_text(json.dumps({
-            "request": top_request, "contract": system.top.model_dump(mode="json"),
+            "request": request, "contract": system.top.model_dump(mode="json"),
             "source": "original user request and top contract; no generated leaf artifacts supplied",
         }, indent=2))
         ws = Workspace(project / "integration")
-        ws.init(request=top_request)
+        ws.init(request=request)
         assembled = render_top(system) + "\n".join(definitions.values())
         stage = stage_config()
         top_adapter = ModelAdapter(stage.model)
         adapters.append(top_adapter)
         runner = AssemblyRunner(ws, stage, adapter=top_adapter, log=log, assembled=assembled)
-        _seed_contract(runner, system.top, top_request, remaining(), review=False)
+        runner.start(request, budget_s=remaining())
+        contract_path = ws.dir("spec") / f"contract.v{system.top.version}.json"
+        contract_path.write_text(system.top.model_dump_json(indent=2))
+        runner._save("contract", contract_path, "composition")
+        runner.store.checkpoint(runner.run_id, "reference", {
+            "request": request, "contract_path": str(contract_path), "contract_version": system.top.version,
+        })
         result["state"] = "verifying_integration"
         save()
         outcome = runner.execute()
         result["integration"] = outcome
         result["unresolved"] = system.unresolved_items()
         result["accepted"] = bool(outcome.get("accepted") and not outcome.get("provisional")
-                                  and not system.unresolved_items() and not system.top.unsupported
+                                  and not result["unresolved"] and not system.top.unsupported
                                   and outcome.get("contract_digest") == system.top.digest())
         result["state"] = "completed"
         result["reason"] = "" if result["accepted"] else "integration not unconditionally accepted"
