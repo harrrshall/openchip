@@ -214,6 +214,14 @@ endmodule
 - Plain Verilog-2001 plus immediate assertions. No `initial` blocks other than `reg x = 0;` style initializers. Every `if` needs `begin ... end` around multiple statements.
 Reply with the module in a single ```verilog fenced block."""
 
+PROPERTIES_REVIEW_SYSTEM = """Review this independent formal property checker against the public hardware request and contract. Return the complete corrected Verilog checker only. You do not have the candidate RTL; do not infer correctness from a design or solver outcome. Preserve useful behavioral assertions and cover statements, exact interface/parameters, and active clock edge. Do not add assumptions on DUT outputs/state or restrict allowed inputs. Do not replace assertions with assumptions or trivial assertions. If correct, return it unchanged.
+
+Check event scheduling carefully. Immediate assertions in a clocked always block see pre-edge values. A nonblocking shadow-state transition must consume CURRENT edge inputs just like the specified state machine; both DUT and shadow update after the assertions. Using previous-cycle inputs for that shadow transition introduces an extra cycle of delay. Saved previous inputs are useful for a direct assertion about the already-updated observed output, but must not accidentally delay a separately reconstructed state machine.
+
+Checker bookkeeping (past_valid, history-valid bits and history-length counters) must start in a known invalid state using reg declaration initializers. This does not initialize or constrain DUT state. For resetless hardware, guard only those assertions whose required state has not yet been established by observed legal input history; track per-bit validity when needed. Never assume a DUT power-up value or force conditioning inputs. Update shadow state and its validity from the first observed edge, including edges before history-dependent assertions become valid. Respect reset polarity/priority, enables, hold behavior, combinational outputs and full packed-bit positions. Use only synthesizable immediate assert(...), cover(...) and explicit state; no SVA or $past.
+Do not use assume statements or preprocessor macros; input/reset constraints belong to the harness. Remove redundant checker assumptions rather than replacing or expanding them. Audit interval boundaries: an output starting at edge k and lasting N full periods changes at k+N. An elapsed counter tested against N-1 on later edges starts at 0, not 1; a remaining counter starts at N. Check N=1 and N=2 explicitly."""
+
+
 PROPERTIES_USER = """Original user request:
 <<<
 {request}

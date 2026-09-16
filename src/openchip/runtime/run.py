@@ -68,11 +68,16 @@ class Budget:
         if self.remaining_s() <= 0:
             raise BudgetExhausted(f"wall time {self.wall_time_s:.0f}s exceeded")
 
-    def check(self, adapter: ModelAdapter) -> None:
+    def check(self, adapter: ModelAdapter, recorded_calls: Optional[list[dict]] = None) -> None:
         self.check_time()
-        if adapter.usage.calls >= self.max_model_calls:
+        # Persisted events include secondary reviewers and survive resume. Model
+        # names alone cannot distinguish two adapters configured with the same model.
+        calls = adapter.usage.calls if recorded_calls is None else len(recorded_calls)
+        tokens = adapter.usage.total_tokens if recorded_calls is None else sum(
+            e.get("prompt_tokens", 0) + e.get("completion_tokens", 0) for e in recorded_calls)
+        if calls >= self.max_model_calls:
             raise BudgetExhausted(f"model call limit {self.max_model_calls} reached")
-        if adapter.usage.total_tokens >= self.max_total_tokens:
+        if tokens >= self.max_total_tokens:
             raise BudgetExhausted(f"token limit {self.max_total_tokens} reached")
 
     def snapshot(self, adapter: ModelAdapter, extra: tuple = ()) -> dict:
@@ -260,7 +265,7 @@ class Runner:
     def _call(self, role: str, system: str, user: str, json_schema: Optional[dict] = None, temperature: Optional[float] = None, seed: Optional[int] = None,
               adapter: Optional[ModelAdapter] = None):
         assert self.budget
-        self.budget.check(self.adapter)
+        self.budget.check(self.adapter, [e for e in self.store.events(self.run_id) if e["kind"] == "model_call"])
         self.store.touch_lock(self.run_id)
         adapter = adapter or self.adapter
         mcfg = adapter.cfg
@@ -274,11 +279,11 @@ class Runner:
                                                      "completion_tokens": r.completion_tokens, "latency_s": round(r.latency_s, 2), "error": r.error, "thinking": think, "model": adapter.cfg.model})
         self.log(f"[model:{role}]{tag} {r.finish_reason} in {r.latency_s:.1f}s ({r.prompt_tokens}+{r.completion_tokens} tok)" + (f" ERROR {r.error}" if r.error else ""))
         self.budget.check_time()
-        if think and r.finish_reason == "length":
+        if think and r.finish_reason == "length" and role != "property_review":
             # Reasoning consumed the token budget (any answer is truncated): retry without thinking, and stop
             # using thinking for this role for the rest of the run — this model cannot finish within the cap.
             self._no_think_roles.add(f"{adapter.cfg.model}:{role}")
-            self.budget.check(self.adapter)
+            self.budget.check(self.adapter, [e for e in self.store.events(self.run_id) if e["kind"] == "model_call"])
             self.log(f"[model:{role}]{tag} thinking hit the token cap; retrying without thinking (and for the rest of this run)")
             r = adapter.chat(msgs, role=role, json_schema=json_schema, temperature=temperature, seed=seed, thinking=False,
                              timeout_s=self.budget.remaining_s())
@@ -851,6 +856,89 @@ class Runner:
         self.store.checkpoint(self.run_id, "rtl", ck)
         return ck
 
+    def _review_counterexample_properties(self, ck: dict, contract: Contract, rtl: Path,
+                                         props: Path, work: Path, original):
+        """One independent checker review; only a successful recheck can replace a counterexample."""
+        if (not self.cfg.verification.review_counterexamples
+                or original.extra.get("status") != "counterexample"
+                or ck.get("properties_origin", "model-generated") != "model-generated"
+                or ck.get("property_review")
+                or any(e["kind"] == "property_review_started" for e in self.store.events(self.run_id))):
+            return original
+        assert self.budget
+        if self.budget.remaining_s() <= 5:
+            return original
+        review_dir = work / "property_review"
+        review_dir.mkdir(parents=True, exist_ok=True)
+        before = review_dir / "original.v"
+        before.write_bytes(props.read_bytes())
+        evidence = review_dir / "original_formal.json"
+        evidence.write_text(json.dumps(original.to_dict(), indent=1))
+        reviewer = self.review_adapter or self.adapter
+        state = {"status": "started", "reviewer_model": reviewer.cfg.model, "original_checker": str(before),
+                 "original_sha256": hashlib.sha256(before.read_bytes()).hexdigest(),
+                 "original_formal": str(evidence), "rtl_sha256": hashlib.sha256(rtl.read_bytes()).hexdigest()}
+        ck["property_review"] = state
+        self.store.event(self.run_id, "property_review_started", state)
+        self.store.checkpoint(self.run_id, "verify", ck)
+
+        def finish(status, **details):
+            state.update(status=status, **details)
+            self.store.event(self.run_id, "property_review", dict(state))
+            self.store.checkpoint(self.run_id, "verify", ck)
+
+        user = ("Request:\n" + ck.get("request", "") + "\nContract:\n" + contract.model_dump_json(indent=1)
+                + "\nSupporting user documents:\n" + self._documents_text()
+                + "\nChecker:\n```verilog\n" + before.read_text() + "\n```")
+        # The context deliberately contains no RTL, other reference or solver verdict.
+        response = self._call("property_review", P.PROPERTIES_REVIEW_SYSTEM, user,
+                              seed=(reviewer.cfg.seed or 0) + 89, adapter=reviewer)
+        (review_dir / "response.txt").write_text(response.text)
+        code = extract_code(response.text, ("verilog", "systemverilog", "v", "sv")) if response.ok else None
+        if not code:
+            finish("unusable_response")
+            return original
+        candidate = review_dir / "reviewed.v"
+        candidate.write_text(code)
+        state.update(reviewed_checker=str(candidate), reviewed_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest())
+        plain = re.sub(r"/\*.*?\*/|//[^\n]*", " ", code, flags=re.S)
+        if re.search(r"\bassume\b|`", plain):
+            finish("rejected_constraints", detail="Reviewed checkers may not introduce assumptions or preprocessor directives.")
+            return original
+        if code.strip() == before.read_text().strip():
+            finish("unchanged")
+            return original
+        check = parse_check(candidate, contract, review_dir, self.cfg.tools.yosys,
+                            min(self.cfg.tools.timeout_s, self.budget.remaining_s()))
+        (review_dir / "parse.json").write_text(json.dumps(check.to_dict(), indent=1))
+        if not check.ok:
+            finish("parse_failed")
+            return original
+        remaining = self.budget.remaining_s() - 2
+        if remaining <= 0:
+            finish("no_recheck_budget")
+            return original
+        t0 = time.time()
+        checked = run_formal(contract, rtl, candidate, review_dir / "formal", self.cfg.tools.sby,
+                             self.cfg.verification.formal_depth,
+                             min(self.cfg.verification.formal_timeout_s, remaining))
+        self.tool_time_s += time.time() - t0
+        result_path = review_dir / "reviewed_formal.json"
+        result_path.write_text(json.dumps(checked.to_dict(), indent=1))
+        if not checked.ok or checked.extra.get("status") != "bounded_pass":
+            finish("recheck_failed", reviewed_status=checked.extra.get("status"), reviewed_formal=str(result_path))
+            return original
+        # Keep both checkers and both tool records. Promote only after an actual
+        # bounded pass; errors/timeouts must never erase the original counterexample.
+        staging = props.with_suffix(".promote-" + uuid.uuid4().hex[:12] + ".v")
+        staging.write_bytes(candidate.read_bytes())
+        os.replace(staging, props)
+        self._save("properties", props, "counterexample_review")
+        finish("bounded_pass", reviewed_sha256=hashlib.sha256(candidate.read_bytes()).hexdigest(),
+               reviewed_formal=str(result_path))
+        self.log("[formal] independently reviewed checker passed the bounded recheck; original counterexample retained")
+        return checked
+
     def _step_rtl(self, ck: dict) -> dict:
         contract = self._load_contract(ck)
         ctx = self._ctx(ck, contract)
@@ -924,6 +1012,14 @@ class Runner:
                 for key in ("last_evidence", "final_evidence"):
                     if ck.get(key) == str(work / "evidence.json"):
                         ck[key] = str(archived / "evidence.json")
+                review = ck.get("property_review") or {}
+                for key in ("original_checker", "original_formal", "reviewed_checker", "reviewed_formal"):
+                    if review.get(key):
+                        try:
+                            relative = Path(review[key]).relative_to(work)
+                        except ValueError:
+                            continue
+                        review[key] = str(archived / relative)
                 self.store.event(self.run_id, "verification_archived", {"from": str(work), "to": str(archived)})
             t0 = time.time()
             props = self._request_properties(ck, contract)
@@ -1001,8 +1097,16 @@ class Runner:
                         self.tool_time_s += time.time() - t0
                         res.formal = {"ok": formal.ok, **formal.to_dict(), **formal.extra,
                                       "tail": formal.tail(40)}
+                        # Persist the counterexample before spending remaining time on review.
+                        summary_before_formal = res.summary.replace("; formal not run", "")
+                        res.summary = summary_before_formal + f"; optional formal BMC depth {self.cfg.verification.formal_depth}: {formal.extra.get('status')}"
                         res.artifacts.update(properties=str(props), properties_sha256=hashlib.sha256(props.read_bytes()).hexdigest())
-                        res.summary = res.summary.replace("; formal not run", "") + f"; optional formal BMC depth {self.cfg.verification.formal_depth}: {formal.extra.get('status')}"
+                        history[-1]["summary"] = res.summary
+                        (work / "evidence.json").write_text(json.dumps(res.to_dict(), indent=1))
+                        formal = self._review_counterexample_properties(ck, contract, rp, props, work, formal)
+                        res.formal = {"ok": formal.ok, **formal.to_dict(), **formal.extra, "tail": formal.tail(40)}
+                        res.artifacts.update(properties=str(props), properties_sha256=hashlib.sha256(props.read_bytes()).hexdigest())
+                        res.summary = summary_before_formal + f"; optional formal BMC depth {self.cfg.verification.formal_depth}: {formal.extra.get('status')}"
                         self.log(f"[formal] optional check: {formal.extra.get('status')}")
                     else:
                         res.formal = {"ok": False, "status": "not_run", "error": "No remaining time for optional formal verification"}

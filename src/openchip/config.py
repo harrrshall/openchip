@@ -17,7 +17,7 @@ else:  # pragma: no cover
 
 
 class ModelConfig(BaseModel):
-    provider: Literal["openai-compatible", "openai", "openrouter", "anthropic"] = "openai-compatible"
+    provider: Literal["openai-compatible", "openai", "openai-responses", "openrouter", "anthropic"] = "openai-compatible"
     base_url: str = "http://127.0.0.1:8000/v1"
     model: str = "Qwen/Qwen3-8B"
     revision: str = "main"
@@ -63,6 +63,7 @@ class ReviewConfig(BaseModel):
 
 
 class VerificationConfig(BaseModel):
+    review_counterexamples: bool = False  # experimental independent checker review; preserve CE unless recheck passes
     sim_cycles: int = 400
     seeds: list[int] = Field(default_factory=lambda: [1, 2, 3])
     require_lint: bool = True

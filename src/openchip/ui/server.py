@@ -113,7 +113,8 @@ class UIState:
         if m.provider != "openai-compatible":
             m.thinking = False
             m.thinking_roles = []
-            m.extra_body = {}
+            if identity != (m.provider, m.model, m.base_url):
+                m.extra_body = {}
         return cfg
 
     # -- toolchain / connectivity ------------------------------------------------------------

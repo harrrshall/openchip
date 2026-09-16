@@ -32,6 +32,7 @@ from ..config import ModelConfig
 PROVIDER_DEFAULTS = {
     "openai-compatible": {"base_url": "http://127.0.0.1:8000/v1", "key_env": "OPENCHIP_MODEL_API_KEY"},
     "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
+    "openai-responses": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
     "openrouter": {"base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
     "anthropic": {"base_url": "https://api.anthropic.com", "key_env": "ANTHROPIC_API_KEY"},
 }
@@ -205,6 +206,8 @@ class ModelAdapter:
         try:
             if self.provider == "anthropic":
                 resp = self._chat_anthropic(messages, json_schema, max_tokens, temperature, deadline)
+            elif self.provider == "openai-responses":
+                resp = self._chat_responses(messages, json_schema, max_tokens, deadline)
             else:
                 resp = self._chat_openai(messages, json_schema, max_tokens, temperature, seed, thinking, deadline)
             resp.latency_s = time.monotonic() - t0
@@ -286,6 +289,45 @@ class ModelAdapter:
         return ModelResponse(text=text, reasoning=reasoning, finish_reason=finish,
                              prompt_tokens=usage.get("prompt_tokens", 0) or 0, completion_tokens=usage.get("completion_tokens", 0) or 0,
                              latency_s=0.0, model=data.get("model", self.cfg.model), raw_id=data.get("id", ""))
+
+    def _chat_responses(self, messages, json_schema, max_tokens, deadline=None) -> ModelResponse:
+        # Explicit protocol selection: model names never silently change API routes.
+        # Do not send sampling/vLLM options that reasoning endpoints may reject.
+        body = {"model": self.cfg.model, "input": messages,
+                "max_output_tokens": max_tokens or self.cfg.max_tokens, "store": False}
+        effort = self.cfg.extra_body.get("reasoning_effort")
+        if effort is not None:
+            body["reasoning"] = {"effort": effort}
+        if json_schema is not None:
+            body["text"] = {"format": {"type": "json_schema", "name": "out", "schema": json_schema}}
+        response = self._post("/responses", body, deadline)
+        response.raise_for_status()
+        data = response.json()
+        parts, summaries = [], []
+        refused = False
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for part in item.get("content", []):
+                    if part.get("type") == "output_text":
+                        parts.append(part.get("text", ""))
+                    elif part.get("type") == "refusal":
+                        refused = True
+            elif item.get("type") == "reasoning":
+                summaries.extend(p.get("text", "") for p in item.get("summary", []) if p.get("type") == "summary_text")
+        status = data.get("status", "unknown")
+        detail = (data.get("incomplete_details") or {}).get("reason", "")
+        finish = "stop" if status == "completed" else ("length" if detail == "max_output_tokens" else status)
+        error = ""
+        if status != "completed":
+            error = f"Responses request {status}" + (f": {detail}" if detail else "")
+        elif refused or not parts:
+            error = "Responses request refused" if refused else "Responses request returned no text"
+        usage = data.get("usage") or {}
+        return ModelResponse(text="".join(parts), reasoning="\n".join(summaries), finish_reason=finish,
+                             prompt_tokens=usage.get("input_tokens", 0) or 0,
+                             completion_tokens=usage.get("output_tokens", 0) or 0,
+                             latency_s=0.0, model=data.get("model", self.cfg.model),
+                             raw_id=data.get("id", ""), error=_scrub(error, self.api_key)[:500])
 
     def _chat_anthropic(self, messages, json_schema, max_tokens, temperature, deadline=None) -> ModelResponse:
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")

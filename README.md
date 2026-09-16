@@ -25,7 +25,23 @@ A generated [UART transmitter example](examples/uart_tx8n1/README.md) includes i
 pip install -e .            # Python 3.10+; install Icarus Verilog, Verilator and Yosys (OSS CAD Suite) for verification
 openchip ui --open          # http://127.0.0.1:8765
 ```
-In **Settings** choose OpenRouter, OpenAI, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. For the same credential variable, a key saved in Settings takes precedence over an inherited environment value, including after restart. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
+In **Settings** choose OpenRouter, OpenAI (Chat Completions), a Responses-compatible endpoint, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. For the same credential variable, a key saved in Settings takes precedence over an inherited environment value, including after restart. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
+
+For a Responses endpoint, use `provider = "openai-responses"` and its base URL
+(without `/responses`) in the model configuration. The adapter sends
+`max_output_tokens`; an optional `[model.extra_body] reasoning_effort = "low"`
+selects a requested reasoning level when the endpoint supports it. Incomplete or
+refused responses fail explicitly. Model support and data handling depend on the
+chosen provider; selecting the protocol does not change the model automatically.
+
+Experimental checker recovery is disabled by default. Set
+`[verification] review_counterexamples = true` to allow one independent review
+of a model-generated checker after an optional-formal counterexample. A configured
+`[model.review]` supplies the reviewer; otherwise the main model is used. The
+reviewer receives the request, contract, supporting documents and checker.
+Original evidence is retained, and only a successful bounded formal recheck can
+resolve that counterexample. This does not establish unbounded correctness.
+
 
 For OpenCode Go chat-completion models, choose **OpenAI**, set the base URL to
 `https://opencode.ai/zen/go/v1`, and enter the Go model ID and key. OpenChip sends

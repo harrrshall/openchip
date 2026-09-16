@@ -61,6 +61,10 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
     reasons: list[str] = []
     if contract is not None and contract.unresolved:
         reasons.append(f"{len(contract.unresolved)} unresolved contract decision(s) require clarification before sign-off")
+    property_review = ck.get("property_review") or {}
+    if (property_review and property_review.get("status") != "bounded_pass"
+            and ((evidence or {}).get("formal") or {}).get("status") != "bounded_pass"):
+        reasons.append("the original formal counterexample remains unresolved after checker review")
     named = requested_module_name(ck.get("request", ""))
     if named and contract is not None and contract.module_name != named:
         reasons.append(f"the request names module `{named}`, but the contract delivers `{contract.module_name}`")
@@ -188,6 +192,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "clock_check": ck.get("clock_check"),
         "lfsr_check": ck.get("lfsr_check"),
         "properties_origin": ck.get("properties_origin", "model-generated"),
+        "property_review": ck.get("property_review"),
         "contract_origin": ck.get("contract_origin", "model-generated"),
         "resetless_startup": ({"conditioning": contract.clock_reset.conditioning or [{p.name: 0 for p in contract.data_inputs()}] * 3,
                                "conditioning_edges": len(contract.clock_reset.conditioning) or 3, "power_up_state_verified": False}
@@ -255,6 +260,11 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     else:
         md.append("No verification evidence was produced.")
     md.append("")
+    if ck.get("property_review"):
+        pr = ck["property_review"]
+        md += ["### Property checker review", "", f"Review/recheck status: **{pr.get('status')}**. "
+               "The checker was reviewed without candidate RTL or solver verdicts. Original checker and counterexample evidence were retained; this does not establish unbounded correctness.",
+               f"Original evidence: `{pr.get('original_formal')}`. Reviewed evidence: `{pr.get('reviewed_formal', 'not produced')}`.", ""]
     if ck.get("review"):
         rv = ck["review"]
         md += ["### Independent spec review", "", f"Verdict: **{rv.get('verdict')}** (reviewer `{rv.get('reviewer_model')}`). Applied {len(rv.get('applied', []))} correction(s), rejected {len(rv.get('rejected', []))}, {len(rv.get('unresolved', []))} question(s) for the user." + (f" {rv.get('notes')}" if rv.get("notes") else ""), ""]
