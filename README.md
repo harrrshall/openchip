@@ -114,6 +114,17 @@ these helpers expect the repository at `/home/openchip` and environment/credenti
 bash scripts/cloud/interrupt_demo.sh /home/openchip-runs/counter-recovery updown_counter
 ```
 
+### benchmark helpers
+
+these scripts use the same provisioned cloud layout as the demo helpers:
+
+- [bench_all.sh](scripts/cloud/bench_all.sh) provisions tools, serves the model configured in `model.env`, then runs core-v1, heldout-v1, VerilogEval direct and the agent subset.
+- [bench_remote.sh](scripts/cloud/bench_remote.sh) runs that evaluation sequence against a remote provider. set `BENCH_FROM` to `core-v1`, `heldout-v1`, `veval-direct` or `veval-agent` to start at that stage; earlier stages are skipped.
+- [experiment_fa.sh](scripts/cloud/experiment_fa.sh) compares review and alternate-reference configurations against the same primary model.
+- [speed_compare.sh](scripts/cloud/speed_compare.sh) serves each supplied model configuration in turn on the same gpu, warms it up and runs core-v1.
+
+see each script's usage comment for arguments. retain the logs and result summaries, and use their recorded verdicts to judge acceptance; `DONE` markers indicate script completion, not verification success.
+
 ### recheck evaluation results
 
 on the linux verification host, use a copy of an evaluation results directory when rerunning these tools: they write verification artifacts and reports into that directory.
