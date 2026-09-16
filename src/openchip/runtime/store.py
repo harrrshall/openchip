@@ -135,7 +135,15 @@ class RunStore:
             cur = self.db.execute("SELECT ts,kind,payload_json FROM events WHERE run_id=? AND kind=? ORDER BY id", (run_id, kind))
         else:
             cur = self.db.execute("SELECT ts,kind,payload_json FROM events WHERE run_id=? ORDER BY id", (run_id,))
-        return [{"ts": r[0], "kind": r[1], **json.loads(r[2])} for r in cur.fetchall()]
+        events = []
+        for ts, event_kind, raw in cur.fetchall():
+            payload = json.loads(raw)
+            # Domain evidence may itself have a kind (for example a clock check).
+            # It must not replace the persisted event identity used by history/resume.
+            if "kind" in payload:
+                payload["payload_kind"] = payload["kind"]
+            events.append({**payload, "ts": ts, "kind": event_kind})
+        return events
 
     def artifact(self, run_id: str, name: str, path: Path, step: str) -> str:
         import hashlib

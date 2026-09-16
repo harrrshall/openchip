@@ -17,6 +17,7 @@ import subprocess
 from .sandbox import run_isolated
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
+CHECKER_VERSION = "request-tables-20260916-state-graphs"
 
 
 @dataclass
@@ -86,16 +88,25 @@ def check_reference_against_request_tables(
     python: str = sys.executable, timeout_s: float = 120.0,
 ) -> dict:
     """Return a verdict dict; `status` is one of not_applicable | ok | mismatch | error."""
-    out: dict = {"status": "not_applicable", "tables": 0, "rows": 0, "mismatches": [], "detail": ""}
+    out: dict = {"status": "not_applicable", "tables": 0, "rows": 0, "mismatches": [], "detail": "",
+                 "checker_version": CHECKER_VERSION, "checked_kinds": []}
     try:
-        tables = parse_request_tables(request, include_external_mux=True)
+        tables = parse_request_tables(request, include_external_mux=True, include_state_graphs=True)
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")
         return out
-    bound = [b for b in (bind(t, contract) for t in tables) if b is not None]
+    bound = []
+    for table in tables:
+        b = bind(table, contract)
+        if b is None and table.kind == "one_hot_state_table":
+            out.update(status="error", detail="Contract ports or timing cannot represent the explicit combinational one-hot state table.")
+            return out
+        if b is not None:
+            bound.append(b)
     if not bound:
         return out
     out["tables"] = len(bound)
+    out["checked_kinds"] = sorted({b.table.kind for b in bound})
     work.mkdir(parents=True, exist_ok=True)
     # A resume/recheck must never read output left by a previous reference. Keep
     # every invocation's artifacts, but give the subprocess a fresh destination.
@@ -104,13 +115,18 @@ def check_reference_against_request_tables(
     contract_path.write_text(contract.model_dump_json(indent=1))
     mismatches: list[dict] = []
     checked = 0
+    deadline = time.monotonic() + max(0, timeout_s)
     for i, b in enumerate(bound):
         rows_path = work / f"table{i}_rows.json"
         res_path = work / f"table{i}_result.json"
         rows_path.write_text(json.dumps({"rows": [r[0] for r in b.rows], "outputs": [b.output_port]}))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            out.update(status="error", detail="No remaining budget for the request-table check.")
+            return out
         try:
             proc = run_isolated(REFROWS, [Path(reference_py), contract_path, rows_path, res_path],
-                                res_path, python=python, timeout_s=timeout_s)
+                                res_path, python=python, timeout_s=remaining)
         except subprocess.TimeoutExpired:
             out.update(status="error", detail="reference model timed out on the request table")
             return out
@@ -134,6 +150,7 @@ def check_reference_against_request_tables(
                     inputs = ", ".join(_describe(v, val) for v, val in zip(b.table.inputs, _row_values(b, vec)))
                     mismatches.append({"kind": b.table.kind, "output": b.table.output.name, "inputs": inputs,
                                        "request_says": int(expected), "reference_says": actual})
+        out["rows"] = checked
     out["rows"] = checked
     out["mismatches"] = mismatches
     out["status"] = "mismatch" if mismatches else "ok"

@@ -16,7 +16,9 @@ def result_summary(outcome: dict, state: str | None) -> dict:
     table_failed = (outcome.get("request_table_check") or {}).get("status") in {"mismatch", "error"}
     formal_failed = formal.get("status") == "counterexample"
     module_failed = bool(outcome.get("requested_module") and outcome["requested_module"] != outcome.get("module"))
-    if (provisional or withheld) and not questions and not clock_failed and not table_failed and not formal_failed and not module_failed:
+    consensus = outcome.get("reference_consensus") or {}
+    references_uncertain = bool(consensus) and consensus.get("confidence") != "high"
+    if (provisional or (withheld and references_uncertain)) and not questions and not clock_failed and not table_failed and not formal_failed and not module_failed:
         questions = ["The independent references disagree or lack corroboration. Please clarify the intended behavior, including timing and priority when inputs coincide."]
     if state in {"running", "planned", "created"}:
         sentence = "Building and checking your design"

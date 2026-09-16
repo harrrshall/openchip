@@ -30,7 +30,7 @@ from ..verification.clockcheck import check_clock
 from ..verification.harness import VerificationResult, compare_references, lint_reference_timing, run_reference, verify
 from ..contracts.tables import parse_request_tables, render_table
 from ..verification.guards import acceptance_guards, contract_guards
-from ..verification.tablecheck import check_reference_against_request_tables
+from ..verification.tablecheck import CHECKER_VERSION, check_reference_against_request_tables
 from ..verification.normalize import normalize_rtl
 from ..verification.testbench import dump_contract_json
 from .store import RunStore, lock_owner_id
@@ -918,11 +918,13 @@ class Runner:
 
     def _check_request_tables(self, ck: dict, contract: Contract, ref: Path) -> dict:
         """Compare the reference against any table printed in the request. No model call."""
-        if (ck.get("request_table_check") or {}).get("status") in {"ok", "mismatch", "not_applicable"}:
+        cached = ck.get("request_table_check") or {}
+        if cached.get("checker_version") == CHECKER_VERSION and cached.get("status") in {"ok", "mismatch", "not_applicable"}:
             return ck
         t0 = time.time()
+        remaining = min(120, self.budget.wall_time_s - (t0 - self.budget.started) - 2) if self.budget else 120
         res = check_reference_against_request_tables(
-            contract, ck.get("request", ""), ref, self.ws.dir("verification") / "request_tables")
+            contract, ck.get("request", ""), ref, self.ws.dir("verification") / "request_tables", timeout_s=remaining)
         self.tool_time_s += time.time() - t0
         ck["request_table_check"] = res
         if res["status"] == "not_applicable":

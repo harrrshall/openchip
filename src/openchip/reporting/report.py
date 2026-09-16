@@ -73,6 +73,15 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
         reasons.append("the reference model contradicts a table printed in the request: " + (t.get("detail") or ""))
     elif t.get("status") == "error":
         reasons.append("the request-table check could not complete: " + (t.get("detail") or "checker error"))
+    if t.get("status") not in {"mismatch", "error"}:
+        from ..contracts.state_tables import parse_state_tables
+        try:
+            state_tables = parse_state_tables(ck.get("request", ""))
+        except (ValueError, OverflowError):
+            reasons.append("the independent state-table check could not establish its scope")
+        else:
+            if state_tables and (t.get("status") != "ok" or "one_hot_state_table" not in t.get("checked_kinds", [])):
+                reasons.append("the independent one-hot state-table check has not completed")
     from ..verification.clockcheck import requires_clock_check
     clock = ck.get("clock_check") or {}
     if requires_clock_check(ck.get("request", "")) and clock.get("status") != "ok":

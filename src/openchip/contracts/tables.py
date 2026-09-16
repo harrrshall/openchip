@@ -36,11 +36,11 @@ class TableVar:
 
 @dataclass(frozen=True)
 class RequestTable:
-    kind: str  # "kmap" | "truth_table" | "waveform"
+    kind: str  # "kmap" | "truth_table" | "waveform" | "one_hot_state_table"
     inputs: tuple[TableVar, ...]  # row-axis variables first, then column-axis variables
     output: TableVar
     rows: tuple[tuple[tuple[int, ...], int], ...]  # ((value per entry of `inputs`), output)
-    dont_care: int  # cells dropped because they were printed as don't-care
+    dont_care: int  # cells printed as don't-care or outside an explicit one-hot domain
     source: str  # the verbatim block of request text this came from
 
 
@@ -55,7 +55,7 @@ def _names_each_bit_once(table: RequestTable) -> bool:
     return len(keys) == len(set(keys))
 
 
-def parse_request_tables(request: str, *, include_external_mux: bool = False) -> list[RequestTable]:
+def parse_request_tables(request: str, *, include_external_mux: bool = False, include_state_graphs: bool = False) -> list[RequestTable]:
     """Every table in `request` that can be read without guessing. `[]` when none can."""
     lines = request.splitlines()
     out: list[RequestTable] = []
@@ -72,6 +72,9 @@ def parse_request_tables(request: str, *, include_external_mux: bool = False) ->
                 break
         else:
             i += 1
+    if include_state_graphs:
+        from .state_tables import parse_state_tables
+        out.extend(parse_state_tables(request))
     return out
 
 
