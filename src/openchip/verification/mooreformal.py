@@ -14,17 +14,22 @@ def moore_contract_matches(contract: Contract, binding: dict) -> bool:
 
 def moore_properties(contract: Contract, request: str) -> str | None:
     binding, incomplete = moore_scope(request)
-    if not binding or incomplete or not moore_contract_matches(contract,binding):
+    if not binding or incomplete or not moore_contract_matches(contract, binding):
         return None
-    rows=binding['rows']; ids={name:i for i,name in enumerate(rows)}
-    width=max(1,(len(rows)-1).bit_length())
-    active='reset' if binding['polarity']=='high' else '!reset'
-    assertions='\n'.join(f"        {width}'d{ids[s]}: assert(out == 1'b{v[2]});" for s,v in rows.items())
-    transitions='\n'.join(f"        {width}'d{ids[s]}: oc_state <= in ? {width}'d{ids[v[1]]} : {width}'d{ids[v[0]]};" for s,v in rows.items())
+    rows = binding['rows']
+    state_ids = {name: index for index, name in enumerate(rows)}
+    width = max(1, (len(rows) - 1).bit_length())
+    active = 'reset' if binding['polarity'] == 'high' else '!reset'
+    assertions = '\n'.join(
+        f"        {width}'d{state_ids[state]}: assert(out == 1'b{output});"
+        for state, (_, _, output) in rows.items())
+    transitions = '\n'.join(
+        f"        {width}'d{state_ids[state]}: oc_state <= in ? {width}'d{state_ids[on_one]} : {width}'d{state_ids[on_zero]};"
+        for state, (on_zero, on_one, _) in rows.items())
     return f'''// Complete public Moore table; compare current pre-edge state, then advance.
 module {contract.module_name}_props(input clk, input reset, input in, input out);
   reg oc_valid = 1'b0;
-  reg [{width-1}:0] oc_state;
+  reg [{width - 1}:0] oc_state;
   always @(posedge clk) begin
     if (oc_valid) begin
       case (oc_state)
@@ -33,7 +38,7 @@ module {contract.module_name}_props(input clk, input reset, input in, input out)
     end
     if ({active}) begin
       oc_valid <= 1'b1;
-      oc_state <= {width}'d{ids[binding['initial']]};
+      oc_state <= {width}'d{state_ids[binding['initial']]};
     end else begin
       case (oc_state)
 {transitions}
