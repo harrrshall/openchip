@@ -1,0 +1,31 @@
+{
+  "rtl_sha256": "8a11a9415b1c2d13d15523f589b0af804f267a7ca7eb0219a3606fd558fcfb61",
+  "bench_sha256": "94625b951d182d4e1350e05bb455b06e8576a610858d3a6233ba37a586625350",
+  "mismatches": 0,
+  "samples": 4096,
+  "model": "glm-5.3-flash",
+  "provider": "OpenCode Go",
+  "provider_revision": "unknown",
+  "source_commit": "76f16bbc9",
+  "run_id": "20260916-120152",
+  "accepted": true,
+  "provisional": false,
+  "independent_verilogeval": {
+    "task": "Prob124_rule110",
+    "mismatches": 0,
+    "samples": 6283
+  },
+  "request_reference_check": {
+    "observed_cycles": 120,
+    "mismatches": 0,
+    "rejected_reference_derivations": 2
+  },
+  "formal": {
+    "status": "bounded_pass",
+    "depth": 20
+  },
+  "limits": [
+    "No power-up-state guarantee before load.",
+    "No unbounded correctness, timing closure, power or silicon claim."
+  ]
+}

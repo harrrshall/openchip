@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -455,12 +456,14 @@ class Runner:
         """
         try:
             tables = parse_request_tables(request)
+            from ..contracts.cellular import render_cellular
+            cellular = render_cellular(request)
         except Exception as e:  # noqa: BLE001 — a parser fault must never block a build
             self.store.event(self.run_id, "request_table_parse_error", {"error": f"{type(e).__name__}: {e}"})
             return ""
-        if not tables:
+        if not tables and not cellular:
             return ""
-        rendered = "\n\n".join(render_table(t) for t in tables)
+        rendered = "\n\n".join([render_table(t) for t in tables] + ([cellular] if cellular else []))
         try:
             (self.ws.dir("spec") / "request_tables.md").write_text(rendered + "\n")
         except Exception:  # noqa: BLE001
@@ -523,6 +526,24 @@ class Runner:
                 continue
             code = reviewed_code
             out_path.write_text(code)
+            from ..verification.cellularcheck import check_cellular
+            assert self.budget
+            t0 = time.time()
+            cellular = check_cellular(contract, ck.get("request", ""), out_path, work / "cellular",
+                                      min(60, self.budget.remaining_s()), sys.executable)
+            self.tool_time_s += time.time() - t0
+            if cellular is not None:
+                self.store.event(self.run_id, "reference_request_check", {"path": str(out_path), **cellular})
+                if cellular["status"] != "ok":
+                    last_err = cellular["detail"] + "\n" + self._request_tables_text(ck.get("request", ""))
+                    saved = out_path.with_suffix(".request-rejected-" + uuid.uuid4().hex[:12] + ".py")
+                    shutil.copyfile(out_path, saved)
+                    self.store.event(self.run_id, "reference_rejected", {"attempt": attempt,
+                                     "request_check": cellular, "retained": str(saved)})
+                    self.log(f"[reference] failed explicit cell-transition check: {cellular['status']}")
+                    if cellular["status"] == "error":
+                        return None, last_err
+                    continue
             vec = run_reference(out_path, cj, seed=1, cycles=50, out=work / "smoke.json")
             if vec.get("error"):
                 last_err = vec["error"]
@@ -1191,21 +1212,28 @@ class Runner:
     def _check_request_tables(self, ck: dict, contract: Contract, ref: Path) -> dict:
         """Compare the reference against any table printed in the request. No model call."""
         cached = ck.get("request_table_check") or {}
-        if cached.get("checker_version") == CHECKER_VERSION and cached.get("status") in {"ok", "mismatch", "not_applicable"}:
+        fingerprint = hashlib.sha256(json.dumps({"request": ck.get("request", ""),
+                                                "contract": contract.model_dump(mode="json"),
+                                                "reference_sha256": hashlib.sha256(ref.read_bytes()).hexdigest()},
+                                               sort_keys=True).encode()).hexdigest()
+        if (cached.get("input_fingerprint") == fingerprint and cached.get("checker_version") == CHECKER_VERSION
+                and cached.get("status") in {"ok", "mismatch", "not_applicable"}):
             return ck
         t0 = time.time()
         remaining = min(120, self.budget.wall_time_s - (t0 - self.budget.started) - 2) if self.budget else 120
         res = check_reference_against_request_tables(
             contract, ck.get("request", ""), ref, self.ws.dir("verification") / "request_tables", timeout_s=remaining)
         self.tool_time_s += time.time() - t0
+        res["input_fingerprint"] = fingerprint
         ck["request_table_check"] = res
         if res["status"] == "not_applicable":
             return ck
         self.store.event(self.run_id, "request_table_check", res)
         if res["status"] == "mismatch":
-            self.log(f"[tables] the reference contradicts the request's own table on {len(res['mismatches'])} row(s): {res['detail'][:300]}")
+            self.log(f"[tables] the reference contradicts the request's own table: {res['detail'][:300]}")
         elif res["status"] == "ok":
-            self.log(f"[tables] reference agrees with the request's printed table on all {res['rows']} row(s)")
+            unit = "observed cycles" if "checked_cycles" in res else "rows"
+            self.log(f"[tables] reference agrees with the request's printed table on all {res['rows']} {unit}")
         else:
             self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
         return ck

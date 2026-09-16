@@ -81,6 +81,9 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
     elif t.get("status") == "error":
         reasons.append("the request-table check could not complete: " + (t.get("detail") or "checker error"))
     if t.get("status") not in {"mismatch", "error"}:
+        from ..contracts.cellular import cellular_scope
+        if cellular_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "cellular_transition_table" not in t.get("checked_kinds", [])):
+            reasons.append("the independent sequential cell-table check has not completed")
         from ..contracts.state_tables import parse_state_tables
         try:
             state_tables = parse_state_tables(ck.get("request", ""))

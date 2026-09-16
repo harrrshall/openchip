@@ -26,7 +26,7 @@ from ..contracts.tables import RequestTable, TableVar, parse_request_tables
 
 REFROWS = Path(__file__).with_name("refrows.py")
 MAX_REPORTED = 6
-CHECKER_VERSION = "request-tables-20260916-submodule-scope"
+CHECKER_VERSION = "request-tables-20260916-cellular"
 
 
 @dataclass
@@ -93,6 +93,10 @@ def check_reference_against_request_tables(
     out: dict = {"status": "not_applicable", "tables": 0, "rows": 0, "mismatches": [], "detail": "",
                  "checker_version": CHECKER_VERSION, "checked_kinds": []}
     try:
+        from .cellularcheck import check_cellular
+        cellular = check_cellular(contract, request, reference_py, work, timeout_s, python)
+        if cellular is not None:
+            return {**out, **cellular}
         tables = parse_request_tables(request, include_external_mux=True, include_state_graphs=True)
     except Exception as e:  # noqa: BLE001 — report the error and withhold sign-off without crashing
         out.update(status="error", detail=f"table parse failed: {type(e).__name__}: {e}")

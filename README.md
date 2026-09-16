@@ -138,3 +138,9 @@ held-out composition gate or a guarantee for other requests.
 - Public benchmarks (VerilogEval) not yet run; contamination of any public benchmark is unknowable.
 
 License: Apache-2.0 (see `pyproject.toml`); third-party model and tool licenses apply to their artifacts.
+
+A measured [512-cell Rule 110 example](examples/rule110/README.md) includes the
+actual delivered RTL, a separate runnable bench, and evidence limits. Complete
+explicit elementary-cell transition requests are checked against their printed
+rows before generated references enter arbitration; power-up before a load is
+not treated as initialized state.
