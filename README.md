@@ -162,6 +162,11 @@ delivered RTL independently. This is one development design, not the three-desig
 held-out composition gate or a guarantee for other requests.
 
 ## Repository
+Revisions retain hashed copies of generated sources and reports under
+`retained/`, included in the downloaded bundle. Earlier verification directories
+remain in place. Legacy files already overwritten before retention was introduced
+cannot be reconstructed automatically; missing or changed bytes are recorded.
+
 `src/openchip/` product · `tests/` verification checks · `examples/` runnable
 designs and benches · `evals/suite/` locked acceptance tasks · `evals/results/`
 recorded benchmark summaries · `scripts/cloud/` cloud operations.

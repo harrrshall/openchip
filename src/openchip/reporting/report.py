@@ -6,6 +6,7 @@ versions and seeds, which requirements have evidence, and what remains unverifie
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 import platform
 import time
@@ -116,9 +117,37 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
     withheld = sign_off_withheld(ck, evidence, contract) if accepted else ""
     if withheld:
         accepted = False
-    history = ck.get("history", [])
+    history = copy.deepcopy(ck.get("history", []))
     rtl_path = Path(ck["rtl_path"]) if ck.get("rtl_path") else None
     ref_path = Path(ck["reference_path"]) if ck.get("reference_path") else None
+    retention_errors = []
+
+    def retained(path, expected=None):
+        if not path:
+            return None
+        try:
+            return store.retain(Path(path), expected)
+        except (OSError, ValueError) as exc:
+            retention_errors.append(str(exc))
+            return None
+
+    verified_artifacts = (evidence or {}).get("artifacts", {})
+    rtl_path = retained(rtl_path, verified_artifacts.get("rtl_sha256"))
+    ref_path = retained(ref_path, verified_artifacts.get("reference_sha256"))
+    contract_path = retained(ck.get("contract_path"))
+    properties_path = retained(ck.get("properties_path"))
+    final_evidence = retained(ck.get("final_evidence") or ck.get("last_evidence"))
+    consensus = copy.deepcopy(ck.get("consensus"))
+    for reference in (consensus or {}).get("references", []):
+        saved = retained(reference.get("path"), reference.get("sha256"))
+        reference.update(path=str(saved) if saved else None, sha256=_sha(saved) if saved else "")
+    for item in history:
+        if item.get("evidence"):
+            saved = retained(item["evidence"])
+            item["evidence"] = str(saved) if saved else None
+    if retention_errors:
+        accepted = False
+        withheld = (withheld + "; " if withheld else "") + "artifact retention failed: " + "; ".join(sorted(set(retention_errors)))
 
     # ---- requirement-to-evidence index --------------------------------------------------
     req_index = []
@@ -182,14 +211,14 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         "requested_module": requested_module_name(ck.get("request", "")),
         "contract_digest": contract.digest() if contract else None,
         "artifacts": {
-            "contract": ck.get("contract_path"), "contract_sha256": _sha(Path(ck["contract_path"])) if ck.get("contract_path") else "",
+            "contract": str(contract_path) if contract_path else None, "contract_sha256": _sha(contract_path) if contract_path else "",
             "rtl": str(rtl_path) if rtl_path else None, "rtl_sha256": _sha(rtl_path) if rtl_path else "",
             "reference": str(ref_path) if ref_path else None, "reference_sha256": _sha(ref_path) if ref_path else "",
-            "final_evidence": ck.get("final_evidence") or ck.get("last_evidence"),
-            "properties": ck.get("properties_path"), "properties_sha256": _sha(Path(ck["properties_path"])) if ck.get("properties_path") else "",
+            "final_evidence": str(final_evidence) if final_evidence else None,
+            "properties": str(properties_path) if properties_path else None, "properties_sha256": _sha(properties_path) if properties_path else "",
         },
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
-        "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
+        "attempts": len(history), "history": history, "reference_consensus": consensus, "review": ck.get("review"), "provisional": provisional,
         "request_table_repair": ck.get("table_repair"),
         "request_table_check": ck.get("request_table_check"),
         "clock_check": ck.get("clock_check"),
@@ -298,4 +327,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
            f"Model: `{cfg.model.model}` @ `{cfg.model.revision}` (temperature {cfg.model.temperature}, seed {cfg.model.seed}, requested thinking setting={cfg.model.thinking}; effective provider reasoning is unknown). Tools: " + ", ".join(f"{k}: {v or 'missing'}" for k, v in tools.items()), "",
            f"Budget: {budget}. Tool execution time {tool_time_s:.1f}s.", ""]
     (reports / "report.md").write_text("\n".join(md))
+    saved_json = store.retain(reports / "outcome.json")
+    saved_md = store.retain(reports / "report.md")
+    store.event(run_id, "report_retained", {"outcome": str(saved_json), "report": str(saved_md)})
     return outcome

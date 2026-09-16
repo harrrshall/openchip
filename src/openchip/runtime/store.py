@@ -5,6 +5,8 @@ Enough is persisted after each meaningful action to resume without private model
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 import sqlite3
 import time
 import uuid
@@ -146,10 +148,96 @@ class RunStore:
         return events
 
     def artifact(self, run_id: str, name: str, path: Path, step: str) -> str:
-        import hashlib
-        h = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-        self.db.execute("INSERT INTO artifacts(run_id,ts,name,path,sha256,step) VALUES (?,?,?,?,?,?)", (run_id, time.time(), name, str(path), h, step))
+        saved = self.retain(path)
+        h = hashlib.sha256(saved.read_bytes()).hexdigest()
+        self.db.execute("INSERT INTO artifacts(run_id,ts,name,path,sha256,step) VALUES (?,?,?,?,?,?)", (run_id, time.time(), name, str(saved), h, step))
         return h
+
+    def retain(self, path: Path, expected_sha256: str | None = None) -> Path:
+        """Retain exact workspace bytes without overwriting an existing object."""
+        root = self.path.resolve().parent.parent
+        source = Path(path).resolve()
+        if not source.is_relative_to(root) or not source.is_file():
+            raise ValueError("Artifact must be a regular file inside the workspace")
+        data = source.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        if expected_sha256 and digest != expected_sha256:
+            raise ValueError("Artifact no longer matches its recorded hash")
+        target = root / "retained" / "artifacts" / digest / source.name
+        if not target.resolve().is_relative_to(root):
+            raise ValueError("Retained artifact destination escapes the workspace")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # A temporary file plus a hard link publishes complete bytes atomically,
+        # without replacing another writer's object at the same content hash.
+        temporary = target.with_name(target.name + ".tmp-" + uuid.uuid4().hex)
+        try:
+            with temporary.open("xb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.chmod(0o444)
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                if target.is_symlink() or target.read_bytes() != data:
+                    raise ValueError("Retained artifact is corrupt; refusing to replace it")
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
+
+    def retain_before_revision(self, run_id: str) -> None:
+        """Migrate matching legacy links before canonical files are regenerated.
+
+        Missing or previously changed bytes are recorded as unavailable; their
+        expected hashes are never replaced with hashes of a newer design.
+        """
+        run = self.get_run(run_id)
+        if not run:
+            return
+        original_outcome = self.db.execute("SELECT outcome_json FROM runs WHERE run_id=?", (run_id,)).fetchone()[0]
+        outcome = run["outcome"]
+        mapping, unavailable, legacy_unhashed = {}, [], []
+        for ident, name, path, digest in self.db.execute(
+                "SELECT id,name,path,sha256 FROM artifacts WHERE run_id=?", (run_id,)).fetchall():
+            try:
+                saved = self.retain(Path(path), digest)
+                mapping[path] = str(saved)
+                self.db.execute("UPDATE artifacts SET path=? WHERE id=?", (str(saved), ident))
+            except (OSError, ValueError) as exc:
+                unavailable.append({"name": name, "path": path, "error": str(exc)})
+        artifacts = outcome.get("artifacts", {})
+        for name in ("contract", "rtl", "reference", "properties"):
+            path, digest = artifacts.get(name), artifacts.get(name + "_sha256")
+            if path and digest:
+                try:
+                    saved = self.retain(Path(path), digest)
+                    mapping[path] = str(saved)
+                    artifacts[name] = str(saved)
+                except (OSError, ValueError) as exc:
+                    unavailable.append({"name": name, "path": path, "error": str(exc)})
+        for reference in (outcome.get("reference_consensus") or {}).get("references", []):
+            path = reference.get("path")
+            if not path:
+                continue
+            try:
+                saved = self.retain(Path(path), reference.get("sha256"))
+                if not reference.get("sha256"):
+                    legacy_unhashed.append(path)
+                mapping[path] = str(saved)
+                reference.update(path=str(saved), sha256=hashlib.sha256(saved.read_bytes()).hexdigest())
+            except (OSError, ValueError) as exc:
+                unavailable.append({"name": "consensus_reference", "path": path, "error": str(exc)})
+        # Keep the original outcome alongside the migrated index.
+        archive = self.path.resolve().parent.parent / "retained" / "revisions" / uuid.uuid4().hex
+        if not archive.resolve().is_relative_to(self.path.resolve().parent.parent):
+            raise ValueError("Retention destination escapes the workspace")
+        archive.mkdir(parents=True)
+        (archive / "outcome-before-retention.json").write_text(original_outcome)
+        (archive / "outcome.json").write_text(json.dumps(outcome, indent=2))
+        self.db.execute("UPDATE runs SET outcome_json=? WHERE run_id=?", (json.dumps(outcome), run_id))
+        self.event(run_id, "artifacts_retained_before_revision", {
+            "paths": mapping, "unavailable": unavailable, "legacy_sources_without_prior_hash": legacy_unhashed,
+            "outcome": str(archive / "outcome.json")})
 
     def artifacts(self, run_id: str) -> list[dict]:
         cur = self.db.execute("SELECT ts,name,path,sha256,step FROM artifacts WHERE run_id=? ORDER BY id", (run_id,))

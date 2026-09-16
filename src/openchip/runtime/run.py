@@ -129,6 +129,11 @@ class Runner:
         if not contracts:
             raise RuntimeError("no contract to revise; run `openchip build` first")
         base = Contract.model_validate_json(contracts[-1].read_text())
+        previous = self.store.latest_run_id()
+        if previous:
+            if self.store.lock_is_live(previous):
+                raise RuntimeError("Cannot revise while the previous run is still active")
+            self.store.retain_before_revision(previous)
         request = self.ws.request_text().strip()
         cfg_dump = self.cfg.model_dump(mode="json")
         if budget_s:
@@ -1025,25 +1030,12 @@ class Runner:
                 return self._queue_table_repair(ck, attempt + 1, check_key="lfsr_check")
             if lfsr["status"] in {"mismatch", "error"}:
                 raise Stalled("Independent LFSR request check did not pass: " + lfsr["detail"])
-            work = vdir / "attempts" / f"attempt_{attempt}"
+            run_directory = "run-" + hashlib.sha256(self.run_id.encode()).hexdigest()[:16]
+            work = vdir / "attempts" / run_directory / f"attempt_{attempt}"
             if work.exists():
-                archived = work.with_name(work.name + "-previous-" + uuid.uuid4().hex[:10])
-                work.rename(archived)
-                for item in history:
-                    if item.get("evidence") == str(work / "evidence.json"):
-                        item["evidence"] = str(archived / "evidence.json")
-                for key in ("last_evidence", "final_evidence"):
-                    if ck.get(key) == str(work / "evidence.json"):
-                        ck[key] = str(archived / "evidence.json")
-                review = ck.get("property_review") or {}
-                for key in ("original_checker", "original_formal", "reviewed_checker", "reviewed_formal"):
-                    if review.get(key):
-                        try:
-                            relative = Path(review[key]).relative_to(work)
-                        except ValueError:
-                            continue
-                        review[key] = str(archived / relative)
-                self.store.event(self.run_id, "verification_archived", {"from": str(work), "to": str(archived)})
+                previous_work = work
+                work = work.with_name(work.name + "-recheck-" + uuid.uuid4().hex[:10])
+                self.store.event(self.run_id, "verification_recheck", {"previous": str(previous_work), "new": str(work)})
             t0 = time.time()
             props = self._request_properties(ck, contract)
             if props is None:
