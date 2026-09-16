@@ -154,3 +154,9 @@ nodes, 64 nesting levels and 4096 bits per intermediate integer.
 Imported and generated contracts must explicitly set `clock_reset.reset` to the
 exact reset input name, or `null` for a resetless interface. Omitting it is a
 validation error; OpenChip no longer assumes an undeclared `rst` port.
+
+Formal checking requires at least one executable assertion in the elaborated
+checker. Comments, disabled generate branches and cover-only modules cannot
+produce a formal pass. This presence check does not establish that assertions
+are sufficient or non-vacuous. A required-formal run with an invalid checker
+withholds acceptance; optional formal reports the error without claiming a pass.

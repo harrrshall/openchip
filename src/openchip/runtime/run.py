@@ -942,7 +942,7 @@ class Runner:
         t0 = time.time()
         checked = run_formal(contract, rtl, candidate, review_dir / "formal", self.cfg.tools.sby,
                              self.cfg.verification.formal_depth,
-                             min(self.cfg.verification.formal_timeout_s, remaining))
+                             min(self.cfg.verification.formal_timeout_s, remaining), yosys=self.cfg.tools.yosys)
         self.tool_time_s += time.time() - t0
         result_path = review_dir / "reviewed_formal.json"
         result_path.write_text(json.dumps(checked.to_dict(), indent=1))
@@ -1114,7 +1114,7 @@ class Runner:
                         t0 = time.time()
                         formal = run_formal(contract, rp, props, work / "formal", self.cfg.tools.sby,
                                             self.cfg.verification.formal_depth,
-                                            min(self.cfg.verification.formal_timeout_s, remaining))
+                                            min(self.cfg.verification.formal_timeout_s, remaining), yosys=self.cfg.tools.yosys)
                         self.tool_time_s += time.time() - t0
                         res.formal = {"ok": formal.ok, **formal.to_dict(), **formal.extra,
                                       "tail": formal.tail(40)}

@@ -11,7 +11,10 @@ unknown, or error. A bounded pass is not a proof.
 """
 from __future__ import annotations
 
+import json
 import re
+import shutil
+import time
 from pathlib import Path
 
 from ..contracts.schema import Contract
@@ -84,10 +87,28 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
     if re.search(r"\b(assert|assume|cover)\s+property\b", normalized):
         r = ToolResult("yosys", [yosys], str(cwd), 1, 0.0, "", "", error="concurrent SVA (`assert property`) is not supported by the open toolchain; use immediate assert(...) on the contract's active clock edge")
         return r
-    script = f"read_verilog -formal -sv -noautowire {props_path.name}; hierarchy -check -top {checker_name(contract)}; proc"
+    # Count elaborated assertions, not source text: comments and disabled generate
+    # branches can contain assert(...) without producing any executable check.
+    elaborated = cwd / "checker-elaborated.json"
+    script = (f"read_verilog -formal -sv -noautowire {props_path.name}; "
+              f"hierarchy -check -top {checker_name(contract)}; proc; "
+              f"write_json {elaborated.name}")
     r = run_tool("yosys", [yosys, "-q", "-p", script], cwd, timeout_s, version=tool_version(yosys, ("-V",)))
     text = props_path.read_text()
     problems = []
+    if r.ok:
+        try:
+            modules = json.loads(elaborated.read_text())["modules"]
+            assertions = sum(
+                cell.get("type") == "$assert" or
+                (cell.get("type") == "$check" and cell.get("parameters", {}).get("FLAVOR") == "assert")
+                for module in modules.values() for cell in module.get("cells", {}).values()
+            )
+            r.extra["elaborated_assertions"] = assertions
+            if assertions == 0:
+                problems.append("checker contains no executable assertion after elaboration")
+        except (OSError, ValueError, KeyError, TypeError):
+            problems.append("could not inspect elaborated checker assertions")
     if not re.search(rf"\bmodule\s+{re.escape(checker_name(contract))}\b", text):
         problems.append(f"checker must be named {checker_name(contract)}")
     if not re.search(r"\bassert\s*\(", text):
@@ -103,13 +124,33 @@ def parse_check(props_path: Path, contract: Contract, cwd: Path, yosys: str = "y
     return r
 
 
-def run_formal(contract: Contract, rtl_path: Path, props_path: Path, work: Path, sby: str = "sby", depth: int = 20, timeout_s: float = 600.0) -> ToolResult:
+def run_formal(contract: Contract, rtl_path: Path, props_path: Path, work: Path, sby: str = "sby", depth: int = 20, timeout_s: float = 600.0, yosys: str = "yosys") -> ToolResult:
     work.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    validation = work / "checker-validation"
+    validation.mkdir(exist_ok=True)
+    checked_props = validation / props_path.name
+    shutil.copyfile(props_path, checked_props)
+    check = parse_check(checked_props, contract, validation, yosys, timeout_s)
+    (validation / "result.json").write_text(json.dumps(check.to_dict(), indent=2))
+    if not check.ok:
+        check.error = "Formal checker validation failed: an executable assertion is required. " + check.error
+        check.extra.update(status="error", depth=depth, checker_validation=str(validation / "result.json"))
+        return check
+    remaining = timeout_s - (time.monotonic() - started)
+    if remaining <= 0:
+        check.timed_out = True
+        check.error = "Formal budget exhausted during checker validation."
+        check.extra.update(status="timeout", depth=depth)
+        return check
     top = work / "formal_top.v"
     top.write_text(generate_formal_top(contract))
-    sources = [str(rtl_path.resolve()), str(props_path.resolve()), str(top.resolve())]
+    sources = [str(rtl_path.resolve()), str(checked_props.resolve()), str(top.resolve())]
     sby_file = sbytool.write_sby(work, sources, "formal_top", depth)
-    r = sbytool.run_bmc(sby_file, work, sby, timeout_s, inputs=sources)
+    r = sbytool.run_bmc(sby_file, work, sby, remaining, inputs=sources)
+    r.extra["checker_validation"] = str(validation / "result.json")
+    r.extra["elaborated_assertions"] = check.extra["elaborated_assertions"]
+    r.duration_s = round(r.duration_s + check.duration_s, 3)
     r.extra["depth"] = depth
     m = re.search(r"Assert failed in (\S+): ([^\s]+)", r.stdout + r.stderr)
     if m:
