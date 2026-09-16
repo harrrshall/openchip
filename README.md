@@ -19,9 +19,11 @@ request → contract (JSON, versioned, requirement provenance)
 Each reference is reviewed against the request and contract in its own context, without the candidate RTL or another generated reference. Drafts are retained. Reference disagreement still withholds sign-off; review and model agreement are not proofs.
 
 Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
-[512-cell Rule 110 engine](examples/rule110/README.md), and
-[saturating event counter](examples/event_counter/README.md), and
-[reloadable timer](examples/reloadable_timer/README.md). Each includes actual
+[512-cell Rule 110 engine](examples/rule110/README.md),
+[saturating event counter](examples/event_counter/README.md),
+[reloadable timer](examples/reloadable_timer/README.md),
+[serial programmable timer](examples/serial_timer/README.md), and
+[counter with nonzero port indices](examples/range_counter/README.md). Each includes actual
 RTL, a separate runnable bench, provenance and the limits of its measurements.
 Complete explicit elementary-cell transition requests are checked against their
 printed rows before generated references enter arbitration; power-up before a
@@ -33,6 +35,11 @@ pip install -e .            # Python 3.10+; install Icarus Verilog, Verilator an
 openchip ui --open          # http://127.0.0.1:8765
 ```
 In **Settings** choose OpenRouter, OpenAI (Chat Completions), a Responses-compatible endpoint, Anthropic or a local OpenAI-compatible server (vLLM), pick a model, paste your key, press **Test connection**, then describe your module and press **Build & verify**. Keys are stored only in `~/.config/openchip/keys.env` (mode 600); the environment variables `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `OPENCHIP_MODEL_API_KEY` work too. For the same credential variable, a key saved in Settings takes precedence over an inherited environment value, including after restart. The run view shows the contract to review, live progress, the RTL and the final report; **Request a change** creates a new contract version and re-verifies.
+
+After a recorded transient provider failure, **Retry provider request** resumes
+from the saved checkpoint when budget remains. It keeps the original model
+configuration, elapsed time, token usage and call limits. It cannot replenish an
+exhausted budget or restart a completed build.
 
 For a Responses endpoint, use `provider = "openai-responses"` and its base URL
 (without `/responses`) in the model configuration. The adapter sends
@@ -116,6 +123,15 @@ Imported and generated contracts must explicitly set `clock_reset.reset` to the
 exact reset input name, or `null` for a resetless interface. Omitting it is a
 validation error; OpenChip no longer assumes an undeclared `rst` port.
 
+
+Descending packed ports can set `lsb` in the contract. For example, `width: 4,
+lsb: 1` describes `[4:1]`. References still receive unsigned packed values: declared
+bit `k` has integer weight `2**(k-lsb)`. The default lower index is zero. This does
+not add support for ascending ranges.
+
+Simulation requires a positive integer `sim_cycles` and at least one integer
+seed. Empty schedules are rejected; compiling and synthesizing a design without
+simulation observations cannot produce acceptance.
 
 ## Command line
 ```bash
