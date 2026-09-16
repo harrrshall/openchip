@@ -1,0 +1,36 @@
+{
+  "run_id": "20260916-100600-d18f00",
+  "model": {
+    "model": "glm-5.3-flash",
+    "revision": "unknown",
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "seed": 1234,
+    "thinking": false,
+    "max_tokens": 10000
+  },
+  "accepted": true,
+  "provisional": false,
+  "formal": {
+    "status": "bounded_pass",
+    "depth": 20,
+    "failed_assert": null,
+    "version": "SBY v0.69"
+  },
+  "independent_checks": [
+    {
+      "divisor": 4,
+      "mismatches": 0,
+      "samples": 10811,
+      "bytes": 256
+    },
+    {
+      "divisor": 7,
+      "mismatches": 0,
+      "samples": 18530,
+      "bytes": 256
+    }
+  ],
+  "rtl_sha256": "a24669e27d08eee3a0a24987802aeb781bcdde66e71b8eb3a23ad1f19f66e104",
+  "scope": "Generated RTL; tested divisors 4 and 7. Bounded formal depth 20, not an unbounded proof. No timing closure, physical implementation or silicon validation."
+}

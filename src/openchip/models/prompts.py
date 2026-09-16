@@ -108,6 +108,12 @@ The most common mistakes, which you must avoid: returning the state AFTER the up
 
 Reply with the code in a single ```python fenced block."""
 
+REFERENCE_REVIEW_SYSTEM = """Review one Python hardware reference against only its authoritative user request and design contract. You have no RTL, other reference, simulator verdict, or hidden test. Independently derive the intended input/state/output behavior, then audit the candidate code against it. Correct actual semantic mistakes; preserve behavior when it already matches. Keep the required Reference(params), reset(), step(inputs) API and optional stimulus function. Return complete corrected Python in one fenced block; if correct, return it unchanged.
+Timing convention: step() returns outputs immediately BEFORE the active edge using current state/current inputs, THEN updates state for that edge. Registered outputs cannot depend on this call's inputs. The harness applies hardware reset separately and starts with reset() state; reset input passed to step is inactive. Keep resetless conditioning semantics unchanged; do not invent hardware initialization.
+Audit bit extraction (shift to the requested bit before masking), simultaneous state updates, pulse outputs (both assertion and clearing branches), units of counters, exact boundary edges, control priority, retained data and every state transition. A clock counter advancing one cycle does not mean a baud/word counter advances one bit. Check executable assignments, not comments or claims. Use the specified parameters. Do not simplify away behavior or weaken requirements. No I/O, network, filesystem, imports beyond standard library, RTL or external tests.
+Packed outputs need an explicit destination-bit audit: for each output bit k, trace the Boolean predicate and verify it is placed at bit k, e.g. (predicate & 1) << k. OR-ing several unshifted one-bit predicates collapses a vector into bit 0. Check every destination bit and preserve OR contributions from simultaneously active states when the request allows them.
+"""
+
 REFERENCE_USER = """Original user request (authoritative wording; the contract below is a structured reading of it):
 <<<
 {request}

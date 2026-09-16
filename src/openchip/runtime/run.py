@@ -485,6 +485,28 @@ class Runner:
                 last_err = "no ```python block defining class Reference was found" if r.ok else r.error
                 self.store.event(self.run_id, "reference_rejected", {"attempt": attempt, "error": last_err})
                 continue
+            # Review each derivation in its own context, without RTL, another
+            # reference, or simulator verdicts. The tools still decide validity.
+            draft = out_path.with_suffix(".draft-" + uuid.uuid4().hex[:12] + ".py")
+            draft.write_text(code)
+            review_user = ("User request:\n" + ck.get("request", "") +
+                           "\nContract:\n" + contract.model_dump_json(indent=1) +
+                           "\nSupporting user documents:\n" + self._documents_text() +
+                           "\nPython reference to review:\n```python\n" + code + "\n```")
+            reviewed = self._call("reference_review", P.REFERENCE_REVIEW_SYSTEM, review_user,
+                                  seed=(self.cfg.model.seed or 0) + seed_offset + attempt + 67, adapter=alt)
+            reviewed_code = extract_code(reviewed.text, ("python", "py")) if reviewed.ok else None
+            self.store.event(self.run_id, "reference_review", {
+                "draft": str(draft), "draft_sha256": hashlib.sha256(code.encode()).hexdigest(),
+                "reviewed_sha256": hashlib.sha256(reviewed_code.encode()).hexdigest() if reviewed_code else "",
+                "changed": bool(reviewed_code and reviewed_code != code),
+                "ok": bool(reviewed_code and "class Reference" in reviewed_code)})
+            if not reviewed_code or "class Reference" not in reviewed_code:
+                last_err = "reference review did not return complete Python defining class Reference" if reviewed.ok else reviewed.error
+                self.store.event(self.run_id, "reference_rejected", {"attempt": attempt, "error": last_err,
+                                 "retained": str(draft)})
+                continue
+            code = reviewed_code
             out_path.write_text(code)
             vec = run_reference(out_path, cj, seed=1, cycles=50, out=work / "smoke.json")
             if vec.get("error"):

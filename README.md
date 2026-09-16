@@ -4,19 +4,21 @@
 
 OpenChip is an autonomous hardware-development agent. You describe a module; it derives a reviewable design contract, an independent executable reference, Verilog RTL, and a formal property checker; runs real tools (Verilator lint, Icarus simulation against the reference, Yosys synthesis, SymbiYosys bounded model checking); repairs from tool evidence within a budget; and delivers a package whose every claim is tied to a tool result and an artifact hash.
 
-Status: **Milestone 2 path works end to end; Milestone 3 partially; runtime model chosen by measurement (ADR 0006).** Ten open-weight models were run through the identical protocol on JarvisLabs. Default is now `openai/gpt-oss-120b` (VerilogEval v2 direct 114/156 = 73.1%, OpenChip agent mode 28/39, project suites 9/10 and 8/10); runner-up `Qwen/Qwen3.8-27B` (project suites 10/10 and 8/10 with zero false acceptances, VerilogEval 76/156). Full table: `evals/results/model-comparison.md`; evidence per run in `evals/results/`. This is an RTL generator with verification evidence, not a chip.
+Status: **Experimental RTL development workflow with bounded verification evidence.** General production readiness is not established. Historical model benchmarks are retained in `evals/results/model-comparison.md`; those results are specific to their recorded models and protocols. OpenChip produces RTL projects, not manufacturable chips.
 
 ## How it works
 ```
 request → contract (JSON, versioned, requirement provenance)
-        → reference model (Python, derived without seeing the RTL)
+        → reference model (Python, derived and reviewed without candidate RTL)
         → property checker (Verilog immediate assertions, optional)
         → RTL (Verilog-2001)
         → lint · sim vs reference (3 seeds × 400 cycles) · generic synth · BMC
-        → repair loop (bounded, every attempt kept) with reference cross-check (2-of-3)
+        → repair loop (bounded, every attempt kept) with independent reference cross-check
         → report.md + outcome.json (requirement-to-evidence index, hashes, tool/model manifest)
 ```
-Design: `docs/architecture/overview.md`. Decisions: `docs/decisions/`.
+Each reference is reviewed against the request and contract in its own context, without the candidate RTL or another generated reference. Drafts are retained. Reference disagreement still withholds sign-off; review and model agreement are not proofs.
+
+A generated [UART transmitter example](examples/uart_tx8n1/README.md) includes its request, RTL, independent framing bench, and scoped verification record.
 
 ## Quick start (bring your own key)
 ```bash
