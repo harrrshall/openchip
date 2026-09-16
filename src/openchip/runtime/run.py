@@ -146,7 +146,6 @@ class Runner:
         return self.run_id
 
     def _step_revise(self, ck: dict) -> dict:
-        spec = self.ws.dir("spec")
         base = Contract.model_validate_json(Path(ck["base_contract_path"]).read_text())
         request, change = ck["request"], ck["change"]
         table_repair = ck.get("table_repair")
@@ -177,10 +176,7 @@ class Runner:
                                     for k in ("module_name", "ports", "parameters", "clock_reset")):
                 errors.append("Table recovery must preserve the exact module, ports, parameters and clock/reset; correct only the request's behavior and requirements.")
                 continue
-            cj = spec / f"contract.v{contract.version}.json"
-            cj.write_text(contract.model_dump_json(indent=1))
-            (spec / f"contract.v{contract.version}.md").write_text(contract.summary_md())
-            self._save("contract", cj, "revise")
+            cj, _ = self._save_contract(contract, "revise")
             changed = [rq.id for rq in contract.requirements if rq.text not in {q.text for q in base.requirements}]
             self.store.event(self.run_id, "contract_revised", {"from": base.version, "to": contract.version, "changed_or_new": changed})
             self.log(f"[revise] contract v{contract.version} (parent v{base.version}); changed/new requirements: {changed or 'none'}; previous evidence invalidated")
@@ -312,6 +308,13 @@ class Runner:
     def _save(self, name: str, path: Path, step: str) -> str:
         return self.store.artifact(self.run_id, name, path, step)
 
+    def _save_contract(self, contract: Contract, step: str) -> tuple[Path, str]:
+        """Persist both contract views and register the exact JSON used by the run."""
+        path = self.ws.dir("spec") / f"contract.v{contract.version}.json"
+        path.write_text(contract.model_dump_json(indent=1))
+        path.with_suffix(".md").write_text(contract.summary_md())
+        return path, self._save("contract", path, step)
+
     # -- steps ----------------------------------------------------------------------------------
     def _step_intake(self, ck: dict) -> dict:
         request = ck["request"]
@@ -341,7 +344,6 @@ class Runner:
             if coerce_notes:
                 self.store.event(self.run_id, "contract_coerced", {"attempt": attempt, "notes": coerce_notes})
                 ck["coerce_notes"] = coerce_notes
-            data.setdefault("version", 1)
             data["version"] = 1
             data["parent_version"] = None
             # Deterministic fill-in: parameters the request names with a default but the model omitted.
@@ -378,11 +380,7 @@ class Runner:
                 errors.append(msg)
                 self.store.event(self.run_id, "contract_rejected", {"attempt": attempt, "error": msg})
                 continue
-            spec = self.ws.dir("spec")
-            cj = spec / f"contract.v{contract.version}.json"
-            cj.write_text(contract.model_dump_json(indent=1))
-            (spec / f"contract.v{contract.version}.md").write_text(contract.summary_md())
-            h = self._save("contract", cj, "intake")
+            cj, h = self._save_contract(contract, "intake")
             self.log(f"[intake] contract v{contract.version} for `{contract.module_name}` with {len(contract.requirements)} requirements (sha {h[:12]})"
                      + (f"; {len(contract.unresolved)} unresolved question(s) recorded" if contract.unresolved else ""))
             ck.update({"contract_path": str(cj), "contract_version": contract.version, "intake_attempts": attempt + 1})
@@ -391,11 +389,7 @@ class Runner:
         raise RuntimeError("intake failed: could not obtain a valid contract in 3 attempts: " + (errors[-1] if errors else ""))
 
     def _save_lfsr_contract(self, ck: dict, contract: Contract, stage: str) -> None:
-        spec = self.ws.dir("spec")
-        path = spec / f"contract.v{contract.version}.json"
-        path.write_text(contract.model_dump_json(indent=1))
-        path.with_suffix(".md").write_text(contract.summary_md())
-        self._save("contract", path, stage)
+        path, _ = self._save_contract(contract, stage)
         ck.update(contract_path=str(path), contract_version=contract.version,
                   contract_origin="request-derived Galois contract")
         self.store.event(self.run_id, "request_contract", {"version": contract.version, "parent_version": contract.parent_version})
@@ -443,11 +437,7 @@ class Runner:
                 new_data["revision_reason"] = "independent spec review: " + "; ".join(f"{a['kind']}:{a['target']}" for a in applied)[:300]
                 try:
                     revised = Contract.model_validate(new_data)
-                    spec = self.ws.dir("spec")
-                    cj = spec / f"contract.v{revised.version}.json"
-                    cj.write_text(revised.model_dump_json(indent=1))
-                    (spec / f"contract.v{revised.version}.md").write_text(revised.summary_md())
-                    self._save("contract", cj, "review")
+                    cj, _ = self._save_contract(revised, "review")
                     ck["contract_path"] = str(cj)
                     ck["contract_version"] = revised.version
                 except ValidationError as e:
@@ -657,10 +647,7 @@ class Runner:
         except ValidationError as exc:
             self.store.event(self.run_id, "conditioning_rejected", {"error": str(exc)[:1200]})
             raise Stalled("Resetless startup vectors failed contract validation; no hardware initialization was substituted.") from exc
-        path = self.ws.dir("spec") / f"contract.v{revised.version}.json"
-        path.write_text(revised.model_dump_json(indent=1))
-        path.with_suffix(".md").write_text(revised.summary_md())
-        self._save("contract", path, "conditioning")
+        path, _ = self._save_contract(revised, "conditioning")
         ck.update(contract_path=str(path), contract_version=revised.version)
         for key in ("final_evidence", "last_evidence", "properties_done", "consensus_done", "consensus"):
             ck.pop(key, None)
@@ -814,11 +801,7 @@ class Runner:
         data["revision_authority"] = "agent_inference"
         data["revision_reason"] = f"timing labels corrected to combinational for {', '.join(outputs)}: two independently derived reference models compute them from same-cycle inputs"
         new = Contract.model_validate(data)
-        spec = self.ws.dir("spec")
-        cj = spec / f"contract.v{new.version}.json"
-        cj.write_text(new.model_dump_json(indent=1))
-        (spec / f"contract.v{new.version}.md").write_text(new.summary_md())
-        self._save("contract", cj, "timing_correction")
+        cj, _ = self._save_contract(new, "timing_correction")
         self.store.event(self.run_id, "contract_revised", {"from": contract.version, "to": new.version, "reason": new.revision_reason, "authority": "agent_inference"})
         ck["contract_path"] = str(cj)
         ck["contract_version"] = new.version
