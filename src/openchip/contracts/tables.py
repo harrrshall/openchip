@@ -124,16 +124,11 @@ def _port_groups(inputs: tuple[TableVar, ...]) -> list[tuple[str, tuple[tuple[in
 
     Each member carries its index into `inputs`, because a row's values are positional.
     """
-    order: list[str] = []
-    for v in inputs:
-        if v.port not in order:
-            order.append(v.port)
-    groups = []
-    for port in order:
-        members = [(i, v) for i, v in enumerate(inputs) if v.port == port]
-        members.sort(key=lambda iv: -(iv[1].bit if iv[1].bit is not None else 0))
-        groups.append((port, tuple(members)))
-    return groups
+    groups: dict[str, list[tuple[int, TableVar]]] = {}
+    for index, var in enumerate(inputs):
+        groups.setdefault(var.port, []).append((index, var))
+    return [(port, tuple(sorted(members, key=lambda iv: -(iv[1].bit or 0))))
+            for port, members in groups.items()]
 
 
 def _packed(members: tuple[tuple[int, TableVar], ...], values: tuple[int, ...]) -> int | None:
@@ -404,7 +399,7 @@ def _parse_truth_table(lines: list[str], i: int, request: str) -> tuple[RequestT
     if end - i - 1 < 2:
         return None, i
     return _rows_to_table("truth_table", names, [_pipe_fields(l) or [] for l in lines[i + 1:end]],
-                          "\n".join(lines[i:end]), allow_dont_care=True), end
+                          "\n".join(lines[i:end])), end
 
 
 def _pipe_fields(line: str) -> list[str] | None:
@@ -444,25 +439,21 @@ def _parse_waveform(lines: list[str], i: int, request: str) -> tuple[RequestTabl
         return None, i
     if any(cell not in ("0", "1") for row in rows for cell in row):
         return None, end  # an `x` or a multi-bit value: not a combinational 0/1 table
-    return _rows_to_table("waveform", names, rows, "\n".join(lines[i:end]), allow_dont_care=False), end
+    return _rows_to_table("waveform", names, rows, "\n".join(lines[i:end])), end
 
 
 # -- shared row handling -------------------------------------------------------------------------
 
-def _rows_to_table(kind: str, names: list[str], raw: list[list[str]], source: str,
-                   allow_dont_care: bool) -> RequestTable | None:
+def _rows_to_table(kind: str, names: list[str], raw: list[list[str]], source: str) -> RequestTable | None:
     """Last column is the output. Duplicate assignments must agree; conflicts decline."""
     inputs = tuple(TableVar(name=n, port=n, bit=None) for n in names[:-1])
     output = TableVar(name=names[-1], port=names[-1], bit=None)
     seen: dict[tuple[int, ...], int] = {}
-    rows: list[tuple[tuple[int, ...], int]] = []
     dont_care = 0
     for row in raw:
         try:
             values = [_cell(c) for c in row]
         except ValueError:
-            return None
-        if not allow_dont_care and any(v is None for v in values):
             return None
         if any(v is None for v in values[:-1]):
             return None  # a don't-care input does not name a row
@@ -470,13 +461,10 @@ def _rows_to_table(kind: str, names: list[str], raw: list[list[str]], source: st
         if values[-1] is None:
             dont_care += 1
             continue
-        if key in seen:
-            if seen[key] != values[-1]:
-                return None  # the same inputs with two different outputs: evidence of state
-            continue
+        if key in seen and seen[key] != values[-1]:
+            return None  # the same inputs with two different outputs: evidence of state
         seen[key] = values[-1]
-        rows.append((key, values[-1]))
-    if not rows:
+    if not seen:
         return None
-    return RequestTable(kind=kind, inputs=inputs, output=output, rows=tuple(rows),
+    return RequestTable(kind=kind, inputs=inputs, output=output, rows=tuple(seen.items()),
                         dont_care=dont_care, source=source)
