@@ -543,6 +543,10 @@ class Runner:
                 from ..verification.neighborcheck import check_neighbors
                 cellular = check_neighbors(contract, ck.get("request", ""), out_path, work / "neighbors",
                                            min(60, self.budget.remaining_s()), sys.executable)
+            if cellular is None:
+                from ..verification.directionalcheck import check_directional
+                cellular = check_directional(contract, ck.get("request", ""), out_path, work / "directional",
+                                             min(60, self.budget.remaining_s()), sys.executable)
             self.tool_time_s += time.time() - t0
             if cellular is not None:
                 self.store.event(self.run_id, "reference_request_check", {"path": str(out_path), **cellular})
@@ -832,6 +836,11 @@ class Runner:
         if code is None:
             code = cellular_properties(contract, ck.get("request", ""))
             origin = "request-derived cell-transition table"
+        if code is None:
+            from ..verification.directionalformal import directional_properties
+            code = directional_properties(contract, ck.get("request", ""))
+            if code:
+                origin = "request-derived directional transitions"
         if code is None:
             return None
         vdir = self.ws.dir("verification")

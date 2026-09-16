@@ -88,6 +88,9 @@ def sign_off_withheld(ck: dict, evidence: dict | None = None, contract: Contract
         from ..contracts.neighbors import neighbor_scope
         if neighbor_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "neighbor_vector_equations" not in t.get("checked_kinds", [])):
             reasons.append("the independent vector-neighbor check has not completed")
+        from ..contracts.directional import directional_scope
+        if directional_scope(ck.get("request", ""))[0] and (t.get("status") != "ok" or "directional_state_transitions" not in t.get("checked_kinds", [])):
+            reasons.append("the independent controller state-transition check has not completed")
         from ..contracts.state_tables import parse_state_tables
         try:
             state_tables = parse_state_tables(ck.get("request", ""))

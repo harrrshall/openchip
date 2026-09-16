@@ -22,12 +22,17 @@ Measured examples include a [UART transmitter](examples/uart_tx8n1/README.md),
 [512-cell Rule 110 engine](examples/rule110/README.md),
 [saturating event counter](examples/event_counter/README.md),
 [reloadable timer](examples/reloadable_timer/README.md),
-[serial programmable timer](examples/serial_timer/README.md), and
+[serial programmable timer](examples/serial_timer/README.md),
+[walking/falling/digging controller](examples/directional_controller/README.md), and
 [counter with nonzero port indices](examples/range_counter/README.md). Each includes actual
 RTL, a separate runnable bench, provenance and the limits of its measurements.
 Complete explicit elementary-cell transition requests are checked against their
 printed rows before generated references enter arbitration; power-up before a
 load is not treated as initialized state.
+The complete walking/falling/digging request in the controller example also has
+an independent transition check and formal checker. Recognition is limited to
+that complete specification; it is not a general natural-language FSM parser.
+
 
 ## Quick start (bring your own key)
 ```bash
