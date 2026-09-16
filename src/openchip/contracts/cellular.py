@@ -7,6 +7,7 @@ bounded grammar rather than silently being discarded.
 from __future__ import annotations
 
 import re
+from .revisions import revision_scope
 
 
 def cellular_binding(request: str) -> dict | None:
@@ -47,9 +48,7 @@ def cellular_binding(request: str) -> dict | None:
 
 
 def cellular_scope(request: str) -> tuple[dict | None, bool]:
-    parts = re.split(r'\n\nChange request \(v\d+\): ', request)
-    latest = cellular_binding(parts[-1])
-    return (latest, False) if latest else (cellular_binding(parts[0]), len(parts) > 1)
+    return revision_scope(request, cellular_binding)
 
 
 def render_cellular(request: str) -> str:

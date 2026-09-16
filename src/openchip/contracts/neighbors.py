@@ -6,6 +6,7 @@ and wrapping rule. Partial revisions and additional behavior cannot be ignored.
 from __future__ import annotations
 
 import re
+from .revisions import revision_scope
 
 
 def neighbor_binding(request: str) -> dict | None:
@@ -36,6 +37,4 @@ def neighbor_binding(request: str) -> dict | None:
 
 
 def neighbor_scope(request: str) -> tuple[dict | None, bool]:
-    parts = re.split(r'\n\nChange request \(v\d+\): ', request)
-    latest = neighbor_binding(parts[-1])
-    return (latest, False) if latest else (neighbor_binding(parts[0]), len(parts) > 1)
+    return revision_scope(request, neighbor_binding)

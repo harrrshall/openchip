@@ -5,6 +5,7 @@ State names, transitions, outputs, reset state and reset polarity are data.
 """
 from __future__ import annotations
 import re
+from .revisions import revision_scope
 
 _I = r'[A-Za-z_]\w*'
 _HEADER = re.compile(
@@ -43,6 +44,4 @@ def moore_binding(request: str) -> dict | None:
 
 
 def moore_scope(request: str) -> tuple[dict | None, bool]:
-    parts = re.split(r'\n\nChange request \(v\d+\): ', request)
-    latest = moore_binding(parts[-1])
-    return (latest, False) if latest else (moore_binding(parts[0]), len(parts) > 1)
+    return revision_scope(request, moore_binding)

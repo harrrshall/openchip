@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from ..contracts.revisions import revision_scope
 import tempfile
 import time
 from pathlib import Path
@@ -48,11 +49,7 @@ def _binding(request: str) -> dict[str, str] | None:
 
 
 def _scope(request: str) -> tuple[dict[str, str] | None, bool]:
-    parts = re.split(r"\n\nChange request \(v\d+\): ", request)
-    latest = _binding(parts[-1])
-    if latest:
-        return latest, False
-    return _binding(parts[0]), len(parts) > 1
+    return revision_scope(request, _binding)
 
 
 def requires_clock_check(request: str) -> bool:

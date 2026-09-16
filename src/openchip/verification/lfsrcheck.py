@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from ..contracts.revisions import revision_scope
 import tempfile
 from pathlib import Path
 
@@ -70,9 +71,7 @@ def _binding(request: str) -> dict | None:
 
 
 def _scope(request: str) -> tuple[dict | None, bool]:
-    parts = re.split(r"\n\nChange request \(v\d+\): ", request)
-    latest = _binding(parts[-1])
-    return (latest, False) if latest else (_binding(parts[0]), len(parts) > 1)
+    return revision_scope(request, _binding)
 
 
 def requires_lfsr_check(request: str) -> bool:
