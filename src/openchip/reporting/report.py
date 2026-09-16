@@ -150,6 +150,7 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
         },
         "formal": (evidence or {}).get("formal") and {k: (evidence or {})["formal"].get(k) for k in ("status", "depth", "failed_assert", "version")},
         "attempts": len(history), "history": history, "reference_consensus": ck.get("consensus"), "review": ck.get("review"), "provisional": provisional,
+        "request_table_repair": ck.get("table_repair"),
         "model": {"model": cfg.model.model, "revision": cfg.model.revision, "temperature": cfg.model.temperature, "top_p": cfg.model.top_p,
                   "seed": cfg.model.seed, "thinking": cfg.model.thinking, "max_tokens": cfg.model.max_tokens},
         "tools": tools, "verification_config": cfg.verification.model_dump(),
@@ -163,6 +164,12 @@ def write_report(ws: "Workspace", store: "RunStore", run_id: str, ck: dict, cfg:
 
     # ---- markdown --------------------------------------------------------------------------
     md = [f"# OpenChip delivery report — run `{run_id}`", "", f"**Outcome:** {status_line}", ""]
+    if ck.get("table_repair"):
+        retained = Path(ck["table_repair"]["retained"])
+        retained_label = str(retained.relative_to(ws.root)) if retained.is_relative_to(ws.root) else str(retained)
+        md += ["The original generated reference contradicted a table in your request. "
+               "One automatic contract correction was attempted; the outcome above reflects the subsequent verification.",
+               f"Earlier contract, code and evidence are retained in `{retained_label}`.", ""]
     if contract:
         md += [f"**Module:** `{contract.module_name}` (contract v{contract.version}, digest `{contract.digest()}`)", ""]
         md += ["## Request", "", "```text", ws.request_text().strip(), "```", ""]

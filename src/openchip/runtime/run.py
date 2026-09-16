@@ -130,6 +130,7 @@ class Runner:
         spec = self.ws.dir("spec")
         base = Contract.model_validate_json(Path(ck["base_contract_path"]).read_text())
         request, change = ck["request"], ck["change"]
+        table_repair = ck.get("table_repair")
         schema = contract_json_schema()
         errors: list[str] = []
         for attempt in range(3):
@@ -144,7 +145,7 @@ class Runner:
             data, _ = coerce_contract(data, request)
             data["version"] = base.version + 1
             data["parent_version"] = base.version
-            data["revision_authority"] = "user"
+            data["revision_authority"] = "agent_inference" if table_repair else "user"
             data.setdefault("revision_reason", change[:200])
             if not data.get("revision_reason"):
                 data["revision_reason"] = change[:200]
@@ -152,6 +153,10 @@ class Runner:
                 contract = Contract.model_validate(data)
             except ValidationError as e:
                 errors.append(str(e)[:2000])
+                continue
+            if table_repair and any(contract.model_dump()[k] != base.model_dump()[k]
+                                    for k in ("module_name", "ports", "parameters", "clock_reset")):
+                errors.append("Table recovery must preserve the exact module, ports, parameters and clock/reset; correct only the request's behavior and requirements.")
                 continue
             cj = spec / f"contract.v{contract.version}.json"
             cj.write_text(contract.model_dump_json(indent=1))
@@ -161,6 +166,8 @@ class Runner:
             self.store.event(self.run_id, "contract_revised", {"from": base.version, "to": contract.version, "changed_or_new": changed})
             self.log(f"[revise] contract v{contract.version} (parent v{base.version}); changed/new requirements: {changed or 'none'}; previous evidence invalidated")
             ck = {"request": request + "\n\nChange request (v" + str(contract.version) + "): " + change.strip(), "contract_path": str(cj), "contract_version": contract.version}
+            if table_repair:
+                ck.update(request=request, table_repair=table_repair)
             self.store.checkpoint(self.run_id, "reference", ck)
             return ck
         raise RuntimeError("revision failed: " + (errors[-1] if errors else "no valid contract"))
@@ -210,29 +217,14 @@ class Runner:
         step = run["step"]
         outcome: dict = {}
         try:
-            if step == "revise":
-                ck = self._step_revise(ck)
-                step = "reference"
-            if step == "intake":
-                ck = self._step_intake(ck)
-                step = "review"
-            if step == "review":
-                ck = self._step_review(ck)
-                step = "reference"
-            if step == "reference":
-                ck = self._step_reference(ck)
-                step = "properties"
-            if step == "properties":
-                ck = self._step_properties(ck)
-                step = "rtl"
-            if step == "rtl":
-                ck = self._step_rtl(ck)
-                step = "verify"
-            if step == "verify":
-                ck = self._step_verify(ck)
-                step = "report"
-            if step == "report":
-                ck, outcome = self._step_report(ck, final_state="completed")
+            steps = {name: getattr(self, "_step_" + name) for name in
+                     ("intake", "review", "revise", "reference", "properties", "rtl", "verify")}
+            while step != "done":
+                if step == "report":
+                    ck, outcome = self._step_report(ck, final_state="completed")
+                    break
+                ck = steps[step](ck)
+                step = self.store.get_run(self.run_id)["step"]
             self.store.set_state(self.run_id, "completed", accepted=outcome.get("accepted"))
         except BudgetExhausted as e:
             self.log(f"[budget] {e}")
@@ -750,7 +742,7 @@ class Runner:
         history: list[dict] = ck.get("history", [])
         attempt = int(ck.get("rtl_attempt", 0))
         assert self.budget
-        max_iter = self.budget.max_repair_iterations
+        max_iter = max(0, self.budget.max_repair_iterations - (ck.get("table_repair") or {}).get("repairs_used", 0))
         signatures: list[str] = [h.get("signature", "") for h in history]
         ref_regenerated = bool(ck.get("reference_regenerated", False))
         while True:
@@ -813,6 +805,9 @@ class Runner:
                     if not ok:
                         continue  # a majority of references disagrees with the RTL: re-verify against the adopted one, then repair
                 ck = self._check_request_tables(ck, contract, ref)
+                if (ck.get("request_table_check", {}).get("status") == "mismatch"
+                        and not ck.get("table_repair") and attempt < max_iter):
+                    return self._queue_table_repair(ck, attempt + 1)
                 if (not self.cfg.verification.require_formal and self.cfg.verification.run_formal
                         and props is not None and props.is_file() and not contract.combinational):
                     remaining = self.budget.wall_time_s - (time.time() - self.budget.started) - 2
@@ -926,6 +921,33 @@ class Runner:
         else:
             self.log(f"[tables] check inconclusive: {res['detail'][:200]}")
         return ck
+
+    def _queue_table_repair(self, ck: dict, repairs_used: int) -> dict:
+        """One bounded restart from a mechanically checked row in the user's request.
+
+        No RTL, reference code or hidden benchmark evidence enters the revision
+        prompt. Preserve all prior deliverables before regeneration overwrites them.
+        """
+        saved = self.ws.root / "retained" / ("table-repair-" + uuid.uuid4().hex[:12])
+        saved.mkdir(parents=True)
+        for name in ("spec", "reference", "rtl", "verification", "reports"):
+            shutil.copytree(self.ws.dir(name), saved / name)
+        (saved / "checkpoint.json").write_text(json.dumps(ck, indent=2))
+        evidence = ck["request_table_check"]
+        change = ("Automatic correction from tool evidence, not a new user requirement. "
+                  "The generated reference contradicts rows printed in the original request. "
+                  "Correct the contract's erroneous behavior/requirements to match every printed row. "
+                  "Remove contradictory simplifications. Preserve exactly the module, ports, parameters "
+                  "and clock/reset. Do not invent requirements or change the original request.\n"
+                  + json.dumps(evidence) + self._request_tables_text(ck["request"]))
+        repair = {"retained": str(saved), "evidence": evidence, "repairs_used": repairs_used}
+        next_ck = {"request": ck["request"], "base_contract_path": ck["contract_path"],
+                   "contract_path": ck["contract_path"], "contract_version": ck["contract_version"],
+                   "change": change, "table_repair": repair, "request_table_check": evidence}
+        self.store.checkpoint(self.run_id, "revise", next_ck)
+        self.store.event(self.run_id, "table_repair", repair)
+        self.log("[tables] retained failed artifacts; correcting the contract once from the request's own rows")
+        return next_ck
 
     def _step_report(self, ck: dict, final_state: str, reason: str = "") -> tuple[dict, dict]:
         assert self.budget
