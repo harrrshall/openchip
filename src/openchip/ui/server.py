@@ -25,6 +25,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse, unquote
 from .presentation import result_summary, stage_durations, contract_diff
 
+from ..reporting.integrity import workspace_outcome, integrity_warning
 from ..config import Config, ModelConfig
 from ..models.adapter import PROVIDER_DEFAULTS, ModelAdapter, resolve_api_key, write_keys_file
 from ..runtime.run import Runner
@@ -272,7 +273,7 @@ class UIState:
                 if runs:
                     entry.update({"state": runs[0]["state"], "step": runs[0]["step"], "run_id": runs[0]["run_id"], "updated": runs[0]["updated"]})
                     full = store.get_run(runs[0]["run_id"])
-                    entry["accepted"] = (full or {}).get("outcome", {}).get("accepted")
+                    entry["accepted"] = workspace_outcome(ws.root, (full or {}).get("outcome", {})).get("accepted")
                     if full:
                         entry.update(self._recovery_state(d.name, full, store))
                 store.close()
@@ -299,14 +300,15 @@ class UIState:
         detail["contract_md"] = spec[-1].read_text() if spec else ""
         detail["contract_version"] = int(spec[-1].stem.split(".v")[1]) if spec else 0
         detail["contract_diff"] = contract_diff(spec)
+        detail["outcome"] = workspace_outcome(ws.root, detail.get("outcome", {}))
         detail["result"] = result_summary(detail.get("outcome", {}), "running" if detail["alive"] else detail.get("state"))
         rate = self.settings.get("usd_per_million_tokens")
         tokens = (detail.get("outcome", {}).get("budget") or {}).get("tokens")
         detail["cost_estimate_usd"] = tokens * rate / 1_000_000 if tokens is not None and rate is not None else None
         rep = ws.root / "reports" / "report.md"
-        detail["report_md"] = rep.read_text() if rep.is_file() else ""
+        detail["report_md"] = integrity_warning(detail["outcome"]) + (rep.read_text() if rep.is_file() else "")
         rtl = sorted((ws.root / "rtl").glob("*.v"))
-        detail["rtl"] = {p.name: p.read_text() for p in rtl}
+        detail["rtl"] = {p.name: p.read_text() for p in rtl if not p.is_symlink() and p.resolve().is_relative_to(ws.root.resolve())}
         detail["files"] = self.deliverable_files(name)
         return detail
 
@@ -331,9 +333,19 @@ class UIState:
 
     def bundle(self, name: str) -> bytes:
         buffer = io.BytesIO()
+        contents = {path: self.artifact(name, path) for path in self.deliverable_files(name)}
+        try:
+            recorded = json.loads(contents.get("reports/outcome.json", b"{}"))
+        except (ValueError, UnicodeDecodeError):
+            recorded = {}
+        current = workspace_outcome(self.workspace_path(name), recorded, contents)
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for path in self.deliverable_files(name):
-                archive.writestr(path, self.artifact(name, path))
+            for path, data in contents.items():
+                archive.writestr(path, data)
+            archive.writestr("CURRENT_WORKSPACE_STATUS.json", json.dumps(current, indent=2))
+            warning = integrity_warning(current)
+            if warning:
+                archive.writestr("CURRENT_WORKSPACE_WARNING.md", warning)
         return buffer.getvalue()
 
 

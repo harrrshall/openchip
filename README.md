@@ -129,6 +129,12 @@ lsb: 1` describes `[4:1]`. References still receive unsigned packed values: decl
 bit `k` has integer weight `2**(k-lsb)`. The default lower index is zero. This does
 not add support for ascending ranges.
 
+The UI and `openchip report` compare current files with the recorded artifact
+hashes. Changed, missing or unrecorded RTL files cannot inherit an earlier run's
+sign-off. Downloads retain historical reports and include
+`CURRENT_WORKSPACE_STATUS.json`; changed workspaces also include a warning.
+Restoring the exact recorded files restores that historical acceptance view.
+
 Simulation requires a positive integer `sim_cycles` and at least one integer
 seed. Empty schedules are rejected; compiling and synthesizing a design without
 simulation observations cannot produce acceptance.

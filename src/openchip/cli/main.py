@@ -192,7 +192,11 @@ def cmd_report(args) -> int:
     if not p.is_file():
         print("no report yet", file=sys.stderr)
         return 1
-    print(p.read_text())
+    from ..reporting.integrity import workspace_outcome, integrity_warning
+    recorded = ws.root / "reports" / "outcome.json"
+    outcome = json.loads(recorded.read_text()) if recorded.is_file() else {}
+    current = workspace_outcome(ws.root, outcome)
+    print(json.dumps(current, indent=2) if args.json else integrity_warning(current) + p.read_text())
     return 0
 
 

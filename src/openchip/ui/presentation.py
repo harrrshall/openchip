@@ -23,6 +23,8 @@ def result_summary(outcome: dict, state: str | None) -> dict:
         questions = ["The independent references disagree or lack corroboration. Please clarify the intended behavior, including timing and priority when inputs coincide."]
     if state in {"running", "planned", "created"}:
         sentence = "Building and checking your design"
+    elif (outcome.get("artifact_integrity") or {}).get("status") == "changed":
+        sentence = "Files changed since verification; previous sign-off does not apply"
     elif clock_failed:
         sentence = "Independent clock verification failed; sign-off withheld"
     elif lfsr_failed:
