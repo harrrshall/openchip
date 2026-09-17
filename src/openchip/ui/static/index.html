@@ -148,7 +148,18 @@
   .composer .section-label svg { width: 16px; height: 16px; }
   .composer #req { display: block; min-height: 5.5rem; height: 5.5rem; max-height: 16rem; padding: 18px 20px; background: #f3f6fc; border: 1px solid #78869b; border-radius: 22px; line-height: 1.6; resize: none; overflow-y: hidden; box-shadow: 0 2px 6px rgba(35,93,221,.04); transition: border-color 140ms ease, box-shadow 140ms ease; }
   .composer #req:focus { border-color: #78869b; outline: none; box-shadow: 0 2px 6px rgba(35,93,221,.04); }
-  .composer .section-label:has(+ #req:focus-visible) { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
+  .composer .section-label:has(+ .req-wrap #req:focus-visible) { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
+  .req-wrap { position: relative; }
+  .req-wrap .tab-hint { position: absolute; right: 14px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: .6875rem; color: var(--muted); pointer-events: none; transition: opacity 140ms ease; }
+  .req-wrap .tab-hint kbd { font: 500 .6875rem var(--mono); padding: 2px 6px; border: 1px solid #b7c2d3; border-bottom-width: 2px; border-radius: 5px; background: var(--panel); color: var(--ink); }
+  .req-wrap.filled .tab-hint { opacity: 0; }
+  .req-wrap:not(.filled) #req { padding-bottom: 38px; }
+  @media (max-width: 640px), (hover: none) { .req-wrap .tab-hint { display: none; } .req-wrap:not(.filled) #req { padding-bottom: 16px; } }
+  .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  .examples-label { font-size: .75rem; color: var(--muted); margin-right: 2px; }
+  .examples button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 5px 12px; min-height: 32px; font: inherit; font-size: .8125rem; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease; }
+  .examples button:hover { background: var(--chip); border-color: #b8caeb; }
+  .examples button.current { border-color: #9cb8e6; background: var(--chip); }
   .composer .prompt-footer { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; align-items: end; gap: 12px; margin-top: 16px; }
   .composer .prompt-footer label { margin: 0 0 6px; font-size: .75rem; }
   .composer .prompt-footer input, .composer .prompt-footer select { height: 44px; font-size: .875rem; border-radius: 8px; padding: 8px 12px; }
@@ -209,7 +220,8 @@
       <p class="lead">Describe your hardware. Get RTL with a reviewable contract and verification evidence.</p>
       <div class="card composer">
         <label class="section-label" for="req"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h12l-4-4m4 4-4 4M20 17H8l4-4m-4 4 4 4"/></svg>Hardware request</label>
-        <textarea id="req" aria-label="Module description" placeholder="Describe what you want to build…"></textarea>
+        <div class="req-wrap"><textarea id="req" aria-label="Module description" aria-describedby="req-tab-hint" placeholder="Describe what you want to build…"></textarea><span class="tab-hint" id="req-tab-hint"><kbd>Tab</kbd>use this example</span></div>
+        <div class="examples" id="examples" role="group" aria-label="Example requests"><span class="examples-label">Try an example</span></div>
         <div class="prompt-footer">
           <div class="project-field"><label for="name">Project</label><input id="name" placeholder="Project name" aria-label="Project name"></div>
           <div class="budget-field"><label for="budget">Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
@@ -642,7 +654,69 @@ function fitRequest() {
   field.style.height = Math.min(field.scrollHeight, limit) + 'px';
   field.style.overflowY = field.scrollHeight > limit ? 'auto' : 'hidden';
 }
-$('req').addEventListener('input', fitRequest);
+const EXAMPLES = [
+  {label: 'UART transmitter', name: 'uart_tx', text: 'An 8N1 UART transmitter with a parameterized baud divisor. Accept a byte on a valid/ready handshake, drive tx idle-high, and assert busy while a frame is being sent.'},
+  {label: 'Sync FIFO', name: 'sync_fifo', text: 'A synchronous FIFO with parameterized WIDTH and DEPTH, registered dout, full and empty flags, and an almost_full flag when count >= DEPTH-2. Writes when full and reads when empty are ignored.'},
+  {label: 'Sequence detector', name: 'seq_detect', text: 'A Moore FSM that detects the overlapping bit sequence 1011 on a serial input and pulses match high for one clock cycle. Synchronous active-high reset.'},
+  {label: 'Countdown timer', name: 'countdown_timer', text: 'A reloadable 16-bit countdown timer: load captures a start value, the counter decrements while enable is high, and done pulses for one cycle when it reaches zero.'},
+  {label: 'PWM generator', name: 'pwm', text: 'A PWM generator with an 8-bit duty-cycle input and a configurable period. The output stays glitch-free when duty changes mid-period by applying the new value at the next period boundary.'},
+];
+const exampleTyper = { index: 0, pos: 0, deleting: false, timer: null };
+function renderExamples() {
+  $('examples').insertAdjacentHTML('beforeend', EXAMPLES.map((ex, i) => `<button type="button" data-example="${i}">${esc(ex.label)}</button>`).join(''));
+  $('examples').addEventListener('click', event => {
+    const button = event.target.closest('button[data-example]');
+    if (button) useExample(+button.dataset.example);
+  });
+}
+function markExample() {
+  document.querySelectorAll('#examples button').forEach((b, i) => b.classList.toggle('current', !$('req').value && i === exampleTyper.index));
+}
+function useExample(i) {
+  const ex = EXAMPLES[i];
+  $('req').value = ex.text;
+  if (!$('name').value.trim()) $('name').value = ex.name;
+  $('req').focus();
+  $('req').setSelectionRange(ex.text.length, ex.text.length);
+  syncRequest();
+}
+function syncRequest() {
+  $('req').parentElement.classList.toggle('filled', !!$('req').value);
+  markExample();
+  fitRequest();
+}
+function typeExamples() {
+  clearTimeout(exampleTyper.timer);
+  const t = exampleTyper, field = $('req');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (field.value || document.hidden) { t.timer = setTimeout(typeExamples, 600); return; }
+  const text = EXAMPLES[t.index].text;
+  let delay;
+  if (reduced) {
+    field.placeholder = text;
+    markExample();
+    t.timer = setTimeout(() => { t.index = (t.index + 1) % EXAMPLES.length; typeExamples(); }, 5000);
+    return;
+  }
+  if (!t.deleting) {
+    t.pos = Math.min(text.length, t.pos + 1 + (Math.random() < .3 ? 1 : 0));
+    delay = 22 + Math.random() * 30;
+    if (t.pos === text.length) { t.deleting = true; delay = 2600; }
+  } else {
+    t.pos = Math.max(0, t.pos - 4);
+    delay = 10;
+    if (t.pos === 0) { t.deleting = false; t.index = (t.index + 1) % EXAMPLES.length; delay = 350; }
+  }
+  field.placeholder = text.slice(0, t.pos) + (t.pos < text.length ? '▍' : '');
+  markExample();
+  t.timer = setTimeout(typeExamples, delay);
+}
+$('req').addEventListener('keydown', event => {
+  if (event.key === 'Tab' && !event.shiftKey && !$('req').value) { event.preventDefault(); useExample(exampleTyper.index); }
+});
+renderExamples();
+typeExamples();
+$('req').addEventListener('input', syncRequest);
 window.addEventListener('resize', fitRequest);
 requestAnimationFrame(fitRequest);
 refreshStatus();
