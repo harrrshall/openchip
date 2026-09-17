@@ -96,8 +96,10 @@
   .btn:hover:not(:disabled), .nav button:hover { background: #282d40; border-color: #68648a; }
   .btn.primary:hover:not(:disabled) { background: #6556ef; }
   .brand { font-size: 1.125rem; letter-spacing: -.03em; }
-  #hosted-notice { padding: 10px 24px; background: #191b27; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 0.8125rem; }
+  #hosted-notice { position: relative; padding: 10px 64px 10px 24px; background: #191b27; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 0.8125rem; }
   #hosted-notice .btn { margin-left: 8px; padding: 4px 10px; min-height: 36px; font-size: 0.8125rem; }
+  #hosted-notice .notice-close { position: absolute; top: 6px; right: 10px; width: 44px; height: 44px; padding: 0; margin: 0; display: grid; place-items: center; background: transparent; border-color: transparent; }
+  #hosted-notice .notice-close:hover { background: var(--chip); }
   .skip-link { position: fixed; top: 8px; left: 8px; z-index: 30; padding: 10px 16px; background: var(--ink); color: var(--bg); transform: translateY(-160%); }
   .skip-link:focus { transform: translateY(0); }
   .toast { z-index: 20; max-width: calc(100vw - 36px); }
@@ -110,7 +112,7 @@
     .workspace-bar { min-height: 48px; margin-bottom: 24px; }
     .workspace-type { display: none; }
     .card { padding: 18px; }
-    #hosted-notice { padding: 10px 14px; }
+    #hosted-notice { padding: 10px 64px 10px 14px; }
     .topbar { flex-wrap: wrap; }
     .topbar .brand { display: flex; }
     .topbar > .row { flex-wrap: wrap !important; }
@@ -127,7 +129,7 @@
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to workspace</a>
-<div id="hosted-notice" role="region" aria-label="Session privacy" hidden>Private browser session · Bring your own API key in Settings. Prompts, outputs and activity are retained by OpenChip for product improvement. Clearing cookies loses access to your projects. <button class="btn" onclick="openSettings()">Details &amp; API key</button></div>
+<div id="hosted-notice" role="region" aria-label="Session privacy" hidden>Private browser session · Bring your own API key in Settings. Prompts, outputs and activity are retained by OpenChip for product improvement. Clearing cookies loses access to your projects. <button class="btn" onclick="openSettings()">Details &amp; API key</button><button class="btn notice-close" type="button" aria-label="Dismiss privacy notice" title="Dismiss notice" onclick="dismissNotice()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
 <div class="topbar" id="topbar" role="navigation" aria-label="Workspace actions">
   <div class="brand"><img class="logo" src="/logo.svg" alt="OpenChip logo">OpenChip</div>
   <div class="row" style="gap:8px;flex-wrap:nowrap">
@@ -225,6 +227,16 @@
 <script>
 let status = null, current = null, poll = null, activeTab = 'contract', logSeen = 0;
 const $ = id => document.getElementById(id);
+const noticePreference = 'openchip.privacy-notice-dismissed.v1';
+let noticeDismissed = false;
+try { noticeDismissed = localStorage.getItem(noticePreference) === '1'; } catch {}
+function dismissNotice() {
+  noticeDismissed = true;
+  try { localStorage.setItem(noticePreference, '1'); } catch {}
+  const returnFocus = $('hosted-notice').contains(document.activeElement);
+  $('hosted-notice').hidden = true;
+  if (returnFocus) $('main').focus();
+}
 async function api(path, body) {
   const response = await fetch(path, body ? {
     method: 'POST',
@@ -296,7 +308,7 @@ async function refreshStatus() {
   const s = status.settings;
   if (status.hosted) {
     $("key-storage-note").textContent = "Use your own provider key. It stays in server memory for this browser session and is forgotten after inactivity or a service restart. Projects are private to this browser. OpenChip retains your prompts, generated designs, tool results and activity to operate and improve the product. Do not submit confidential designs. Clearing cookies removes your access to saved projects; it does not delete retained data.";
-    $("hosted-notice").hidden = false;
+    $("hosted-notice").hidden = noticeDismissed;
   }
   $('modelline').innerHTML = `<b>${esc(s.provider)}</b> · ${esc(s.model || 'no model')}<br><span class="${s.key_present||(!status.hosted && s.provider==='openai-compatible')?'':'chip warn'}">${s.key_present ? 'key ' + esc(s.key_hint) : ((!status.hosted && s.provider==='openai-compatible') ? 'no key needed' : 'no API key')}</span>`;
   const d = status.doctor; const missing = Object.entries(d.tools).filter(([k,v]) => !v.ok && k !== 'sby').map(([k])=>k);
