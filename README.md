@@ -10,6 +10,8 @@ openchip turns a hardware request into a project with a behavioral contract, a r
 
 [open the hosted app](https://13f5f45067271.notebooksn.jarvislabs.net).
 
+deployed on 17 september 2026: the [verified cleanup release](https://github.com/harrrshall/openchip/commit/c4da68ca2ba1f0c8fece5e4f7cf065332240a117).
+
 no owner-issued login is needed. each browser gets a private session. to start:
 
 1. open settings and enter your own model provider, model, and api key. test the connection. provider usage is billed to your provider account.
