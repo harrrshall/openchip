@@ -1,42 +1,58 @@
 <p align="center">
   <img src="src/openchip/ui/static/logo.svg" alt="OpenChip chip logo" width="64" height="64">
 </p>
-<h1 align="center">openchip</h1>
-<p align="center">describe hardware. generate rtl. inspect the verification evidence.</p>
+<h1 align="center">OpenChip</h1>
+<p align="center">Describe hardware. Generate RTL. Inspect the verification evidence.</p>
 
-openchip turns a hardware request into a project with a behavioral contract, a reference model, verilog source, and a verification report. use the browser interface to create a design, review its files, and request changes. The white-and-blue workspace uses bundled Geist typography and supports keyboard navigation, responsive layouts, and enlarged text; the website and this README share the same chip logo.
+OpenChip turns a natural-language hardware request into a Verilog project with a behavioral contract, executable reference models, and a verification report. Use the browser interface or CLI to build a design, inspect the generated files, and request changes.
 
-## start using openchip
+**OpenChip is experimental.** A passing result applies to the recorded contract, checks, and bounds. Review the contract and evidence before using a design; generated RTL is not a production-ready chip.
 
-[open the hosted app](https://13f5f45067271.notebooksn.jarvislabs.net).
+## Quick start
 
-deployed on 17 september 2026: the [verified cleanup release](https://github.com/harrrshall/openchip/commit/c4da68ca2ba1f0c8fece5e4f7cf065332240a117).
+[Open the hosted app](https://13f5f45067271.notebooksn.jarvislabs.net) — no local installation required.
 
-no owner-issued login is needed. each browser gets a private session. to start:
+1. Open **Settings**, choose your model provider, and enter the model name and API key. Test the connection. Model usage is billed to your provider account.
+2. Describe your hardware and give the project a name. Include signal widths, clock and reset behavior, and what should happen each cycle.
+3. Select **Build & verify**. Review the contract, verification report, and generated files. Download the project or submit a change request.
 
-1. open settings and enter your own model provider, model, and api key. test the connection. provider usage is billed to your provider account.
-2. create a project and describe the hardware, including ports, clock, reset, and expected behavior.
-3. run build & verify. review the contract and report, then download the project or request a change.
+Try this request:
 
-try a request like:
+> Create a Verilog module named counter with inputs clk, rst, and enable, and an 8-bit unsigned output count. Update on the rising edge of clk. A synchronous active-high reset sets count to zero and takes priority over enable. When enabled, increment with wraparound; otherwise hold the count.
 
-> create an 8-bit counter with a rising-edge clock, synchronous active-high reset, and an enable input. reset sets the count to zero. enable increments the count with wraparound; otherwise it holds its value.
+For more detailed requests and example designs, browse [examples](examples/).
 
-### privacy and session data
+### Hosted privacy and access
 
-projects, settings, and downloads are isolated by a secure, httponly browser cookie. other browser sessions cannot list or access your projects. api keys stay in server memory; they are not saved in browser storage, project files, or activity records. re-enter your key after a service restart or an inactive session expires. download your work before clearing cookies: clearing them removes your access, while retained data remains on the service.
+Each browser receives a separate session. Download your work before clearing cookies: clearing them removes access to your session, but does not delete data retained by the service.
 
-openchip retains submitted prompts, generated designs, build evidence, and session activity to operate and improve the product. do not submit confidential designs. hosted connections support the listed public provider endpoints; arbitrary local or private server urls are available only in a self-hosted installation.
+API keys remain in server memory and are not saved in browser storage, project files, or activity records. You may need to re-enter your key after a service restart or session expiry. Model requests are sent to the provider you configure.
 
-### operate a hosted installation
+The hosted service retains submitted prompts, generated designs, verification evidence, and session activity to operate and improve the product. Do not submit confidential designs. Hosted connections use the listed public provider endpoints; use a self-hosted installation for local or private model endpoints.
 
-set `OPENCHIP_HOSTED_ORIGIN` to the public https origin and put the ui behind an https reverse proxy that preserves the host header. `OPENCHIP_WORKSPACES` selects a persistent data directory. this enables private browser sessions instead of the shared owner login. existing owner projects remain outside the public sessions directory. the browser session authorizes access; an api key authorizes model calls only.
+## What a build produces
 
-session data is retained under `OPENCHIP_WORKSPACES/sessions/<opaque-id>/`: `activity.sqlite3` records request time, method, route category, and response status; `settings.json` contains non-secret model settings; `projects/` retains prompts, model-generated artifacts, run databases, usage, and verification evidence. keep this directory private and back it up outside the published repository. request headers, cookies, and submitted api-key fields are excluded from activity records. hosted builds are limited to one per session and two concurrent builds overall.
+- A versioned **behavioral contract** describing the interface and expected behavior.
+- **Verilog RTL** and executable reference models used to check the design.
+- **Tool evidence** from lint, simulation, synthesis, synthesized-netlist checks, and bounded formal checks where supported.
+- A readable **`report.md`** and machine-readable **`outcome.json`**, with retained files and logs for inspection.
 
-## run locally
+OpenChip uses tool failures to guide a bounded repair loop and reruns verification after changes. Interrupted builds can be resumed from checkpoints.
 
-use linux with python 3.10 or newer. full verification needs bubblewrap with working user namespaces, icarus verilog, verilator, yosys, symbiyosys, and an smt solver. the [oss cad suite](https://github.com/YosysHQ/oss-cad-suite-build) provides the hardware tools; follow its installation instructions and activate its environment first. install bubblewrap through your linux package manager. on macos or windows, use a linux virtual machine for verification.
+The contract matters: a design can satisfy an incorrect interpretation of your request. Check assumptions, reset behavior, priorities, and edge cases as well as the final verdict. Formal results are bounded, and skipped or timed-out checks are not proofs. Timing closure, physical implementation, and silicon validation are outside this workflow.
+
+## Self-hosting
+
+### Requirements
+
+- Linux with Python 3.10 or newer. Use a Linux virtual machine for full verification on macOS or Windows.
+- Icarus Verilog, Verilator, Yosys, SymbiYosys, and an SMT solver available on `PATH`.
+- Bubblewrap with working user namespaces to sandbox generated reference code.
+- A model provider account or a compatible model endpoint you operate.
+
+The [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) bundles hardware verification tools. Install and activate the tools, and install Bubblewrap through your Linux package manager, before building designs.
+
+### Install and open the interface
 
 ```sh
 git clone https://github.com/harrrshall/openchip.git
@@ -44,132 +60,76 @@ cd openchip
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-openchip doctor
 openchip ui --open
 ```
 
-resolve missing tools reported by `openchip doctor` before building. the interface opens at [localhost:8765](http://127.0.0.1:8765). configure your model connection in settings, then follow the same project workflow above. model inference can use a remote provider or a compatible endpoint you run yourself.
+The interface runs at [localhost:8765](http://127.0.0.1:8765). Configure your model in Settings and follow the quick start above. Browser settings and CLI configuration are separate; configure the CLI as described below before using it for builds.
 
-`openchip doctor` must report `sandbox ok`. reference models execute inside a bubblewrap sandbox and there is no unsandboxed fallback, so a host where bubblewrap cannot create user namespaces fails every build at reference generation. on ubuntu 24.04 (including fresh cloud images and docker/colima virtual machines) the default apparmor restriction blocks this; allow it with:
+Run `openchip doctor` to inspect tool availability, sandbox support, and the CLI model connection. Resolve missing prerequisites before building. If the sandbox check fails, check whether your host or container permits Bubblewrap user namespaces. Reference execution has no unsandboxed fallback.
 
-```sh
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-echo kernel.apparmor_restrict_unprivileged_userns=0 | sudo tee /etc/sysctl.d/99-openchip-bwrap.conf
-```
+### Configure the CLI model
 
-plain docker containers also block user namespaces through seccomp; use a virtual machine instead.
+Supported provider adapters are `openai`, `openai-responses`, `openai-compatible`, `openrouter`, and `anthropic`. Select the adapter that matches your endpoint. Model inference can run remotely; a local GPU is not required when using a remote provider.
 
-## use a hosted model through opencode go
-
-[opencode go](https://opencode.ai/docs/go/) exposes kimi, deepseek, glm, qwen and minimax models behind one openai-style endpoint. openchip supports it out of the box and adds the required `x-opencode-session` header automatically. put the key in your environment and point a config at the gateway with the `openai` provider:
-
-```sh
-export OPENCODE_GO_API_KEY=sk-...
-```
+Create `openchip.toml` in the repository root. This template is for an OpenAI-style chat-completions API; replace the endpoint and model placeholders with values from your provider:
 
 ```toml
-# openchip.toml
 [model]
-provider = "openai"                       # not "openai-compatible": the gateway rejects vllm-only request fields
-base_url = "https://opencode.ai/zen/go/v1"
-model = "kimi-k3"                         # fast and schema-clean; deepseek-v4-pro and glm-5.3-flash also work
-api_key_env = "OPENCODE_GO_API_KEY"
-max_tokens = 32000
-temperature = 0.2
-context_window = 128000
-timeout_s = 600.0
-thinking = true
+provider = "openai"
+base_url = "https://YOUR-PROVIDER-ENDPOINT/v1"
+model = "YOUR-MODEL-ID"
+api_key_env = "OPENCHIP_MODEL_API_KEY"
 ```
+
+Load `OPENCHIP_MODEL_API_KEY` into your shell environment using your preferred secret-management method. Keep credentials out of configuration files and version control. Then check the connection:
 
 ```sh
-openchip --config openchip.toml doctor          # model line must read ok
-openchip --config openchip.toml init work/lfsr8 --request request.md --name lfsr8
-openchip --config openchip.toml build --project work/lfsr8 --budget 25m
-openchip --config openchip.toml report --project work/lfsr8
+openchip --config openchip.toml doctor
 ```
 
-in the browser interface choose provider `openai`, enter the same base url, model and key in settings, and test the connection.
+The CLI discovers `openchip.toml` automatically from the current directory; `--config` selects a different file. See [configs](configs/) for further options, including generation limits, verification settings, and build budgets. Example configurations target specific endpoints and may need adjustment for your model.
 
-## how it works
+### Build from the command line
 
-1. a request becomes a versioned contract describing the interface and behavior.
-2. openchip prepares a reference model and generates rtl against the contract.
-3. verification runs lint, source simulation, synthesis, synthesized-netlist checks, and bounded formal checks where supported.
-4. a bounded repair loop uses tool failures to revise the design and rerun verification.
-5. the project retains source files, logs, `report.md`, and `outcome.json` so you can inspect each result.
-
-the browser report preview supports headings, tables, bullet lists, fenced code, inline code and bold text. raw html is displayed as text. the project retains the original markdown report for download and further inspection.
-
-a passing result is limited to the recorded contract, checks, and bounds. openchip is experimental; general production readiness is still being evaluated. review the contract and evidence before using a design. timing closure and silicon validation remain outside this workflow.
-
-## cloud demo helpers
-
-on a provisioned jarvislabs instance, the [demo launcher](scripts/cloud/run_demo.sh) accepts a core-v1 task id, request file, or request text:
+Save your hardware description in `request.md`, then run:
 
 ```sh
-bash scripts/cloud/run_demo.sh /home/openchip-runs/counter-demo updown_counter 20m
+openchip init work/counter --request request.md --name counter
+openchip build --project work/counter --budget 20m
+openchip report --project work/counter
 ```
 
-these helpers expect the repository at `/home/openchip` and environment/credentials in `/home/openchip-env/{env.sh,secrets.env}`. keep credentials outside the repository.
-
-[interrupt_demo.sh](scripts/cloud/interrupt_demo.sh) exercises checkpoint recovery: it starts a build, interrupts it after reference generation, resumes, and reverifies the delivered artifacts. choose a fresh workspace; it refuses an existing workspace or `<workspace>.build.log`, including symlinks, and retains the log. it never deletes an earlier run.
+Inspect progress, request a change, or recover an interrupted build:
 
 ```sh
-bash scripts/cloud/interrupt_demo.sh /home/openchip-runs/counter-recovery updown_counter
+openchip status --project work/counter
+openchip revise --project work/counter --change "Increase count to 16 bits." --budget 20m
+openchip resume --project work/counter
 ```
 
-### benchmark helpers
+Run `openchip verify --project work/counter` to recheck delivered artifacts, or `openchip --help` to explore all commands. Model configuration saved in `openchip.toml` applies to these commands when run from the repository root.
 
-these scripts use the same provisioned cloud layout as the demo helpers:
+### Serve multiple users
 
-- [bench_all.sh](scripts/cloud/bench_all.sh) provisions tools, serves the model configured in `model.env`, then runs core-v1, heldout-v1, VerilogEval direct and the agent subset.
-- [bench_remote.sh](scripts/cloud/bench_remote.sh) runs that evaluation sequence against a remote provider. set `BENCH_FROM` to `core-v1`, `heldout-v1`, `veval-direct` or `veval-agent` to start at that stage; earlier stages are skipped.
-- [experiment_fa.sh](scripts/cloud/experiment_fa.sh) compares review and alternate-reference configurations against the same primary model.
-- [speed_compare.sh](scripts/cloud/speed_compare.sh) serves each supplied model configuration in turn on the same gpu, warms it up and runs core-v1.
+For a public installation, set `OPENCHIP_HOSTED_ORIGIN` to the public HTTPS origin and place the UI behind an HTTPS reverse proxy that preserves the host header. This enables separate browser sessions. Set `OPENCHIP_WORKSPACES` to a private, persistent data directory and back it up outside the repository.
 
-see each script's usage comment for arguments. retain the logs and result summaries, and use their recorded verdicts to judge acceptance; `DONE` markers indicate script completion, not verification success.
+A browser session authorizes access to projects; a provider API key authorizes model calls. Configure retention and privacy disclosures for your installation before accepting other users' designs.
 
-### summarize recorded results
+## Development and contributions
 
-on the linux verification host, generate reports from retained result copies without new model calls:
+The implementation lives in [src/openchip](src/openchip/): contracts define behavior, model adapters connect providers, the runtime coordinates builds and repairs, and verification and reporting retain tool evidence. The browser interface is in [src/openchip/ui](src/openchip/ui/).
+
+For evaluation workflows, see [src/openchip/evals](src/openchip/evals/) and the task definitions in [evals/suite](evals/suite/). Deployment and benchmark helpers live in [scripts/cloud](scripts/cloud/); read their prerequisites before running them.
+
+To contribute, open an issue with a reproducible hardware request or steps to reproduce a problem. For pull requests, explain the user-visible change and include relevant tool evidence and regression checks. On a configured Linux verification host:
 
 ```sh
-python -m openchip.evals.compare /path/to/results-copy /path/to/model-comparison.md
-python -m openchip.evals.fa_report /path/to/fa-experiment-copy /path/to/fa-report.md
+python -m pip install -e '.[dev]'
+python -m pytest -q
 ```
 
-the comparison reads run summaries and keeps the last directory in name order for each model/revision and protocol. the false-acceptance report reads configurations `D`, `A`, `B`, and `C`, using the first matching directory in name order for each protocol; it also writes `fa-report.json` inside the experiment copy. these commands summarize recorded evidence; they do not rerun verification.
+Keep changes focused, and distinguish generated output from behavior verified by tools.
 
-### recheck evaluation results
+## License
 
-on the linux verification host, use a copy of an evaluation results directory when rerunning these tools: they write verification artifacts and reports into that directory.
-
-```sh
-python -m openchip.evals.rescore /path/to/results-copy /path/to/suite
-python -m openchip.evals.mutate /path/to/results-copy /path/to/suite
-```
-
-rescoring checks saved rtl against the suite reference without new model calls. mutation checking introduces small rtl faults and measures whether the model-derived and suite references detect them. both use the highest numbered contract snapshot, so `contract.v10.json` takes precedence over `contract.v9.json`. mutation sensitivity is not a completeness proof.
-
-## architecture
-
-- `src/openchip/contracts/` defines the design contract and its validation.
-- `src/openchip/models/` connects to model providers.
-- `src/openchip/runtime/` coordinates generation, repair, and project state.
-- `src/openchip/tools/` and `src/openchip/verification/` run hardware tools and evaluate their results.
-- `src/openchip/reporting/` records evidence; `src/openchip/ui/` serves the browser interface.
-- `src/openchip/evals/` runs evaluations and summarizes or rechecks recorded results.
-
-browse [examples](examples/) for sample requests and projects, and [configs](configs/) for configuration files.
-
-## contribute
-
-open an issue describing the user problem, or submit a focused pull request with:
-
-- the behavior you changed and why it helps a user.
-- a reproducible request or steps that demonstrate the problem.
-- tool evidence showing the result before and after your change, with relevant regression checks.
-
-## license
-
-[apache-2.0](LICENSE).
+[Apache License 2.0](LICENSE).
