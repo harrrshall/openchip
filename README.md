@@ -4,7 +4,7 @@
 <h1 align="center">openchip</h1>
 <p align="center">describe hardware. generate rtl. inspect the verification evidence.</p>
 
-openchip turns a hardware request into a project with a behavioral contract, a reference model, verilog source, and a verification report. use the browser interface to create a design, review its files, and request changes. The graphite-and-blue workspace uses bundled Geist typography and supports keyboard navigation, responsive layouts, and enlarged text; the website and this README share the same chip logo.
+openchip turns a hardware request into a project with a behavioral contract, a reference model, verilog source, and a verification report. use the browser interface to create a design, review its files, and request changes. The white-and-blue workspace uses bundled Geist typography and supports keyboard navigation, responsive layouts, and enlarged text; the website and this README share the same chip logo.
 
 ## start using openchip
 
