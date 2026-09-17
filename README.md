@@ -104,6 +104,7 @@ Inspect progress, request a change, or recover an interrupted build:
 ```sh
 openchip status --project work/counter
 openchip revise --project work/counter --change "Increase count to 16 bits." --budget 20m
+# Use resume only if a build was interrupted.
 openchip resume --project work/counter
 ```
 
