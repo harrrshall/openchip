@@ -30,6 +30,33 @@ API keys remain in server memory and are not saved in browser storage, project f
 
 The hosted service retains submitted prompts, generated designs, verification evidence, and session activity to operate and improve the product. Do not submit confidential designs. Hosted connections use the listed public provider endpoints; use a self-hosted installation for local or private model endpoints.
 
+## How it works
+
+The chat-style workspace is where you describe hardware, follow progress, and request changes. Behind it, the OpenChip harness coordinates model calls, runs verification tools, tracks checkpoints, and enforces build and repair limits. The model proposes designs; tool results provide the verification evidence.
+
+```mermaid
+flowchart TD
+    U["Your hardware request or change"] --> I["Chat-style workspace or CLI"]
+    I --> H["OpenChip harness"]
+    M["Your configured model provider"] <--> H
+    subgraph Build["Build and verification loop"]
+        C["Define and review the behavioral contract"]
+        G["Generate reference models and Verilog RTL"]
+        V["Run lint, simulation, synthesis and supported formal checks"]
+        R["Repair using tool feedback"]
+        C --> G --> V
+        V -->|"Repairable failure, within budget"| R
+        R --> V
+    end
+    H --> C
+    V -->|"Checks complete or repair limit reached"| O["Report, source files and verification evidence"]
+    H -->|"Stopped or failed run"| O
+    O --> P["Review the outcome in your workspace"]
+    P -->|"Request a change"| I
+```
+
+Each change starts a revised contract and a new verification run. Reports retain the outcome and available evidence even when a build fails or exhausts its budget; reaching the report stage does not mean a design passed.
+
 ## What a build produces
 
 - A versioned **behavioral contract** describing the interface and expected behavior.
