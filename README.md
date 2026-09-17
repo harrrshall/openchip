@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="src/openchip/ui/static/logo.svg" alt="openchip logo" width="64" height="64">
+  <img src="src/openchip/ui/static/logo.svg" alt="OpenChip chip logo" width="64" height="64">
 </p>
 <h1 align="center">openchip</h1>
 <p align="center">describe hardware. generate rtl. inspect the verification evidence.</p>
 
-openchip turns a hardware request into a project with a behavioral contract, a reference model, verilog source, and a verification report. use the browser interface to create a design, review its files, and request changes.
+openchip turns a hardware request into a project with a behavioral contract, a reference model, verilog source, and a verification report. use the browser interface to create a design, review its files, and request changes. The dark workspace supports keyboard navigation, responsive layouts, and enlarged text; the website and this README share the same chip logo.
 
 ## start using openchip
 
