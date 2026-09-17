@@ -35,24 +35,14 @@ The hosted service retains submitted prompts, generated designs, verification ev
 The chat-style workspace is where you describe hardware, follow progress, and request changes. Behind it, the OpenChip harness coordinates model calls, runs verification tools, tracks checkpoints, and enforces build and repair limits. The model proposes designs; tool results provide the verification evidence.
 
 ```mermaid
-flowchart LR
-    U["Your hardware request or change"] --> I["Chat-style workspace or CLI"]
-    I --> H["OpenChip harness"]
-    M["Your configured model provider"] <--> H
-    subgraph Build["Build and verification loop"]
-        C["Define and review the behavioral contract"]
-        G["Generate reference models and Verilog RTL"]
-        V["Run lint, simulation, synthesis and supported formal checks"]
-        R["Repair using tool feedback"]
-        C --> G --> V
-        V -->|"Repairable failure, within budget"| R
-        R --> V
-    end
-    H --> C
-    V -->|"Checks complete or repair limit reached"| O["Report, source files and verification evidence"]
-    H -->|"Stopped or failed run"| O
-    O --> P["Review the outcome in your workspace"]
-    P -->|"Request a change"| I
+flowchart TB
+    U["Describe or revise hardware<br/>Chat workspace / CLI"] --> H["OpenChip harness<br/>Plan, track and enforce limits"]
+    M["Your model provider"] <--> H
+    H --> G["Review contract<br/>Generate references + RTL"]
+    G --> V["Verify with tools<br/>Lint · simulation · synthesis · bounded formal"]
+    V -->|"Tool feedback"| R["Repair within budget"]
+    R --> V
+    V --> O["Review results<br/>RTL · report · evidence"]
 ```
 
 Each change starts a revised contract and a new verification run. Reports retain the outcome and available evidence even when a build fails or exhausts its budget; reaching the report stage does not mean a design passed.
