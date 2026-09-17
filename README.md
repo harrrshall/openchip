@@ -6,7 +6,7 @@
 
 OpenChip turns a natural-language hardware request into a Verilog project with a behavioral contract, executable reference models, and a verification report. Use the browser interface or CLI to build a design, inspect the generated files, and request changes.
 
-**OpenChip is experimental.** A passing result applies to the recorded contract, checks, and bounds. Review the contract and evidence before using a design; generated RTL is not a production-ready chip.
+🚧 **Work in progress**
 
 ## Quick start
 
