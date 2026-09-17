@@ -35,7 +35,7 @@ The hosted service retains submitted prompts, generated designs, verification ev
 The chat-style workspace is where you describe hardware, follow progress, and request changes. Behind it, the OpenChip harness coordinates model calls, runs verification tools, tracks checkpoints, and enforces build and repair limits. The model proposes designs; tool results provide the verification evidence.
 
 ```mermaid
-flowchart TD
+flowchart LR
     U["Your hardware request or change"] --> I["Chat-style workspace or CLI"]
     I --> H["OpenChip harness"]
     M["Your configured model provider"] <--> H
