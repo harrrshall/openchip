@@ -142,6 +142,31 @@
     .topbar > .row { width: 100%; }
     .lead { font-size: 0.875rem; }
   }
+
+  .composer.card { padding: 20px; border-radius: 16px; }
+  .composer .section-label { margin: 0 0 12px; gap: 8px; font-weight: 500; }
+  .composer .section-label svg { width: 16px; height: 16px; }
+  .composer #req { display: block; min-height: 124px; height: 124px; padding: 14px 16px; background: #090a0c; border: 1px solid #686c76; border-radius: 10px; line-height: 1.6; resize: vertical; }
+  .composer #req:focus { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+  .composer .prompt-footer { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; align-items: end; gap: 12px; margin-top: 16px; }
+  .composer .prompt-footer label { margin: 0 0 6px; font-size: .75rem; }
+  .composer .prompt-footer input, .composer .prompt-footer select { height: 44px; font-size: .875rem; border-radius: 8px; padding: 8px 12px; }
+  .composer #go { min-height: 44px; height: 44px; gap: 12px; margin: 0; white-space: nowrap; }
+  .composer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; margin-top: 14px; }
+  .composer-meta p { margin: 0; font-size: .75rem; }
+  .composer-environment { font-size: .75rem; color: var(--muted); }
+  .composer-environment summary { padding: 2px 0; text-align: right; }
+  .composer-environment[open] { flex-basis: 100%; }
+  .composer-environment[open] summary { text-align: left; }
+  .composer #readiness { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+  @media (max-width: 600px) {
+    .composer.card { padding: 16px; }
+    .composer .prompt-footer { grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr); gap: 12px; }
+    .composer .build-field { grid-column: 1 / -1; }
+    .composer #go { width: 100%; }
+    .composer #req { min-height: 140px; height: 140px; }
+    .composer-environment summary { text-align: left; }
+  }
 </style>
 </head>
 <body>
@@ -170,15 +195,15 @@
     <section id="home">
       <h1>What do you want to build?</h1>
       <p class="lead">Describe your hardware. Get RTL with a reviewable contract and verification evidence.</p>
-      <div class="card">
-        <label class="section-label" for="req"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h12l-4-4m4 4-4 4M20 17H8l4-4m-4 4 4 4"/></svg>Hardware intent</label>
-        <textarea id="req" aria-label="Module description" placeholder="Describe the module, its ports, and what happens each clock.&#10;&#10;For example: An 8-bit counter with synchronous reset and an enable input. Increment when enabled; otherwise hold the count."></textarea>
-        <div class="row prompt-footer">
-          <div><label for="name">Project name</label><input id="name" placeholder="sync_fifo"></div>
-          <div class="fix"><label for="budget">Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
-          <div class="fix" style="align-self:flex-end"><button class="btn primary" id="go" onclick="startRun()">Build &amp; verify<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+      <div class="card composer">
+        <label class="section-label" for="req"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h12l-4-4m4 4-4 4M20 17H8l4-4m-4 4 4 4"/></svg>Hardware request</label>
+        <textarea id="req" aria-label="Module description" placeholder="e.g. Build an 8-bit counter with synchronous reset. Increment when enabled; otherwise hold the count."></textarea>
+        <div class="prompt-footer">
+          <div class="project-field"><label for="name">Project</label><input id="name" placeholder="Project name" aria-label="Project name"></div>
+          <div class="budget-field"><label for="budget">Budget</label><select id="budget"><option value="600">10 min</option><option value="1200" selected>20 min</option><option value="3600">1 hour</option><option value="14400">4 hours</option></select></div>
+          <div class="build-field"><button class="btn primary" id="go" onclick="startRun()">Build &amp; verify<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
         </div>
-        <p class="hint">Typically 1 to 3 minutes; complex designs and repairs can take longer.</p><div class="hint" style="margin-top:10px" id="readiness"></div>
+        <div class="composer-meta"><p class="hint">Most builds take 1–3 min. Complex designs take longer.</p><details class="composer-environment"><summary>Environment details</summary><div class="hint" id="readiness"></div></details></div>
       </div>
       <div class="card" id="recent"><h2 style="margin-top:0">Recent designs</h2><div id="recentlist" class="empty">No designs yet.</div></div>
     </section>
