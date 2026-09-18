@@ -22,6 +22,33 @@ Try this request:
 
 For more detailed requests and example designs, browse [examples](examples/).
 
+### Review intent before building
+
+[Intent Radar](https://13f5f45067271.notebooksn.jarvislabs.net/radar) uses
+[TypeSafe Jev](https://docs.typesafe.ai/models) to review eight aspects of a hardware
+request together: reset, clocking, overflow, backpressure, simultaneous events,
+output timing, widths, and boundary behavior. Enter your TypeSafe key, then review
+once or enable **Review as I edit**. Missing choices and uncertain judgments stay
+visible. Paste a generated contract JSON to compare its behavior with your request,
+export the review, or carry the request into the hardware workspace.
+
+This is an experimental semantic aid, not a verification gate. It can miss logic,
+table, and waveform errors and can flag harmless assumptions. Model confidence is
+not proof. Hardware acceptance still requires the existing tool checks. The pinned
+reviewer is `jev-1.13.0`; it does not replace your RTL generation model. Requests
+and supplied contracts are sent to TypeSafe. Displayed cost is an input-token
+estimate using the published rate, not an invoice.
+
+For the CLI, load `TYPESAFE_API_KEY` through your secret manager, then run:
+
+```sh
+openchip intent --request request.md
+openchip intent --request request.md --contract work/counter/spec/contract.v1.json
+```
+
+The command returns advisory JSON with the model version, probabilities, latency,
+usage, and input hashes. Exit zero means the review completed, not that hardware passed.
+
 ### Hosted privacy and access
 
 Each browser receives a separate session. Download your work before clearing cookies: clearing them removes access to your session, but does not delete data retained by the service.

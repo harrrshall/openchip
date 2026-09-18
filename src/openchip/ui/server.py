@@ -55,6 +55,24 @@ class UIState:
         self.logs: dict[str, list[dict]] = {}      # workspace name -> log lines
         self.threads: dict[str, threading.Thread] = {}
         self.settings = self._load_settings()
+        self.intent_key = ""
+        self.intent_lock = threading.Lock()
+        self.intent_last_call = 0.0
+
+    def review_intent(self, body: dict) -> dict:
+        from ..intent import IntentError, analyze
+
+        # Hosted sessions must never spend an owner's environment credential.
+        key = self.intent_key or ("" if hasattr(self, "manager") else os.environ.get("TYPESAFE_API_KEY", ""))
+        if not self.intent_lock.acquire(blocking=False):
+            raise IntentError("A review is already running. Wait for it to finish.")
+        try:
+            if time.monotonic() - self.intent_last_call < 1:
+                raise IntentError("Wait a moment before starting another review.")
+            self.intent_last_call = time.monotonic()
+            return analyze(body.get("request", ""), contract=body.get("contract"), api_key=key)
+        finally:
+            self.intent_lock.release()
 
     # -- settings -------------------------------------------------------------------------
     def _load_settings(self) -> dict:
@@ -452,6 +470,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/logo.svg":
                 return self._send(200, (STATIC / "logo.svg").read_bytes(), "image/svg+xml")
+            if u.path == "/radar":
+                return self._send(200, (STATIC / "radar.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/status":
                 return self._send(200, {"settings": self.state.public_settings(), "doctor": self.state.doctor(), "workspaces": "this browser session" if self.sessions else str(self.state.workspaces), "hosted": self.sessions is not None, "runs": self.state.list_runs()})
             if u.path == "/api/runs":
@@ -475,6 +495,18 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         try:
             body = self._json()
+            if u.path == "/api/intent/key":
+                key = body.get("api_key", "").strip()
+                if len(key) > 4096 or any(c in key for c in "\r\n\x00"):
+                    raise ValueError("Invalid key")
+                self.state.intent_key = key
+                return self._send(200, {"key_present": bool(key)})
+            if u.path == "/api/intent":
+                from ..intent import IntentError
+                try:
+                    return self._send(200, self.state.review_intent(body))
+                except IntentError as e:
+                    return self._send(503, {"error": str(e)})
             if u.path == "/api/settings":
                 return self._send(200, self.state.save_settings(body))
             if u.path == "/api/test":

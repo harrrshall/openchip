@@ -349,6 +349,21 @@ def cmd_ui(args) -> int:
     return 0
 
 
+def cmd_intent(args) -> int:
+    from ..intent import IntentError, analyze
+
+    try:
+        contract = json.loads(Path(args.contract).read_text()) if args.contract else None
+        if args.contract and not isinstance(contract, dict):
+            raise ValueError("Contract must be a JSON object.")
+        result = analyze(_read_request(args.request), contract=contract)
+    except (IntentError, ValueError, OSError) as e:
+        print(f"Intent review unavailable: {e}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2))
+    return 0  # A successful advisory request is not a hardware acceptance.
+
+
 def _logger():
     t0 = time.time()
 
@@ -369,6 +384,9 @@ def build_parser() -> argparse.ArgumentParser:
         return parser
 
     s = command("doctor", cmd_doctor, "report prerequisites, tool versions, model connectivity")
+    s = command("intent", cmd_intent, "review request clarity or contract drift with TypeSafe (advisory)")
+    s.add_argument("--request", required=True, help="hardware request text or file")
+    s.add_argument("--contract", help="optional generated contract JSON to compare against the request")
     s = command("init", cmd_init, "create a design workspace")
     s.add_argument("project")
     s.add_argument("--request", help="request text or path to a file")
